@@ -45,7 +45,12 @@ class VLMClient:
         candidate_paths = [
             Path("vlm/key.txt"),
             Path("key.txt"),
+            Path("tests/key.txt"),
+            Path(".env"),
             Path(__file__).resolve().parents[3] / "vlm" / "key.txt",
+            Path(__file__).resolve().parents[3] / "key.txt",
+            Path(__file__).resolve().parents[3] / "tests" / "key.txt",
+            Path(__file__).resolve().parents[3] / ".env",
         ]
         for p in candidate_paths:
             if p.exists():

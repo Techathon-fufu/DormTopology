@@ -15,7 +15,7 @@ import argparse
 from pathlib import Path
 
 # Add project root to sys.path
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -26,25 +26,25 @@ DEFAULT_CANDIDATE_ITEMS = {
     "item_05": {
         "name": "卷尺",
         "english_name": "tape_measure",
-        "crop_path": "vlm/crops/crop_item_05_卷尺.png",
+        "crop_path": "tests/crops/crop_item_05_卷尺.png",
         "prompt": "A compact round yellow and black tape measure, hard surface, realistic 3D asset",
     },
     "item_03": {
         "name": "鼠标",
         "english_name": "mouse",
-        "crop_path": "vlm/crops/crop_item_03_鼠标.png",
+        "crop_path": "tests/crops/crop_item_03_鼠标.png",
         "prompt": "A modern ergonomic wireless optical computer mouse, black matte finish",
     },
     "item_07": {
         "name": "充电器",
         "english_name": "charger",
-        "crop_path": "vlm/crops/crop_item_07_充电器.png",
+        "crop_path": "tests/crops/crop_item_07_充电器.png",
         "prompt": "A white compact multi-port USB-C fast charger wall adapter plug",
     },
     "item_04": {
         "name": "鼠标垫",
         "english_name": "mousepad",
-        "crop_path": "vlm/crops/crop_item_04_鼠标垫.png",
+        "crop_path": "tests/crops/crop_item_04_鼠标垫.png",
         "prompt": "A black desk mousepad mat with smooth edge stitching",
     },
 }
@@ -93,18 +93,21 @@ def generate_single_item(
 
 
 def update_detection_json(item_id: str, model_rel_path: str):
-    json_path = PROJECT_ROOT / "vlm" / "results" / "vlm_result_round2.json"
-    if not json_path.exists():
-        return
-    try:
-        data = json.loads(json_path.read_text(encoding="utf-8"))
-        for item in data.get("items", []):
-            if item.get("id") == item_id:
-                item["model_url"] = model_rel_path
-                print(f"[+] Linked model '{model_rel_path}' to {item_id} in {json_path.name}")
-        json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    except Exception as e:
-        print(f"[!] Warning: Failed to update {json_path}: {e}")
+    candidate_json_paths = [
+        PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_round2.json",
+        PROJECT_ROOT / "vlm" / "results" / "vlm_result_round2.json",
+    ]
+    for json_path in candidate_json_paths:
+        if json_path.exists():
+            try:
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                for item in data.get("items", []):
+                    if item.get("id") == item_id:
+                        item["model_url"] = model_rel_path
+                        print(f"[+] Linked model '{model_rel_path}' to {item_id} in {json_path.name}")
+                json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            except Exception as e:
+                print(f"[!] Warning: Failed to update {json_path}: {e}")
 
 
 def main():

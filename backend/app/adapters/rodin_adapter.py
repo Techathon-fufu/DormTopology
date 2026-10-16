@@ -67,8 +67,12 @@ class RodinClient:
         candidate_paths = [
             Path("vlm/rodin_key.txt"),
             Path("rodin_key.txt"),
+            Path("tests/rodin_key.txt"),
+            Path(".env"),
             Path(__file__).resolve().parents[3] / "vlm" / "rodin_key.txt",
             Path(__file__).resolve().parents[3] / "rodin_key.txt",
+            Path(__file__).resolve().parents[3] / "tests" / "rodin_key.txt",
+            Path(__file__).resolve().parents[3] / ".env",
         ]
         for p in candidate_paths:
             if p.exists():

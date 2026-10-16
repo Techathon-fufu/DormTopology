@@ -12,7 +12,7 @@ import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -21,8 +21,8 @@ from backend.app.adapters.vlm_adapter import VLMClient
 
 def main():
     parser = argparse.ArgumentParser(description="Run VLM Perception on desk image")
-    parser.add_argument("--image", type=str, default="vlm/images/testimage_0001.jpg", help="Path to desktop image")
-    parser.add_argument("--crop", action="store_true", help="Crop detected items into vlm/crops")
+    parser.add_argument("--image", type=str, default="tests/test_images/testimage_0001.jpg", help="Path to desktop image")
+    parser.add_argument("--crop", action="store_true", help="Crop detected items into tests/crops")
     args = parser.parse_args()
 
     img_path = Path(args.image)
