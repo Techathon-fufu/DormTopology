@@ -18,6 +18,8 @@
 
 演示配置 ID 为 `demo_desk_v1`：桌宽 1.45m、净深 0.60m、桌面顶高 0.77m。这些是可替换的示例参数，不是学校实测标准，也未核验现有 Blender 模型。书架尺寸、穿线孔形状和墙面位置需在首个演示场景中明确填写；不预设所有桌体都有 55cm 开孔。
 
+演示场景必须配置上层四格书架、右侧抽屉内部收纳区域、真实穿线孔与背板后通道。墙插和网口物品底面中心的默认高度为 `position[1] = 0.30`，可在后墙平面内沿 X/Y 调整，Z 固定；该默认值同样不是实测值。桌体运行时资产目标为 `models/dorm_desk_assembled.glb`，仅包含固定结构；可移动物品使用独立资产。
+
 桌体 GLB 使用同一世界原点，单品 GLB 使用底面中心锚点。Blender 源文件若为 Z-up，由导出流程转换到 glTF 的 Y-up，前端不再次旋转。资产导入时统一尺寸和锚点，保留物品变换；不能把生成网格直接当作精确碰撞体。
 
 物品 `size_m` 是规划尺寸；接口局部坐标使用实际米制值。编辑尺寸时必须同步更新碰撞体，并由用户重新确认接口位置，不能只缩放外观而保留不匹配的接口。
@@ -62,13 +64,22 @@
 
 接口字段为 `id`、`type`、`local_position`、`local_direction`、`capacity`。首版 `capacity` 为 1，接口 ID 在场景内唯一；插排每个插孔是独立接口。类型为 `power_source` / `power_sink` / `usb` / `network` / `hdmi`。电源线连接 source 与 sink，其他线连接同类接口；USB 等复杂协议协商不在首版范围。
 
+前端可接收物品表面任意取点的世界坐标，按第 1 节逆变换写入接口的 `local_position`，表面法向转换为 `local_direction`，确认类型后再提交线缆；不另加与接口坐标重复的线缆端点字段。终点同样引用插排、墙插或网口的独立接口。
+
+插排使用 `category: "power_strip"`，额外必需字段 `socket_count` 为 `4` / `6` / `8`，必须恰有相同数量的 `power_source` 接口，并有一个供插排总线使用的 `power_sink` 接口。选择规格时同步更新尺寸、碰撞体与接口；保留仍存在的接口 ID，移除接口上的线缆必须由用户重新指定，不能自动改接或静默删除。编辑过程中可提示悬空连接，但输入进入算法前仍须通过全部 ID 引用校验；切换规格递增场景版本。
+
+照片识别需区分常用外设与待收纳杂物，用户确认后映射到现有 `category`、`allowed_region_ids` 和 `fixed`，不另加同义分类字段。键盘、鼠标、数位板允许区域为桌面中央；课本、水杯、收纳盒等允许区域为书架格或抽屉，具体区域 ID 由演示场景配置。
+
 ### 2.2 区域与碰撞几何
 
 - `regions[]`：`id`、`surface_y_m`、`bounds_xz_m: [x_min, x_max, z_min, z_max]`、`clearance_height_m`。物品底面必须完整落在区域内，`position[1]` 等于支撑面高度，物品高度不超过净空。
+- 四格书架每格单独配置区域；右侧抽屉区域使用内部底面、内边界与净高，内壁纳入 `obstacles`。抽屉在固定可访问状态规划，不要求开合动画，不允许通过忽略壁厚扩大收纳容积。
 - `obstacles[]` 与 `reserved_zones[]`：`id`、`min: [x,y,z]`、`max: [x,y,z]`，均为世界坐标 AABB。区域接触作为支撑处理，体积相交作为冲突处理；几何容差固定为 0.001m，不能用容差豁免明确的穿透。
 - 桌板穿线孔必须同时体现在桌板碰撞体分割和走线通道中，不能仅给封闭桌板添加路径节点。
 - `routing_graph.nodes[]`：`id`、`position`、`kind`，kind 为 `corner` / `slot` / `fixing_point` / `endpoint`。
-- `routing_graph.edges[]`：`id`、`from_node_id`、`to_node_id`、`modes`、`clearance_radius_m`、`exposed`；边首版表示直线通道，需通过碰撞检查，净空半径不得小于线缆半径。
+- `routing_graph.edges[]`：`id`、`from_node_id`、`to_node_id`、`modes`、`clearance_radius_m`、`exposed`；边首版表示直线通道，需通过碰撞检查，净空半径不得小于线缆半径。`modes` 为 `slot` / `backboard` 的非空子集，图边为双向。
+- `slot` 路径必须经过 `kind: "slot"` 的实际开孔通道下行；背板后通道以 `fixing_point` 节点与允许 `backboard` 的边配置，路径必须绕至背板后下行。两种模式的完整通道均需在演示场景配置，不能仅通过更改输出标签表示不同策略。
+- 多线缆允许在同一通道汇聚，必须为线缆体积安排不相交的位置并复查共享通道净空。单个插孔的容量规则不因汇聚而改变；通道不足时返回 `no_path`。
 - 设备接口通过经碰撞检查的引出段连接到图；仅允许在已标定接口附近的短引出通道离开所属设备碰撞体，不能整体忽略该设备障碍。
 
 ### 2.3 线缆输入
@@ -77,8 +88,9 @@
 
 - `cable_type`：`power` / `usb` / `network` / `hdmi`，用于连接类型校验。
 - `thickness`：`thick` / `thin`，用于界面预设；实际规划采用用户确认的 `diameter_m` 和 `min_bend_radius_m`。
+- 粗线预设覆盖台式机/显示器电源线、网线与插排总线，细线预设覆盖充电线、外设连接线；预设提供不同线径和弯曲半径，数值需在实现时记录并由用户确认，不能仅依据电气类型强制指定粗细。
 - `length_m` 是现有线长；最终路径长度加 `slack_m` 不得超过它。
-- `mode`：首版支持 `slot`；`backboard` 是后续策略，无对应实现或通道时返回 `unsupported_mode`。
+- `mode`：首版必须支持 `slot` 与 `backboard`。对应实现或通道缺失时返回 `unsupported_mode`，仍属于该策略验收未完成，不能改走另一策略后标记成功。
 - 原始线缆可选 `baseline_path_points`；未提供时，原始暴露线长未知，不能按零计算。
 
 ## 3. 整理输出 `packing_result.json`
@@ -92,6 +104,8 @@
   "items": [
     {
       "item_id": "laptop_1",
+      "name": "笔记本电脑",
+      "model_url": null,
       "current_pos": [0.9, 0.77, 0.35],
       "target_pos": [0.725, 0.77, 0.3],
       "target_rotation_y_rad": 0,
@@ -105,6 +119,8 @@
 ```
 
 示例只含一个物品，实际输出必须覆盖所有参与整理的物品，固定物品也需要保留。`current_pos` 是本次输入的位置，不是原始快照位置。`target_region_id` 引用输入区域，不能由自然语言临时生成。
+
+每条物品结果包含 `name` 与 `model_url`，分别复制当前输入物品的显示名和已归一化独立资产路径，无模型时为 `null`；前端仍按 `item_id` 匹配，不以名称为主键。`current_pos` 与 `target_pos` 分别满足附件要求的整理前坐标和目标坐标。以上载荷可序列化下载为 `packing_result.json`，不要求后端和算法通过磁盘通信。
 
 顶层 `status` 为 `success` / `partial` / `infeasible`：全部满足收纳要求为 success，存在未安放物品但整体仍无冲突为 partial，无法给出满足硬约束的布局为 infeasible。每件物品 `placement_status` 为 `placed` / `unchanged` / `unplaced`。后两种的目标位置与朝向保持输入值；`unplaced` 需带原因，目标区域无法确认时为 `null`，且继续参与最终场景碰撞检查。
 
@@ -128,6 +144,7 @@
       "mode": "slot",
       "diameter_m": 0.004,
       "status": "failed",
+      "curve_segments": [],
       "path_points": [],
       "path_length_m": null,
       "reason_code": "length_exceeded"
@@ -147,7 +164,11 @@
 
 单线 `status` 为 `valid` / `failed`。有效路径 `path_points` 是已平滑并复查的世界坐标采样点，至少两个点，首尾与对应接口一致；`path_length_m` 为实际验证曲线的弧长，`reason_code` 为 `null`。渲染器按采样点绘制已验证路径，不再擅自使用另一条可能穿模的插值曲线。
 
-失败路径必须为 `[]`，长度为 `null`，并包含原因。弯曲半径依据连续曲线或圆弧段校验，不能把采样点间的折线尖角视为符合半径要求。碰撞检查应覆盖采样点之间的线缆体积，而不只是点本身。
+`curve_segments` 为必需数组，保存已验证样条的世界坐标控制点，每段为 `{control_points: [P0, P1, P2, P3]}`；每个 P 为 `[x,y,z]`，固定表示三次 Bézier 曲线 `B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 + 3(1-t)t^2 P2 + t^3 P3`，`0 ≤ t ≤ 1`。有效结果至少一段，首尾为真实接口位置，段间端点重合且切向连续，直线可用共线控制点表示。`path_points` 必须采样自这些段，弧长和最小弯曲半径也必须基于同一连续曲线验证。前端若从控制点重建，仅可使用相同定义并遵守验证采用的采样精度，不得另行拟合样条。
+
+失败时 `curve_segments` 和 `path_points` 均为 `[]`，长度为 `null`，并包含原因。弯曲半径依据连续曲线校验，不能把采样点间的折线尖角视为符合半径要求。碰撞检查应覆盖曲线与采样点之间的线缆体积，而不只是点本身；验证需保守覆盖采样近似误差。算法实现时记录采样误差与弧长积分精度，并提供成功与失败 JSON 样例供前端解析和下载为 `cable_routing.json`。
+
+附件“任意两点成功生成样条”表示接受任意合法表面点并在约束可行时生成路径，不承诺穿越障碍或突破线长限制；不可行条件仍必须返回失败。
 
 ## 5. 版本、错误与结果有效性
 
