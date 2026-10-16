@@ -40,6 +40,7 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 | 文档 | 唯一负责的内容 |
 | --- | --- |
 | [项目实施方案](docs/implementation_roadmap.md) | 首版范围、技术架构、算法选择、工期与模块职责 |
+| [走线算法规划](docs/routing_algorithm_plan.md) | 走线输入、A* 搜索、双策略、曲线复查、多线汇聚与输出约定 |
 | [用户体验设计](docs/ux_design.md) | 用户流程、交互方式、加载状态与错误反馈 |
 | [数据契约](docs/data_contract.md) | 坐标、单位、资产规范、场景与模块 JSON 协议 |
 | [研发任务与验收](docs/project_tasks.md) | 任务负责人、依赖、验收条件与集成检查 |

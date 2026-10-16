@@ -165,6 +165,10 @@
       "reason_code": "length_exceeded"
     }
   ],
+  "metrics": {
+    "exposed_length_m": null,
+    "baseline_exposed_length_m": null
+  },
   "issues": [
     {
       "entity_id": "cable_laptop_power",
@@ -182,6 +186,8 @@
 `curve_segments` 为必需数组，保存已验证样条的世界坐标控制点，每段为 `{control_points: [P0, P1, P2, P3]}`；每个 P 为 `[x,y,z]`，固定表示三次 Bézier 曲线 `B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 + 3(1-t)t^2 P2 + t^3 P3`，`0 ≤ t ≤ 1`。有效结果至少一段，首尾为真实接口位置，段间端点重合且切向连续，直线可用共线控制点表示。`path_points` 必须采样自这些段，弧长和最小弯曲半径也必须基于同一连续曲线验证。前端若从控制点重建，仅可使用相同定义并遵守验证采用的采样精度，不得另行拟合样条。
 
 失败时 `curve_segments` 和 `path_points` 均为 `[]`，长度为 `null`，并包含原因。弯曲半径依据连续曲线校验，不能把采样点间的折线尖角视为符合半径要求。碰撞检查应覆盖曲线与采样点之间的线缆体积，而不只是点本身；验证需保守覆盖采样近似误差。算法实现时记录采样误差与弧长积分精度，并提供成功与失败 JSON 样例供前端解析和下载为 `cable_routing.json`。
+
+`metrics.exposed_length_m` 是所有有效当前路径在 `exposure_zones` 并集内的弧长之和；没有任何有效路径时为 `null`。只有所有请求线缆都提供 `baseline_path_points`，才能用相同规则计算 `metrics.baseline_exposed_length_m`，否则为 `null`。失败线缆不贡献当前暴露线长，未知基线不能按零处理。该指标由走线算法计算，前端不自行估算。
 
 附件“任意两点成功生成样条”表示接受任意合法表面点并在约束可行时生成路径，不承诺穿越障碍或突破线长限制；不可行条件仍必须返回失败。
 
