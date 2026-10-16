@@ -44,3 +44,19 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* 打印 / 保存 PDF 版式（方案交付页）：页边距、避免步骤被跨页切断 */
+@media print {
+  @page {
+    margin: 13mm;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

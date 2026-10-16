@@ -16,16 +16,7 @@ import { RoomShell } from '@/scene/RoomShell'
 import { SceneObjectMesh } from '@/scene/SceneObjectMesh'
 import { ZoneOverlay } from '@/scene/ZoneOverlay'
 import { basicMaterial, ringGeometry } from '@/scene/resources'
-
-/** 环境是否支持 WebGL（不支持时给出可操作的降级界面） */
-function detectWebGL(): boolean {
-  try {
-    const canvas = document.createElement('canvas')
-    return Boolean(canvas.getContext('webgl2') ?? canvas.getContext('webgl'))
-  } catch {
-    return false
-  }
-}
+import { detectWebGL } from '@/lib/webgl'
 
 /** 三维渲染错误边界：渲染失败时给出重试入口，不影响左右面板继续工作 */
 class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
