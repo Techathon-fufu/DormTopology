@@ -67,16 +67,16 @@ def generate_single_item(
     tier: str = "standard",
     use_agentic: bool = True,
 ):
-    print(f"\n==========================================")
-    print(f"Generating 3D asset for: {item_id} ({target_filename})")
-    print(f"Source Image: {image_path}")
-    print(f"Prompt: {prompt}")
-    print(f"Target Output: {output_dir / target_filename}")
-    print(f"Tier: {tier}, Mode: {'Agentic' if use_agentic else 'Gen-2.5'}")
-    print(f"==========================================")
+    print(f"\n==========================================", flush=True)
+    print(f"Generating 3D asset for: {item_id} ({target_filename})", flush=True)
+    print(f"Source Image: {image_path}", flush=True)
+    print(f"Prompt: {prompt}", flush=True)
+    print(f"Target Output: {output_dir / target_filename}", flush=True)
+    print(f"Tier: {tier}, Mode: {'Agentic' if use_agentic else 'Gen-2.5'}", flush=True)
+    print(f"==========================================", flush=True)
 
     def on_progress(msg: str):
-        print(f"[*] {msg}")
+        print(f"[*] {msg}", flush=True)
 
     result = client.generate_glb_from_image(
         image_path=image_path,
@@ -88,7 +88,7 @@ def generate_single_item(
         on_progress=on_progress,
     )
 
-    print(f"[+] Successfully generated asset: {result.downloaded_files}")
+    print(f"[+] Successfully generated asset: {result.downloaded_files}", flush=True)
     return result
 
 
@@ -118,6 +118,9 @@ def main():
     parser.add_argument("--gen25", action="store_true", help="Use standard Gen-2.5 endpoint instead of Agentic")
     parser.add_argument("--check-balance", action="store_true", help="Only check account balance")
     parser.add_argument("--api-key", type=str, help="Rodin API Key override")
+    parser.add_argument("--resume-uuid", type=str, help="Resume downloading an existing task uuid")
+    parser.add_argument("--resume-sub-key", type=str, help="Resume polling with subscription_key")
+    parser.add_argument("--resume-name", type=str, default="tape_measure.glb", help="Filename for resumed download")
 
     args = parser.parse_args()
 
@@ -125,8 +128,8 @@ def main():
     try:
         client = RodinClient(api_key=args.api_key)
     except ValueError as e:
-        print(f"\n[ERROR] {e}")
-        print("\nPlease write your Rodin API Key into 'vlm/rodin_key.txt' (or set RODIN_API_KEY environment variable).")
+        print(f"\n[ERROR] {e}", flush=True)
+        print("\nPlease write your Rodin API Key into 'vlm/rodin_key.txt' (or set RODIN_API_KEY environment variable).", flush=True)
         sys.exit(1)
 
     if args.check_balance:
@@ -134,6 +137,20 @@ def main():
         return
 
     output_dir = PROJECT_ROOT / "objects"
+
+    if args.resume_uuid and args.resume_sub_key:
+        print(f"[*] Resuming polling for task {args.resume_uuid}...", flush=True)
+        def _prog_cb(status_dict):
+            jobs = status_dict.get("jobs") or ([status_dict["job"]] if "job" in status_dict else [])
+            states = ", ".join([f"{j.get('uuid', '')[:8]}:{j.get('status')}" for j in jobs])
+            print(f"[*] Job status: [{states}]", flush=True)
+
+        client.poll_status(args.resume_sub_key, on_progress=_prog_cb)
+        print(f"[*] Task completed! Downloading asset to {output_dir / args.resume_name}...", flush=True)
+        saved = client.download_assets(args.resume_uuid, output_dir, target_filename=args.resume_name)
+        print(f"[+] Download complete: {saved}", flush=True)
+        update_detection_json("item_05", f"objects/{args.resume_name}")
+        return
 
     if args.image:
         img_p = Path(args.image)

@@ -153,7 +153,7 @@ class RodinClient:
             data["prompt"] = prompt
 
         with path.open("rb") as f:
-            files = {"images": (path.name, f, mime_type)}
+            files = {"images": ("input.png", f, mime_type)}
             result = self._request_with_rate_limit("POST", "rodin_agentic", data=data, files=files)
             
         return result
@@ -182,7 +182,7 @@ class RodinClient:
             data["prompt"] = prompt
 
         with path.open("rb") as f:
-            files = {"images": (path.name, f, mime_type)}
+            files = {"images": ("input.png", f, mime_type)}
             result = self._request_with_rate_limit("POST", "rodin", data=data, files=files)
             
         return result
@@ -207,7 +207,7 @@ class RodinClient:
             time.sleep(delay)
             status_data = self._request_with_rate_limit("POST", "status", json={"subscription_key": subscription_key})
             
-            jobs = status_data.get("jobs", [])
+            jobs = status_data.get("jobs") or ([status_data["job"]] if "job" in status_data else [])
             if on_progress:
                 on_progress(status_data)
 
@@ -242,7 +242,8 @@ class RodinClient:
             filename = target_filename or raw_name
             
             target_file = out_path / filename
-            r = self.session.get(url, stream=True, timeout=120)
+            # Download asset using raw requests (avoids sending Bearer token to presigned S3/OSS URLs)
+            r = requests.get(url, stream=True, timeout=120)
             r.raise_for_status()
             with target_file.open("wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
@@ -271,11 +272,16 @@ class RodinClient:
         if use_agentic:
             gen_resp = self.submit_agentic_image_to_3d(image_path, prompt=prompt, tier=tier, export_type="glb")
             task_uuid = gen_resp["uuid"]
-            subscription_key = gen_resp["job"]["subscription_key"]
+            job_info = gen_resp.get("job") or gen_resp.get("jobs", {})
+            subscription_key = job_info.get("subscription_key")
         else:
             gen_resp = self.submit_gen25_image_to_3d(image_path, prompt=prompt)
             task_uuid = gen_resp["uuid"]
-            subscription_key = gen_resp["jobs"]["subscription_key"]
+            job_info = gen_resp.get("jobs") or gen_resp.get("job", {})
+            subscription_key = job_info.get("subscription_key")
+
+        if not subscription_key:
+            raise ValueError(f"Could not extract subscription_key from response: {gen_resp}")
 
         if on_progress:
             on_progress(f"Task submitted. UUID: {task_uuid}, subscription_key: {subscription_key}. Polling...")

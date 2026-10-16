@@ -64,7 +64,8 @@
         1.302,
         0.453,
         0.77
-      ]
+      ],
+      "model_url": "objects/mouse.glb"
     },
     {
       "id": "item_04",
@@ -108,7 +109,8 @@
         0.673,
         0.375,
         0.77
-      ]
+      ],
+      "model_url": "objects/tape_measure.glb"
     },
     {
       "id": "item_06",
