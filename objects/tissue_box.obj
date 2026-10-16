@@ -1,0 +1,27 @@
+mtllib tissue_box.mtl
+o Tissue_Box
+usemtl TissueMaterial
+s 1
+# Real-world dimensions: 15cm (0.15m X) x 10cm (0.10m Z) x 7cm (0.07m Y)
+# Standard low-poly clean geometric box / white model, 8 vertices, 6 quads, zero textures
+v -0.075000 0.000000 -0.050000 0.90 0.90 0.90
+v  0.075000 0.000000 -0.050000 0.90 0.90 0.90
+v  0.075000 0.000000  0.050000 0.90 0.90 0.90
+v -0.075000 0.000000  0.050000 0.90 0.90 0.90
+v -0.075000 0.070000 -0.050000 0.90 0.90 0.90
+v  0.075000 0.070000 -0.050000 0.90 0.90 0.90
+v  0.075000 0.070000  0.050000 0.90 0.90 0.90
+v -0.075000 0.070000  0.050000 0.90 0.90 0.90
+
+# Bottom (y=0)
+f 1 2 3 4
+# Top (y=0.07)
+f 8 7 6 5
+# Front (z=0.05)
+f 4 3 7 8
+# Back (z=-0.05)
+f 2 1 5 6
+# Left (x=-0.075)
+f 1 4 8 5
+# Right (x=0.075)
+f 3 2 6 7
