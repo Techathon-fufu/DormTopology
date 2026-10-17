@@ -44,7 +44,7 @@ import { Label, Separator } from '@/ui/kit/primitives'
 
 /**
  * 空间整理面板（右侧停靠 / 抽屉复用）：
- * 偏好设置 → 生成整理方案（规则式演示）→ 目标布局预览 → 分批动画（暂停 / 跳过 / 重播）→ 接受 / 恢复原布局。
+ * 偏好设置 → 生成整理方案（规则式演示）→ 整理结果预览 → 分批动画（暂停 / 跳过 / 重播）→ 接受 / 恢复原布局。
  * 整理前后对比使用同一镜头（不移动相机），指标全部来自本地场景数据计算并附口径说明。
  */
 
@@ -97,14 +97,17 @@ export function OrganizePanel({
   onFlash,
   className,
   onClose,
+  onPreviewReady,
 }: {
   project: Project
   onFlash: (msg: string) => void
   className?: string
+  onPreviewReady?: () => void
   onClose?: () => void
 }) {
   const status = useOrganizeStore((s) => s.status)
   const plan = useOrganizeStore((s) => s.plan)
+  const commands = useOrganizeStore((s) => s.commands)
   const error = useOrganizeStore((s) => s.error)
   const compare = useOrganizeStore((s) => s.compare)
   const showZones = useOrganizeStore((s) => s.showZones)
@@ -176,7 +179,16 @@ export function OrganizePanel({
           if (stageLabel) setStage(stageLabel)
         },
       })
+      if (!useOrganizeStore.getState().open || useProjectsStore.getState().projects[p.id] !== p) {
+        updateJob(job.id, { status: 'failed', error: '场景已变更，请重新生成方案' })
+        if (useOrganizeStore.getState().open) { setStatus('config'); setError('场景已变更，请重新生成方案') }
+        return
+      }
       setPlan(result, p.objects)
+      setShowZones(false)
+      useWorkspaceStore.getState().setViewPreset('desk')
+      startPlayback()
+      onPreviewReady?.()
       updateJob(job.id, { status: 'success', progress: 1, resultNote: result.summary })
       const warnCount = result.serviceMeta?.warnings?.length ?? 0
       onFlash(
@@ -190,6 +202,7 @@ export function OrganizePanel({
       )
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      setStatus('config')
       setError(msg)
       updateJob(job.id, { status: 'failed', error: msg })
     }
@@ -220,7 +233,7 @@ export function OrganizePanel({
 
   const planning = status === 'planning'
   const hasPlan = plan !== null
-  const batches = plan?.batches ?? []
+  const batches = commands
   const currentBatch = batches.length > 0 ? batches[Math.min(batchIndex, batches.length - 1)] : null
   const progressPct = Math.round(
     batches.length > 0 ? ((batchIndex + batchProgress) / batches.length) * 100 : 100,
@@ -356,7 +369,7 @@ export function OrganizePanel({
                     onChange={(v) => setPreferences({ typingWidth: v })}
                   />
                 </div>
-                <p className="text-[11px] leading-relaxed text-faint">
+                <p className="text-xs leading-relaxed text-muted-foreground">
                   区域自动贴桌面靠人一侧；其它物品默认避让（高件避让书架搁板投影时可跨其后缘）。
                 </p>
               </div>
@@ -445,7 +458,7 @@ export function OrganizePanel({
               {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {planning ? `生成中 · ${stage || '准备中'}` : '生成整理方案'}
             </Button>
-            <p className="text-[11px] leading-relaxed text-faint">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               {isMockMode
                 ? '演示算法为可解释的规则式布局（本地计算，标注「规则式演示方案」）；真实布局 / 搬运优化算法入口已接入服务层（VITE_API_MODE=real 时调用后端）。'
                 : '真实模式：方案由后端布局算法生成（经前端本地边界与引用校验，标注「真实后端算法」）；不可用时不会自动降级，请重试或切换到演示模式。'}
@@ -456,11 +469,11 @@ export function OrganizePanel({
             {/* 方案摘要 + 指标 */}
             <section className="space-y-2 rounded-lg border border-border p-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-[13px] font-semibold">目标布局预览</h3>
+                <h3 className="text-[13px] font-semibold">整理结果预览</h3>
                 <span className="text-[11px] text-faint">{formatDateTime(plan.createdAt)}</span>
               </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">{plan.summary}</p>
-              <div className="grid grid-cols-3 gap-2">
+              <p className="text-xs leading-relaxed text-muted-foreground">{plan.summary.replace(/，动画 \d+ 组/, `，操作 ${commands.length} 步`)}</p>
+              <div className="grid grid-cols-2 gap-2">
                 <Stat
                   label="桌面可用面积"
                   hint="估算口径见下方说明"
@@ -481,7 +494,7 @@ export function OrganizePanel({
                   hint={`未放置 ${plan.metrics.unplacedCount} · 相交 ${plan.metrics.overlapCount} · 越界 ${plan.metrics.outOfBoundsCount}`}
                 />
               </div>
-              <details className="text-[11px] leading-relaxed text-faint">
+              <details className="text-xs leading-relaxed text-muted-foreground">
                 <summary className="cursor-pointer select-none">指标口径说明</summary>
                 <p className="mt-1">{plan.metrics.method}</p>
               </details>
@@ -489,7 +502,7 @@ export function OrganizePanel({
 
             {/* 动画 */}
             <section className="space-y-2 rounded-lg border border-border p-3">
-              <h3 className="text-[13px] font-semibold">整理动画（按物品组分批）</h3>
+              <h3 className="text-[13px] font-semibold">模型操作指令（逐步执行）</h3>
               {batches.length === 0 ? (
                 <p className="text-xs text-muted-foreground">物品已在目标位置，无需动画。</p>
               ) : (
@@ -498,24 +511,15 @@ export function OrganizePanel({
                     const done = status === 'finished' || i < batchIndex
                     const activeBatch = status === 'playing' || status === 'paused' ? i === batchIndex : false
                     return (
-                      <li
-                        key={b.id}
-                        className={cn(
-                          'flex items-center justify-between rounded-md px-2 py-1 text-xs',
-                          activeBatch ? 'bg-primary/10 text-primary' : 'text-muted-foreground',
-                        )}
-                      >
-                        <span className="inline-flex items-center gap-1.5">
-                          {done ? (
-                            <CheckCircle2 className="h-3 w-3 text-success" />
-                          ) : activeBatch ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-border" />
-                          )}
-                          {i + 1}. {b.label}
-                        </span>
-                        <span className="tabular-nums">{b.objectIds.length} 件</span>
+                      <li key={b.id} className={cn('rounded-lg border px-2.5 py-2 text-xs', activeBatch ? 'border-primary/30 bg-primary-soft text-primary' : 'border-border/70 text-muted-foreground')}>
+                        <details>
+                          <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                            {done ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" /> : activeBatch ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[10px] tabular-nums">{i + 1}</span>}
+                            <span className="min-w-0 flex-1 leading-5">{b.label}</span>
+                            <span className="shrink-0 text-[10px] text-faint">理由</span>
+                          </summary>
+                          <p className="mt-2 border-t border-border/60 pt-2 leading-6 text-muted-foreground">{b.reason}</p>
+                        </details>
                       </li>
                     )
                   })}
@@ -533,7 +537,7 @@ export function OrganizePanel({
                   <p className="text-[11px] tabular-nums text-faint">
                     {status === 'finished'
                       ? '整理动画已完成（位置为目标布局）'
-                      : `第 ${Math.min(batchIndex + 1, batches.length)}/${batches.length} 组 · ${currentBatch?.label ?? ''}`}
+                      : `第 ${Math.min(batchIndex + 1, batches.length)}/${batches.length} 步 · ${currentBatch?.label ?? ''}`}
                   </p>
                 </div>
               ) : null}
@@ -572,17 +576,17 @@ export function OrganizePanel({
                 {(status === 'playing' || status === 'paused') && batches.length > 0 ? (
                   <Button size="sm" variant="outline" onClick={skipToEnd}>
                     <SkipForward className="h-3.5 w-3.5" />
-                    跳过
+                    查看最终效果
                   </Button>
                 ) : null}
               </div>
-              <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-faint">
+              <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
                 <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                动画仅用于方案展示，按物品组分批近似移动，不代表真实搬运路径已经过碰撞验证。
+                动画仅用于方案展示，根据物品位置与朝向逐条执行展示指令，不代表真实搬运路径已经过碰撞验证。
               </p>
               {reducedMotion ? (
                 <p className="rounded-md bg-info/10 px-2 py-1.5 text-[11px] leading-relaxed text-info">
-                  已检测到系统「减少动态效果」偏好：播放时直接显示目标布局，不做分批动画。
+                  已检测到系统「减少动态效果」偏好：播放时直接显示目标布局，直接呈现执行结果。
                 </p>
               ) : null}
             </section>
@@ -595,7 +599,8 @@ export function OrganizePanel({
                 className="w-full"
                 value={compare}
                 onChange={(v) => {
-                  setCompare(v)
+                  if (v === 'after') skipToEnd()
+                  else setCompare(v)
                   useTourStore.getState().signal(project.id, 'compare')
                 }}
                 options={[
@@ -603,8 +608,8 @@ export function OrganizePanel({
                   { value: 'after', label: '查看整理后' },
                 ]}
               />
-              <p className="text-[11px] leading-relaxed text-faint">
-                一键切换即时对比；相机保持同一视角不变。动画播放中切换到「整理前」会暂时隐藏预览位置。
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                一键切换即时对比；相机保持同一视角不变。切换到「整理前」会暂停演示；继续播放会回到操作预览。
               </p>
             </section>
 
@@ -667,7 +672,7 @@ export function OrganizePanel({
           <Separator />
           <div className="space-y-1.5 p-3">
             <div className="flex gap-2">
-              <Button className="flex-1" size="sm" onClick={accept}>
+              <Button className="flex-1" size="sm" disabled={status !== 'finished'} onClick={accept}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 接受方案
               </Button>
@@ -676,8 +681,8 @@ export function OrganizePanel({
                 恢复原布局
               </Button>
             </div>
-            <p className="text-[11px] leading-relaxed text-faint">
-              接受后写入项目（一次可撤销记录，Ctrl+Z 可回到整理前）；预览与动画不会修改项目数据。
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              查看最终效果后可接受。接受后写入项目（一次可撤销记录，Ctrl+Z 可回到整理前）；预览与动画不会修改项目数据。
             </p>
           </div>
         </>

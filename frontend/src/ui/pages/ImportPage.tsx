@@ -37,6 +37,8 @@ import { EmptyState } from '@/ui/kit/empty-state'
 import { FastForwardToggle } from '@/ui/kit/fast-forward'
 import { Input, Label, Select } from '@/ui/kit/primitives'
 import { MmInput } from '@/ui/kit/mm-input'
+import { PageIntro } from '@/ui/layout/PageIntro'
+import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { JobList } from '@/ui/jobs/JobList'
 
 type Step = 1 | 2 | 3
@@ -498,26 +500,22 @@ export function ImportPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">照片导入与物品确认</h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            上传照片 → 确认识别物品（可修改）→ 生成 3D 资产 → 带入三维工作台。
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
+      <PageIntro step="02 / 照片与物品" title="把桌面，带进三维空间" description="上传照片后，确认物品名称和尺寸，再选择展示模型。识别结果可随时校正。"><ProjectSteps projectId={project.id} current="import" className="flex-wrap" /></PageIntro>
+      <div className="rounded-xl border border-border bg-surface p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-1">
           {STEP_LABELS.map((s, i) => (
             <span key={s.n} className="flex items-center gap-1">
               <button
                 type="button"
                 disabled={s.n >= step}
+                aria-current={s.n === step ? 'step' : undefined}
                 onClick={() => setStep(s.n)}
                 className={
                   s.n === step
-                    ? 'rounded-full bg-primary-soft px-3 py-1 text-[13px] font-medium text-primary'
+                    ? 'rounded-lg bg-primary-soft px-3 py-2 text-[13px] font-medium text-primary'
                     : s.n < step
-                      ? 'rounded-full px-3 py-1 text-[13px] text-muted-foreground hover:bg-muted'
-                      : 'rounded-full px-3 py-1 text-[13px] text-faint'
+                      ? 'rounded-lg px-3 py-2 text-[13px] text-muted-foreground hover:bg-muted'
+                      : 'rounded-lg px-3 py-2 text-[13px] text-faint'
                 }
               >
                 {s.n} · {s.label}
@@ -541,7 +539,7 @@ export function ImportPage() {
       ) : null}
 
       {step === 1 ? (
-        <section className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">
+        <section className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-xs">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">① 上传桌面照片</h2>
             {isMockMode ? (
@@ -552,8 +550,8 @@ export function ImportPage() {
           </div>
           <p className="text-[13px] leading-relaxed text-muted-foreground">
             {isMockMode
-              ? '照片原图保存在浏览器 IndexedDB（大文件不进入 localStorage）。演示模式下识别使用模拟数据，可选择真实照片，也可直接使用示例照片或开始识别。'
-              : '照片原图保存在浏览器 IndexedDB；真实识别会把所选照片上传到应用后端分析，返回清单经你确认后才写入场景（尺寸为估计值，需人工核对）。'}
+              ? '照片保存在当前浏览器。演示模式使用模拟识别结果；你可以上传照片，或先用示例照片体验。'
+              : '照片保存在当前浏览器；识别时会发送所选照片到应用后端。请核对返回的清单与估计尺寸，确认后再加入场景。'}
           </p>
 
           {project.isDemo ? (
@@ -579,7 +577,7 @@ export function ImportPage() {
 
           <label
             className={cn(
-              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center transition-colors',
+              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-10 text-center transition-colors focus-within:ring-2 focus-within:ring-primary/40',
               dragging
                 ? 'border-primary bg-primary-soft/60'
                 : 'border-border hover:border-primary/50 hover:bg-primary-soft/40',
@@ -605,7 +603,8 @@ export function ImportPage() {
               type="file"
               accept="image/jpeg,image/png,image/webp"
               multiple
-              className="hidden"
+              className="sr-only"
+              aria-label="选择桌面照片"
               onChange={(e) => {
                 void handleFiles(e.target.files)
                 e.target.value = ''
@@ -656,7 +655,7 @@ export function ImportPage() {
                     type="button"
                     title="移除照片"
                     onClick={() => void removePhoto(p)}
-                    className="absolute right-1 top-1 rounded-full bg-surface/90 p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute right-1 top-1 rounded-full bg-surface/90 p-1 opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                   >
                     <Trash2 className="h-3.5 w-3.5 text-danger" />
                   </button>
@@ -704,17 +703,14 @@ export function ImportPage() {
               跳过识别，使用示例物品库
             </Button>
             {isMockMode ? (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  className="accent-[#0F9D8A]"
-                  checked={forceFail}
-                  onChange={(e) => setForceFail(e.target.checked)}
-                />
-                强制模拟识别失败（演示失败 / 重试流程）
-              </label>
+              <details className="w-full border-t border-border/70 pt-3">
+                <summary className="cursor-pointer text-xs text-muted-foreground">演示选项{forceFail ? ' · 已开启失败演示' : ''}</summary>
+                <div className="mt-3 flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" className="accent-[#0F9D8A]" checked={forceFail} onChange={(e) => setForceFail(e.target.checked)} />强制模拟识别失败（演示失败 / 重试流程）</label>
+                  <FastForwardToggle />
+                </div>
+              </details>
             ) : null}
-            <FastForwardToggle />
           </div>
         </section>
       ) : null}

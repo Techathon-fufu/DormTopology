@@ -1,3 +1,4 @@
+import { Dropdown } from '@/ui/kit/dropdown'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
@@ -28,6 +29,7 @@ import { buildGuideBundle, type GuideIssue, type GuideStep, type StepTarget } fr
 import { cn, downloadJson, formatDateTime } from '@/lib/utils'
 import { formatMeters, mToMm } from '@/lib/units'
 import { isMockMode } from '@/api'
+import { PageIntro } from '@/ui/layout/PageIntro'
 import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { Badge } from '@/ui/kit/badge'
 import { Button } from '@/ui/kit/button'
@@ -63,7 +65,7 @@ function SectionCard({
   children: ReactNode
 }) {
   return (
-    <section className="break-inside-avoid rounded-lg border border-border bg-surface p-4 shadow-sm">
+    <section className="break-inside-avoid rounded-xl border border-border bg-surface p-5 shadow-xs">
       <div className="flex items-center gap-2">
         <span className="text-primary [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
         <h2 className="text-sm font-semibold">{title}</h2>
@@ -440,39 +442,16 @@ export function GuidePage() {
       </div>
 
       {/* 工具栏 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <div>
-          <h1 className="text-xl font-semibold">方案交付 · {project.name}</h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            按次序执行整理与走线；所有内容由当前方案实时生成，线长 / 配件为本地计算与估算。
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ProjectSteps projectId={project.id} current="guide" className="hidden lg:flex" />
-          <Button variant="outline" onClick={() => navigate(`/projects/${project.id}/workspace`)}>
-            <ArrowLeft className="h-4 w-4" />
-            返回工作台
-          </Button>
-          <Button variant={stale ? 'primary' : 'outline'} onClick={onRegenerate}>
-            <RefreshCw className="h-4 w-4" />
-            重新生成指南
-          </Button>
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="h-4 w-4" />
-            打印 / 保存 PDF
-          </Button>
-          <Button variant="outline" onClick={exportJson}>
-            <FileJson className="h-4 w-4" />
-            导出 JSON
-          </Button>
-          <Button variant="outline" onClick={exportScreenshot}>
-            <FileImage className="h-4 w-4" />
-            导出截图
-          </Button>
+      <PageIntro step="04 / 方案交付" title="让整理，有迹可循" description={`${project.name} · 摆放与接线步骤由当前场景生成，线长与配件数量为本地计算或估算。`}><ProjectSteps projectId={project.id} current="guide" className="flex-wrap" /></PageIntro>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface p-3 print:hidden">
+        <Button variant="ghost" onClick={() => navigate(`/projects/${project.id}/workspace`)}><ArrowLeft className="h-4 w-4" />返回工作台</Button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onRegenerate}><RefreshCw className="h-4 w-4" />更新指南</Button>
+          <Dropdown className="relative"><summary className="flex h-9 cursor-pointer list-none items-center rounded-lg border border-border px-3 text-[13px] font-medium [&::-webkit-details-marker]:hidden">更多导出</summary><div className="absolute right-0 top-11 z-20 flex w-44 flex-col gap-1 rounded-xl border border-border bg-surface p-2 shadow-md"><Button variant="ghost" className="justify-start" onClick={exportJson}><FileJson className="h-4 w-4" />导出 JSON</Button><Button variant="ghost" className="justify-start" onClick={exportScreenshot}><FileImage className="h-4 w-4" />导出截图</Button></div></Dropdown>
+          <Button onClick={handlePrint}><Printer className="h-4 w-4" />打印 / 保存 PDF</Button>
         </div>
       </div>
 
-      {/* 方案修改提示 */}
       {stale ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 print:hidden">
           <AlertTriangle className="h-5 w-5 shrink-0 text-warning" />
@@ -491,14 +470,14 @@ export function GuidePage() {
 
       {/* 概览统计 */}
       <section className="grid break-inside-avoid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
           <p className="text-xs text-muted-foreground">物品</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">
             {stats.visibleObjectCount} 件
             <span className="ml-1 text-xs font-normal text-faint">可见 / 共 {stats.objectCount}</span>
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
           <p className="text-xs text-muted-foreground">线缆</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">
             {stats.cableCount} 条
@@ -507,7 +486,7 @@ export function GuidePage() {
             </span>
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             线缆总长（含预留） <DataBadge kind="computed" />
           </p>
@@ -516,7 +495,7 @@ export function GuidePage() {
           </p>
           <p className="text-xs text-faint">净估算 {formatMeters(stats.totalLengthM)}</p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
           <p className="text-xs text-muted-foreground">待解决问题</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">
             {stats.warningCount} 处
@@ -657,9 +636,9 @@ export function GuidePage() {
 
         {/* 右列：场景视图 + 进度 */}
         <aside className="space-y-4 print:hidden">
-          <div className="rounded-lg border border-border bg-surface p-3 shadow-sm xl:sticky xl:top-20">
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-xs xl:sticky xl:top-20">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">整理后的场景</h2>
+              <h2 className="text-sm font-semibold">当前方案场景</h2>
               <Segmented<GuideView>
                 size="sm"
                 value={view}
@@ -680,7 +659,7 @@ export function GuidePage() {
               />
             </div>
             <p className="mt-2 text-xs leading-relaxed text-faint">
-              点击场景中的物品 / 线缆，或点击步骤右侧的定位按钮，可高亮对应对象；拖动旋转、滚轮缩放。
+              点击物品、线缆或步骤旁的定位按钮可高亮对象。俯视时隐藏上床结构以便查看桌面；拖动可旋转，滚轮可缩放。
               「导出截图」与打印版式使用当前机位的画面。
             </p>
             {focus ? (
@@ -695,7 +674,7 @@ export function GuidePage() {
             ) : null}
           </div>
 
-          <div className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">执行进度</h2>
               <span className="text-sm font-semibold tabular-nums">

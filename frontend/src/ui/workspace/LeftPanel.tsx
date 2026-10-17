@@ -62,6 +62,7 @@ function ItemRow({
         onAfterSelect?.()
       }}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           select(object.id)
@@ -70,7 +71,7 @@ function ItemRow({
       }}
       title={hasIssues ? issues!.map((i) => i.message).join('\n') : undefined}
       className={cn(
-        'group flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
+        'group relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
         selected ? 'bg-primary-soft' : 'hover:bg-muted',
         !object.visible && 'opacity-55',
       )}
@@ -114,14 +115,14 @@ function ItemRow({
       </span>
 
       {/* 显示 / 隐藏、锁定按钮（悬停显现；处于隐藏 / 锁定状态时始终可见） */}
-      <span className="flex shrink-0 items-center gap-0.5">
+      <span className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-surface opacity-0 shadow-xs transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         <button
           type="button"
           title={object.visible ? '隐藏物品（保留在列表中）' : '恢复显示'}
           className={cn(
             'rounded p-0.5 hover:bg-muted hover:text-foreground',
             object.visible
-              ? 'text-muted-foreground opacity-0 focus-visible:opacity-100 group-hover:opacity-100'
+              ? 'text-muted-foreground'
               : 'text-warning',
           )}
           onClick={(e) => {
@@ -138,7 +139,7 @@ function ItemRow({
             'rounded p-0.5 hover:bg-muted hover:text-foreground',
             object.locked
               ? 'text-warning'
-              : 'text-muted-foreground opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
+              : 'text-muted-foreground',
           )}
           onClick={(e) => {
             e.stopPropagation()

@@ -375,7 +375,7 @@ export function WorkspacePage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background">
       <Toolbar
         project={project}
         onOpenOrganize={handleOpenOrganize}
@@ -393,13 +393,13 @@ export function WorkspacePage() {
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
-            className="hidden w-72 shrink-0 border-r lg:flex"
+            className="hidden w-60 shrink-0 border-r lg:flex"
           />
         ) : (
           <LeftPanel
             project={project}
             issuesById={issuesById}
-            className="hidden w-64 shrink-0 border-r lg:flex"
+            className="hidden w-[216px] shrink-0 border-r lg:flex"
           />
         )}
 
@@ -424,13 +424,13 @@ export function WorkspacePage() {
             <DragHintChip />
           </div>
 
-          <p className="pointer-events-none absolute bottom-3 left-4 hidden text-[11px] text-muted-foreground md:block">
+          <p className="pointer-events-none absolute bottom-3 left-4 right-4 hidden truncate text-center text-xs text-muted-foreground md:block">
             {mode === 'cable'
               ? '点击线缆查看 / 编辑属性 · 点击两个接口建立连接 · 拖拽线缆上的白色节点调整路径（10mm 吸附）· Esc 取消'
-              : '拖拽物品移动（吸附桌面 / 书架 / 地面）· 左键空白处旋转 · 右键平移 · 滚轮缩放 · Q/E 旋转 · 方向键微调 · Delete 删除'}
+              : '拖拽物品移动 · 空白处拖动旋转视角 · 滚轮缩放 · Q/E 旋转物品'}
           </p>
-          <p className="pointer-events-none absolute bottom-3 left-4 text-[11px] text-muted-foreground md:hidden">
-            拖拽物品移动 · 单指旋转 · 双指缩放 / 平移 · 顶部按钮打开面板抽屉
+          <p className="pointer-events-none absolute bottom-3 left-3 right-3 text-center text-[11px] text-muted-foreground md:hidden">
+            单指旋转 · 双指缩放 · 顶部打开物品与属性
           </p>
         </div>
 
@@ -438,7 +438,8 @@ export function WorkspacePage() {
           <OrganizePanel
             project={project}
             onFlash={showFlash}
-            className="hidden w-80 shrink-0 border-l xl:flex"
+            onPreviewReady={() => setRightOpen(false)}
+            className="hidden w-72 shrink-0 border-l xl:flex"
           />
         ) : mode === 'cable' && selectedCableId ? (
           <CablePanel
@@ -446,7 +447,7 @@ export function WorkspacePage() {
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
-            className="hidden w-80 shrink-0 border-l xl:flex"
+            className="hidden w-72 shrink-0 border-l xl:flex"
           />
         ) : (
           <RightPanel
@@ -502,6 +503,7 @@ export function WorkspacePage() {
           <OrganizePanel
             project={project}
             onFlash={showFlash}
+            onPreviewReady={() => setRightOpen(false)}
             className="h-full w-full border-l"
             onClose={() => {
               useOrganizeStore.getState().closePanel()

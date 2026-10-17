@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useMemo } from 'react'
 import { uid } from '@/lib/utils'
 import type { GenerationJob, JobType } from '@/types/project'
 
@@ -60,7 +61,11 @@ export const useJobsStore = create<JobsState>()((set) => ({
 }))
 
 export function useProjectJobs(projectId: string | undefined): GenerationJob[] {
-  return useJobsStore((s) => (projectId ? s.jobs.filter((j) => j.projectId === projectId) : []))
+  const jobs = useJobsStore((s) => s.jobs)
+  return useMemo(
+    () => (projectId ? jobs.filter((j) => j.projectId === projectId) : []),
+    [jobs, projectId],
+  )
 }
 
 export function getJobs(): GenerationJob[] {

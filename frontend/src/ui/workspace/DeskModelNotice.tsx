@@ -1,62 +1,26 @@
-import { AlertTriangle, Loader2, RotateCcw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Loader2, RotateCcw } from 'lucide-react'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { Button } from '@/ui/kit/button'
 
-/**
- * 桌体模型状态提示（视口右下角浮层）：
- * - 加载中：轻提示（不遮挡操作）；
- * - 加载失败：可读原因 + 「重试」/「改用简化几何」（回退参数化桌体，演示仍可继续）；
- * - 已选择简化几何：提供「尝试加载模型」入口。
- * 加载成功且正常显示时不渲染。
- */
+/** Asset diagnostics stay available without covering the scene by default. */
 export function DeskModelNotice() {
   const status = useDeskModelStore((s) => s.status)
   const error = useDeskModelStore((s) => s.error)
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const retry = useDeskModelStore((s) => s.retry)
   const useSimplifiedDesk = useDeskModelStore((s) => s.useSimplifiedDesk)
-
   if (!showDesk || status === 'idle' || status === 'loaded') return null
-
-  if (status === 'loading') {
-    return (
-      <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 rounded-full border border-border bg-surface/95 px-3 py-1.5 text-xs shadow-sm">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-        桌体模型加载中（dorm_desk_assembled.glb）…
-      </div>
-    )
-  }
-
-  if (status === 'skipped') {
-    return (
-      <div className="absolute bottom-3 right-3 flex max-w-xs flex-col gap-2 rounded-lg border border-border bg-surface/95 px-3 py-2 text-xs shadow-sm">
-        <span className="leading-relaxed text-muted-foreground">
-          当前使用参数化简化桌体（已按你的选择跳过 GLB 模型加载）。
-        </span>
-        <Button size="sm" variant="outline" className="h-7 self-start px-2 text-xs" onClick={retry}>
-          <RotateCcw className="h-3 w-3" />
-          尝试加载模型
-        </Button>
-      </div>
-    )
-  }
-
-  // status === 'failed'
+  if (status === 'loading') return <div role="status" className="pointer-events-none absolute right-3 top-3 flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-2 text-xs shadow-xs"><Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />正在载入桌体</div>
   return (
-    <div className="absolute bottom-3 right-3 flex max-w-xs flex-col gap-2 rounded-lg border border-warning/40 bg-surface/95 px-3 py-2 text-xs shadow-sm">
-      <span className="flex items-center gap-1.5 font-medium text-warning">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-        桌体模型加载失败，已回退到参数化简化桌体
-      </span>
-      <span className="leading-relaxed text-muted-foreground">{error}</span>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={retry}>
-          重试
-        </Button>
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={useSimplifiedDesk}>
-          改用简化几何
-        </Button>
+    <details className="group absolute right-3 top-3 z-20 text-xs">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-2 text-muted-foreground shadow-xs [&::-webkit-details-marker]:hidden">
+        <AlertTriangle className="h-3.5 w-3.5 text-warning" />简化桌体<ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="absolute right-0 top-11 w-72 max-w-[calc(100vw-32px)] space-y-3 rounded-xl border border-border bg-surface p-4 shadow-overlay">
+        <div><p className="font-semibold text-foreground">正在使用简化外观</p><p className="mt-1.5 leading-relaxed text-muted-foreground">{status === 'skipped' ? '已跳过桌体模型加载，仍可继续整理与查看方案。' : '桌体模型暂不可用，已保留可操作的简化场景。'}</p></div>
+        {error && status === 'failed' ? <details className="rounded-lg bg-muted/60 p-2"><summary className="cursor-pointer text-muted-foreground">查看加载原因</summary><p className="mt-2 break-words leading-relaxed">{error}</p></details> : null}
+        <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={retry}><RotateCcw className="h-3.5 w-3.5" />重新加载</Button>{status === 'failed' ? <Button size="sm" variant="ghost" onClick={useSimplifiedDesk}>保留简化桌体</Button> : null}</div>
       </div>
-    </div>
+    </details>
   )
 }

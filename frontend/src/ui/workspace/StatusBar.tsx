@@ -6,6 +6,7 @@ import { cableDisplayPoints } from '@/scene/cables'
 import { estimateCableLength } from '@/scene/cableRoute'
 import { isMockMode } from '@/api'
 import { useProjectJobs } from '@/state/jobsStore'
+import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { FastForwardToggle } from '@/ui/kit/fast-forward'
@@ -27,6 +28,7 @@ export function StatusBar({
   issuesById: Map<string, SceneIssue[]>
   onRetryJob: (job: GenerationJob) => void
 }) {
+  const preview = useOrganizeStore((s) => s.plan !== null)
   const mode = useWorkspaceStore((s) => s.mode)
   const lastScore = useWorkspaceStore((s) => s.lastScore)
   const select = useWorkspaceStore((s) => s.select)
@@ -56,10 +58,10 @@ export function StatusBar({
         <span className="font-medium text-foreground">
           {mode === 'organize' ? '整理物品' : '规划走线'}
         </span>
-        <span className="hidden md:inline">
+        <span className="hidden xl:inline">
           {mode === 'organize'
-            ? '「生成整理方案」：规则式演示，按 桌面常用区 / 书架收纳区 / 桌下隐藏区 分批归位'
-            : '「规划走线」：接口 → 路径节点 → 平滑曲线 → 障碍检查（规则式演示，未真实算法验证）'}
+            ? '规则式演示 · 本地保存'
+            : '规则式演示 · 结果需核查'}
         </span>
       </span>
 
@@ -121,7 +123,7 @@ export function StatusBar({
           }}
         >
           <AlertTriangle className="h-3 w-3" />
-          校验警示 {issueCount} 件
+          {preview ? '原布局警示' : '校验警示'} {issueCount} 件
         </button>
       ) : null}
 

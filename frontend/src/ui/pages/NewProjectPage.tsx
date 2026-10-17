@@ -5,6 +5,8 @@ import type { Project } from '@/types/project'
 import { createDemoCables, createDemoSceneObjects, createStandardRoom } from '@/data/demoProject'
 import { uid } from '@/lib/utils'
 import { useProjectsStore } from '@/state/projectsStore'
+import { PageIntro } from '@/ui/layout/PageIntro'
+import { DeskIllustration } from '@/ui/brand/DeskIllustration'
 import { Button } from '@/ui/kit/button'
 import { Input, Label } from '@/ui/kit/primitives'
 
@@ -40,17 +42,14 @@ export function NewProjectPage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">新建项目</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          创建项目 → 空间配置（单位 mm，实时预览）→ 照片导入 → 三维工作台。
-        </p>
-      </div>
+      <PageIntro step="新的开始" title="给你的空间起个名字" description="先创建项目，再确认桌面尺寸。照片、物品和整理方案会保存在当前浏览器。" />
+      <div className="mx-auto max-w-xs rounded-xl bg-[#EEF2EB] px-6"><DeskIllustration /></div>
 
-      <section className="space-y-4 rounded-lg border border-border bg-surface p-4 shadow-sm">
+      <section className="space-y-5 rounded-xl border border-border bg-surface p-6 shadow-xs">
         <div className="space-y-1">
-          <Label>项目名称</Label>
+          <Label htmlFor="project-name">项目名称</Label>
           <Input
+            id="project-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="例如：3 号楼 502 书桌"
@@ -81,12 +80,12 @@ export function NewProjectPage() {
           </Button>
           <Button variant="outline" size="lg" onClick={() => create(true)}>
             <Sparkles className="h-4 w-4" />
-            创建并载入示例物品库（直达工作台）
+            使用示例物品开始
           </Button>
         </div>
       </section>
 
-      <p className="text-[11px] leading-relaxed text-faint">
+      <p className="text-xs leading-relaxed text-faint">
         只想先看看效果？首页的「示例项目」内置完整物品库与现状线缆，可随时载入对比。
       </p>
     </div>

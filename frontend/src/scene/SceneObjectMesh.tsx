@@ -36,6 +36,10 @@ export function SceneObjectMesh({
   const organizePose = useOrganizeStore((s) =>
     s.compare === 'after' ? s.overrides[object.id] : undefined,
   )
+  const activeOperation = useOrganizeStore((s) =>
+    s.compare === 'after' && (s.status === 'playing' || s.status === 'paused') &&
+    s.commands[s.batchIndex]?.objectId === object.id,
+  )
   const dragging = dragPreview !== null
   const dragInvalid = dragPreview !== null && !dragPreview.valid
 
@@ -76,12 +80,12 @@ export function SceneObjectMesh({
           sockets={object.powerStrip?.socketCount}
         />
       </group>
-      {selected || hovered || dragging ? (
+      {selected || hovered || dragging || activeOperation ? (
         <mesh
           geometry={boxGeometry(dims.width * 1.06, dims.height * 1.08, dims.depth * 1.06)}
           material={basicMaterial('#0F9D8A', {
             wireframe: true,
-            opacity: selected || dragging ? 0.85 : 0.4,
+            opacity: selected || dragging || activeOperation ? 0.85 : 0.4,
           })}
         />
       ) : null}
