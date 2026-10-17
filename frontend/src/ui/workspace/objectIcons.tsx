@@ -9,6 +9,8 @@ import {
   Mouse,
   Package,
   Plug,
+  Printer,
+  PcCase,
   Smartphone,
 } from 'lucide-react'
 import type { ObjectCategory, PrimitiveShape } from '@/types/project'
@@ -21,6 +23,11 @@ const SHAPE_ICONS: Partial<Record<PrimitiveShape, typeof Laptop>> = {
   mouse: Mouse,
   lamp: Lamp,
   books: BookOpen,
+  book: BookOpen,
+  printer: Printer,
+  computerTower: PcCase,
+  powerAdapter: Plug,
+  thermos: Coffee,
   cup: Coffee,
   storageBox: Box,
   powerStrip: Plug,

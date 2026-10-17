@@ -4,6 +4,7 @@ import math
 
 from .errors import SceneInputError
 from .geometry import validate_item_geometry
+from .geometry.convex import validate_compound
 from .plug_mounts import plug_mount_geometry_issues
 
 
@@ -188,7 +189,12 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                     path + ".allowed_rotations_y_rad", "only 0 and pi/2 are supported"
                 )
         collision = _object(item["collision"], "type", path + ".collision")
-        _enum(collision["type"], {"box"}, path + ".collision.type")
+        _enum(collision["type"], {"box", "compound"}, path + ".collision.type")
+        if collision["type"] == "compound":
+            try:
+                validate_compound(collision)
+            except (ValueError, TypeError, OverflowError) as error:
+                _fail(path + ".collision", str(error))
         for key in ("image_url", "model_url"):
             _nullable_string(item[key], path + "." + key)
         generation = _object(

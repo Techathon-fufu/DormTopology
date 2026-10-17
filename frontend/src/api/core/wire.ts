@@ -1,3 +1,4 @@
+import { exportCollision, type CompoundCollision } from '@/scene/collisionGeometry'
 /**
  * 前后端 wire 契约（snake_case）与转换 / 校验层。
  *
@@ -244,6 +245,7 @@ export interface WireItemPayload {
   size_m: Vec3
   position: Vec3
   rotation_y_rad: number
+  collision: CompoundCollision
   dimensions_source: 'user' | 'estimated' | 'template'
   dimensions_confirmed: boolean
   fixed: boolean
@@ -313,6 +315,7 @@ export function toWireItem(o: SceneObject): WireItemPayload {
     size_m: [o.dimensions.width, o.dimensions.height, o.dimensions.depth],
     position: [...o.transform.position] as Vec3,
     rotation_y_rad: o.transform.rotationY,
+    collision: exportCollision(o),
     dimensions_source: dimensionSource,
     dimensions_confirmed: dimensionSource !== 'estimated',
     fixed: o.fixed || o.locked,

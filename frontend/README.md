@@ -4,7 +4,7 @@ React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面
 
 独立的 `/algorithm-lab` 可读取真实 Python 领域算法导出的 JSON，查看布局、路径和失败原因；这不代表产品流程或 Rodin 真实联调已完成。
 
-本目录的设计基线见 [docs/design-spec.md](docs/design-spec.md)；仓库级约定以 [实施方案](../docs/implementation_roadmap.md) 与 [数据契约](../docs/data_contract.md) 为准。
+当前视觉与布局基线见 [DESIGN.md](../DESIGN.md)，本轮实现与截图见 [UI 改版记录](docs/ui-refresh/README.md)；旧设计草案保留于 [docs/design-spec.md](docs/design-spec.md)；仓库级约定以 [实施方案](../docs/implementation_roadmap.md) 与 [数据契约](../docs/data_contract.md) 为准。
 
 ## 运行与检查
 
@@ -30,6 +30,8 @@ npm run build      # tsc --noEmit && vite build
 项目列表（含内置示例项目）→ 创建项目 → 空间配置 → 照片导入与物品确认 → 三维工作台 → 方案交付（执行指南）。
 
 - **一键演示导览**（首页「一键演示」）：6 步固定顺序（查看凌乱桌面 → 确认识别物品 → 自动整理 → 规划走线 → 对比前后 → 查看执行指南），步骤切换自动导航、完成自动打勾、可点步骤条跳转；「重置并重播」重新种入示例项目并清理交付勾选 / 候选方案 / 任务记录 / 撤销历史；导览进度本地持久化；工作台步骤自动切换桌面视角（路演三幕：杂乱还原 / 归位动画 / 收拢对比）。演示辅助：「跳过模拟等待」（全局演示加速，仅 mock 生效）与系统「减少动态效果」偏好（整理 / 收拢动画直接显示末态）。演示脚本与验收明细见 [docs/demo-and-acceptance.md](docs/demo-and-acceptance.md)。
+
+- **整理操作演示**：方案编译为逐件模型移动 / 旋转指令，自动播放、暂停、重播与最终效果；实现边界与检查见 [整理操作演示](docs/organization-playback.md)。
 
 - **空间配置**（`/projects/:id/setup`）：桌体、房间、立柱、穿线孔、墙面接口的表单配置，表单为毫米制（与三维内部米制通过 `@/lib/units` 换算），配置冲突有就地校验；墙面接口高度支持滑块 + 数值调整（钳制在墙内，默认 350mm，可恢复默认，变更后相关走线提示需重算）。
 - **照片导入**（`/projects/:id/import`）：示例照片与上传（IndexedDB 保存）、识别 Mock 输出候选清单、物品增删改与尺寸确认、模型生成任务 Mock（等待/失败/重试/部分成功）、物品落位到桌面。

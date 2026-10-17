@@ -25,16 +25,17 @@ export function Segmented<T extends string>({
   className,
 }: SegmentedProps<T>) {
   return (
-    <div className={cn('inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5', className)}>
+    <div className={cn('inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/70 p-0.5', className)}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           title={o.title}
           disabled={o.disabled}
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-md px-3 font-medium transition-colors disabled:pointer-events-none disabled:opacity-40',
+            'inline-flex items-center gap-1.5 rounded-md px-3 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:pointer-events-none disabled:opacity-40',
             size === 'sm' ? 'h-7 text-[13px]' : 'h-8 text-sm',
             value === o.value
               ? 'bg-surface text-foreground shadow-xs'

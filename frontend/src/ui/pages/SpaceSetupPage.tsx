@@ -11,6 +11,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react'
+import { PageIntro } from '@/ui/layout/PageIntro'
 import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { SpacePreview3D } from '@/ui/setup/SpacePreview3D'
 import { Button } from '@/ui/kit/button'
@@ -69,7 +70,7 @@ function MmField({
         disabled={disabled}
         onChange={(m) => onChangeMm(Math.round(mToMm(m)))}
       />
-      {hint ? <p className="text-[11px] text-faint">{hint}</p> : null}
+      {hint ? <p className="text-xs text-faint">{hint}</p> : null}
     </div>
   )
 }
@@ -84,7 +85,7 @@ function SectionCard({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">
+    <section className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         {extra}
@@ -203,27 +204,19 @@ export function SpaceSetupPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">空间配置</h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            填写宿舍与书桌尺寸，实时预览 → 保存后进入照片导入。表单单位：毫米（mm）；三维场景内部使用米。
-          </p>
-        </div>
-        <ProjectSteps projectId={project.id} current="setup" className="hidden md:flex" />
-      </div>
+      <PageIntro step="01 / 确认空间" title="为你的书桌，建立空间" description="填写实际测量的尺寸，右侧预览会同步变化。所有输入均以毫米（mm）为单位。"><ProjectSteps projectId={project.id} current="setup" className="flex-wrap" /></PageIntro>
 
       {project.isDemo ? (
         <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary-soft/60 px-3 py-2 text-[13px] leading-relaxed">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
-            当前是示例项目：保存会覆盖其空间配置，可随时点击「使用示例空间」恢复默认示例（桌面 1200 × 600 ×
+            当前是示例项目：保存会覆盖其空间配置，可随时点击「使用示例空间」恢复默认示例（桌面 1600 × 800 ×
             750 mm 等，均为可修改的示例值）。
           </p>
         </div>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* ── 表单 ─────────────────────────────────────────────── */}
         <div className="space-y-4">
           <SectionCard
@@ -288,7 +281,7 @@ export function SpaceSetupPage() {
                 onChangeMm={(v) => patch({ shelfDepth: v })}
               />
             </div>
-            <p className="text-[11px] text-faint">
+            <p className="text-xs text-faint">
               校验参考示例床架下沿约 1580 mm：桌面高度 + 离桌高度 + 250 mm 取物空间不可超过该值。
             </p>
           </SectionCard>
@@ -376,7 +369,7 @@ export function SpaceSetupPage() {
                       </Button>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="shrink-0 text-[11px] text-faint">高度滑块</span>
+                      <span className="shrink-0 text-xs text-faint">高度滑块</span>
                       <input
                         type="range"
                         min={yMin}
@@ -387,13 +380,13 @@ export function SpaceSetupPage() {
                         className="h-1.5 min-w-36 flex-1 cursor-pointer accent-[#0F9D8A]"
                         onChange={(e) => updateOutlet(o.id, { y: clampOutletY(Number(e.target.value), form.roomH) })}
                       />
-                      <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                      <span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                         当前位置：{o.y} mm
                       </span>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-[11px]"
+                        className="h-7 px-2 text-xs"
                         disabled={o.y === OUTLET_DEFAULT_Y_MM}
                         title={`恢复默认高度 ${OUTLET_DEFAULT_Y_MM} mm`}
                         onClick={() => updateOutlet(o.id, { y: OUTLET_DEFAULT_Y_MM })}
@@ -402,7 +395,7 @@ export function SpaceSetupPage() {
                         恢复默认
                       </Button>
                     </div>
-                    <p className="text-[11px] leading-relaxed text-faint">
+                    <p className="text-xs leading-relaxed text-faint">
                       可调范围 {yMin}–{yMax} mm（距地 / 距顶至少 {OUTLET_WALL_MARGIN_MM} mm，不会移出墙体）；
                       建议 {OUTLET_ADVICE_Y_MM.min}–{OUTLET_ADVICE_Y_MM.max} mm（常见床头 / 桌面附近插座高度）。
                     </p>
@@ -429,16 +422,16 @@ export function SpaceSetupPage() {
         </div>
 
         {/* ── 预览 / 校验 / 操作 ───────────────────────────────── */}
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <div className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
             <h2 className="mb-2 text-sm font-semibold">简化三维预览</h2>
             <SpacePreview3D room={previewRoom} />
-            <p className="mt-2 text-[11px] leading-relaxed text-faint">
+            <p className="mt-2 text-xs leading-relaxed text-faint">
               预览为简化示意：房间 / 桌面 / 书架 / 立柱 / 出线孔 / 插座均由当前表单实时生成；床架为示例规格，随立柱自动展开。
             </p>
           </div>
 
-          <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+          <div className="rounded-xl border border-border bg-surface p-5 shadow-xs">
             <h2 className="mb-2 text-sm font-semibold">当前空间摘要</h2>
             <dl className="space-y-1 text-[13px] text-muted-foreground">
               <div className="flex justify-between gap-3">
@@ -528,7 +521,7 @@ export function SpaceSetupPage() {
             </Button>
             <Button variant="outline" onClick={useDemoSpace}>
               <Sparkles className="h-4 w-4" />
-              使用示例空间（1200 × 600 × 750 mm）
+              使用示例空间（1600 × 800 × 750 mm）
             </Button>
             <Button variant="ghost" onClick={revert} disabled={!dirty}>
               <RotateCcw className="h-4 w-4" />

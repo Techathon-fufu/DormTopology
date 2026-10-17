@@ -21,19 +21,20 @@ export function ProjectSteps({
   className?: string
 }) {
   return (
-    <nav className={cn('flex items-center gap-1', className)}>
-      {STEPS.map((s) => (
+    <nav aria-label="项目步骤" className={cn('flex items-center gap-1', className)}>
+      {STEPS.map((s, i) => (
         <Link
           key={s.key}
           to={`/projects/${projectId}/${s.suffix}`}
+          aria-current={s.key === current ? 'step' : undefined}
           className={cn(
-            'rounded-full px-3 py-1 text-[13px] transition-colors',
+            'inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-xs transition-colors',
             s.key === current
               ? 'bg-primary-soft font-medium text-primary'
               : 'text-muted-foreground hover:bg-muted',
           )}
         >
-          {s.label}
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current/20 text-[10px]">{i + 1}</span>{s.label}
         </Link>
       ))}
     </nav>

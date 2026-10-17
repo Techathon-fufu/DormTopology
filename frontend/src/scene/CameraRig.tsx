@@ -5,12 +5,12 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 
 const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [number, number, number] }> = {
-  persp: { pos: [1.9, 1.6, 2.6], target: [0, 0.9, 0.45] },
+  persp: { pos: [1.35, 1.2, 1.9], target: [0, 0.78, 0.35] },
   front: { pos: [0, 1.05, 3.0], target: [0, 0.95, 0.4] },
-  top: { pos: [0, 3.4, 0.46], target: [0, 0, 0.45] },
+  top: { pos: [0, 2.7, 0.46], target: [0, 0.75, 0.45] },
   left: { pos: [-2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
   right: { pos: [2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
-  desk: { pos: [0.55, 1.5, 1.35], target: [0, 0.8, 0.35] },
+  desk: { pos: [0.75, 1.9, 2.0], target: [0, 0.85, 0.45] },
 }
 
 /**

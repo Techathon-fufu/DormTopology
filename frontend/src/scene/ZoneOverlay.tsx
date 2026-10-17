@@ -52,12 +52,11 @@ function ZoneLabel({
     <Html
       position={[x, y, z]}
       center
-      distanceFactor={6}
-      zIndexRange={[20, 0]}
+      zIndexRange={[5, 0]}
       style={{ pointerEvents: 'none' }}
     >
       <span
-        className="whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium shadow-xs"
+        className="whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[11px] font-medium shadow-xs"
         style={{ borderColor: color, color: '#26221B', background: 'rgba(255, 253, 248, 0.9)' }}
       >
         {text}

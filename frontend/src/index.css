@@ -60,3 +60,21 @@
     page-break-inside: avoid;
   }
 }
+/* Consistent focus and selection for keyboard and touch use. */
+@layer base {
+  ::selection { background: #d5eee5; color: #203e36; }
+  a:focus-visible, summary:focus-visible, button:focus-visible {
+    outline: 2px solid #0f9d8a;
+    outline-offset: 3px;
+  }
+}
+.playback-progress { appearance: none; background: #e8ede6; }
+.playback-progress::-webkit-progress-bar { background: #e8ede6; }
+.playback-progress::-webkit-progress-value { background: #0f9d8a; }
+.playback-progress::-moz-progress-bar { background: #0f9d8a; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
+@media (pointer: coarse) {
+  .ui-button, .ui-input, .ui-select, summary { min-height: 44px; }
+}

@@ -297,7 +297,7 @@ export function formToRoom(f: SpaceForm): RoomConfig {
   }
 }
 
-/** 示例空间：上床下桌标准款（1200 × 600 × 750 mm 等，均为可修改的示例值） */
+/** 示例空间：上床下桌标准款（1600 × 800 × 750 mm 等，均为可修改的示例值） */
 export function demoSpaceForm(): SpaceForm {
   return roomToForm(createStandardRoom())
 }

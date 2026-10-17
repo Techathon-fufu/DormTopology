@@ -37,7 +37,7 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
           shadow-mapSize={[1024, 1024]}
         />
         <directionalLight position={[-4, 3, 3]} intensity={0.35} />
-        <RoomShell room={room} />
+        <RoomShell room={room} showBed={view !== 'top'} />
         <CameraRig preset={view} />
       </Canvas>
       <div className="absolute right-2 top-2">

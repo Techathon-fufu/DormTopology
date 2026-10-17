@@ -1,3 +1,5 @@
+import { describePrimitive } from './primitiveGeometry'
+import { objectToWorld } from './collisionGeometry'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import {
   DESK_BEAM_DEPTH,
@@ -97,10 +99,11 @@ function classify(o: SceneObject): Role {
   if (shape === 'keyboard' || name.includes('键盘')) return 'keyboard'
   if (shape === 'mouse' || name.includes('鼠标')) return 'mouse'
   if (shape === 'monitor' || name.includes('显示器') || name.includes('屏幕')) return 'monitor'
+  if (shape === 'book' || shape === 'books') return 'book'
   if (shape === 'laptop' || name.includes('笔记本')) return 'laptop'
   if (shape === 'lamp' || name.includes('台灯') || name.includes('灯')) return 'lamp'
-  if (shape === 'cup' || name.includes('杯')) return 'cup'
-  if (shape === 'books' || name.includes('书')) return 'book'
+  if (shape === 'cup' || shape === 'thermos' || name.includes('杯')) return 'cup'
+  if (name.includes('书')) return 'book'
   if (shape === 'storageBox' || o.category === 'storage') return 'container'
   if (
     shape === 'powerStrip' ||
@@ -273,24 +276,23 @@ function placeInsideContainer(
   obj: SceneObject,
   container: PlacedPose,
 ): PlanAssignment | null {
-  const cw = container.object.dimensions.width
-  const cd = container.object.dimensions.depth
-  const ch = container.object.dimensions.height
-  if (obj.dimensions.height + 0.01 > ch) return null
-  const wall = 0.014
-  const innerW = cw - wall * 2
-  const innerD = cd - wall * 2
+  const cavity = describePrimitive(container.object.model.shape, container.object.dimensions).cavity
+  if (!cavity) return null
+  const innerW = cavity.max[0] - cavity.min[0]
+  const innerD = cavity.max[2] - cavity.min[2]
+  if (obj.dimensions.height > cavity.max[1] - cavity.min[1]) return null
   if (obj.dimensions.width > innerW || obj.dimensions.depth > innerD) return null
 
   const key = `container:${container.object.id}`
-  const startX = container.position[0] - cw / 2 + wall
+  const startX = cavity.min[0]
   let cursor = ctx.cursors.get(key) ?? startX
-  const y = container.position[1] + 0.002
-  const z = container.position[2]
+  const y = cavity.min[1]
+  const z = (cavity.min[2] + cavity.max[2]) / 2
+  const containerObject = { ...container.object, transform: { position: container.position, rotationY: container.rotationY } }
 
   while (cursor + obj.dimensions.width <= startX + innerW + 1e-6) {
-    const position: Vec3 = [cursor + obj.dimensions.width / 2, y, z]
-    if (canPlace(ctx, obj, position, 0)) {
+    const position = objectToWorld([cursor + obj.dimensions.width / 2, y, z], containerObject)
+    if (canPlace(ctx, obj, position, container.rotationY)) {
       ctx.cursors.set(key, cursor + obj.dimensions.width + 0.012)
       const remainMm = Math.max(
         0,
@@ -299,7 +301,7 @@ function placeInsideContainer(
       return {
         objectId: obj.id,
         position,
-        rotationY: 0,
+        rotationY: container.rotationY,
         zone: container.zone,
         reason: `小件优先入盒：放入「${container.object.name}」内部（盒内剩余宽度约 ${remainMm} mm）`,
       }
@@ -471,7 +473,7 @@ export function computeRuleBasedPlan(input: {
     if (zones.shelf && b.dimensions.height + 0.02 <= zones.shelf.clearance) {
       a = placeInBand(ctx, b, zones.shelf, 'shelf:left', {
         zone: 'shelf',
-        reason: '书本优先归入书架收纳区（左侧竖放位）',
+        reason: '书本优先归入书架收纳区（左侧书本位）',
       })
     }
     if (!a) {
@@ -771,7 +773,7 @@ export function computeRuleBasedPlan(input: {
   const rules = [
     `键鼠优先：打字活动区（约 ${typingWmm} × ${typingDmm} mm）保留给键盘 / 鼠标，其它物品默认避让`,
     `常用物品：标记「常用」的 ${frequentCount} 件物品优先放在桌面常用区前排与两侧的易取位置`,
-    shelfOn ? '书本优先：书本（叠放）优先归入书架收纳区左侧' : '书本优先：未启用书架，书本退而放在桌面后带',
+    shelfOn ? '书本优先：书本优先归入书架收纳区左侧' : '书本优先：未启用书架，书本退而放在桌面后带',
     '小件入盒：小件物品（最长边 ≤ 160mm）优先放入尺寸适配的收纳容器内部',
     '排插归位：排插优先放入已配置且高度足够的桌下隐藏区，靠后墙放置便于插拔',
     '包围盒检查：全部落位按物品包围盒（宽 × 高 × 深）检查分区分界、房间边界与明显相交；高件（显示器等）避让书架搁板投影',
