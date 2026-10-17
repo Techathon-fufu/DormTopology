@@ -7,7 +7,7 @@ import { useDeliverStore } from './deliverStore'
 import { useJobsStore } from './jobsStore'
 import { useOrganizeStore } from './organizeStore'
 import { useCableStore } from './cableStore'
-import { useWorkspaceStore } from './workspaceStore'
+import { useWorkspaceStore, type ViewPreset } from './workspaceStore'
 
 /**
  * 「一键演示」导览状态机：
@@ -24,14 +24,17 @@ export interface DemoTourStep {
   hint: string
   /** 相对路由（/projects/{id}/ 之后） */
   path: string
+  /** 工作台步骤的预设视角（路演三幕：进入步骤时自动应用） */
+  view?: ViewPreset
 }
 
 export const DEMO_TOUR_STEPS: DemoTourStep[] = [
   {
     id: 'messy',
     title: '查看凌乱桌面',
-    hint: '这是整理前的桌面：物品有重叠、线缆散乱（演示现状）。拖动 / 旋转视角看一看。',
+    hint: '幕一 · 杂乱还原：整理前的桌面——物品重叠、线缆散乱（演示现状）。拖动 / 旋转视角看一看。',
     path: 'workspace',
+    view: 'desk',
   },
   {
     id: 'confirm-items',
@@ -42,20 +45,23 @@ export const DEMO_TOUR_STEPS: DemoTourStep[] = [
   {
     id: 'organize',
     title: '自动整理',
-    hint: '回到工作台点「生成整理方案」→ 预览目标布局（可播放动画 + 对比前后）→「接受方案」。',
+    hint: '幕二 · 归位动画：点「生成整理方案」→ 播放整理动画 / 对比前后 →「接受方案」完成归位。',
     path: 'workspace',
+    view: 'desk',
   },
   {
     id: 'cables',
     title: '规划走线',
     hint: '切换到「规划走线」模式 → 点顶部「规划走线」按钮：全部线缆按路径节点重算（规则式演示）。',
     path: 'workspace',
+    view: 'desk',
   },
   {
     id: 'compare',
     title: '对比前后',
-    hint: '选中一条线缆切换「原始 / 建议」走线（可播放收拢动画）；「空间整理」面板里可「恢复整理前状态」一键还原。',
+    hint: '幕三 · 收拢对比：点左侧「收拢动画（全部线缆）」看原始 → 建议过渡，或用「原始 / 建议」切换对比。',
     path: 'workspace',
+    view: 'desk',
   },
   {
     id: 'guide',

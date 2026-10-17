@@ -23,10 +23,11 @@ import {
 } from '@/types/project'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { cableDisplayPoints, endpointOf, endpointLabel } from '@/scene/cables'
-import { checkCableRoute, sampleCurve } from '@/scene/cableRoute'
+import { checkCableRoute } from '@/scene/cableRoute'
 import { computeCableAvoidZones, computeRouteNodes, routeNodeMap } from '@/scene/routeNodes'
 import { PORT_TYPE_COLORS } from '@/scene/ports'
 import { formatMm, formatMeters } from '@/lib/units'
+import { startCollectAnim } from '@/lib/collectAnim'
 import { useCableStore } from '@/state/cableStore'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
@@ -225,21 +226,6 @@ export function CablePanel({
       )
       return { points: pts, ids: nids }
     }, '已微调路径节点坐标（本地障碍检查将重新执行）')
-  }
-
-  const startCollectAnim = () => {
-    const from: Record<string, Vec3[]> = {}
-    for (const c of project.cables) {
-      if (!c.originalRoute) continue
-      const pts = cableDisplayPoints(c, project.objects, 'original')
-      from[c.id] = sampleCurve(pts, 48)
-    }
-    if (Object.keys(from).length === 0) {
-      onFlash('暂无可对比的原始走线：请先执行一次「规划走线」（规划前的走线会保留为原始走线）')
-      return
-    }
-    setRouteView('suggested')
-    useCableStore.getState().startAnim(from)
   }
 
   return (
@@ -551,7 +537,12 @@ export function CablePanel({
                 继续
               </Button>
             ) : (
-              <Button size="sm" variant="outline" className="flex-1" onClick={startCollectAnim}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => startCollectAnim(project, onFlash)}
+              >
                 <Play className="h-3.5 w-3.5" />
                 {animStatus === 'finished' ? '重播收拢动画' : '播放收拢动画'}
               </Button>

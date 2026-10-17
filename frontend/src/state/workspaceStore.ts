@@ -98,6 +98,8 @@ interface WorkspaceState {
   lastScore: number | null
   setMode: (mode: WorkspaceMode) => void
   setViewPreset: (p: ViewPreset) => void
+  /** 应用视角预设并强制重新应用相机（重复进入同一预设也会生效；导览步骤切换用） */
+  applyViewPreset: (p: ViewPreset) => void
   resetView: () => void
   setDrag: (drag: DragState | null) => void
   select: (id: string | null) => void
@@ -160,6 +162,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     lastScore: null,
     setMode: (mode) => set({ mode }),
     setViewPreset: (viewPreset) => set({ viewPreset }),
+    applyViewPreset: (viewPreset) => set((s) => ({ viewPreset, viewNonce: s.viewNonce + 1 })),
     resetView: () => set((s) => ({ viewPreset: 'persp', viewNonce: s.viewNonce + 1 })),
     setDrag: (drag) => set({ drag }),
     select: (selectedId) => set({ selectedId }),
