@@ -3,6 +3,7 @@ import { OrbitControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useDrawerStore } from '@/state/drawerStore'
+import { useObjectResizeStore } from '@/state/objectResizeStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
 
@@ -45,6 +46,7 @@ export function CameraRig({
   const nonce = useWorkspaceStore((s) => s.viewNonce)
   const objectDragActive = useWorkspaceStore((s) => s.drag !== null)
   const drawerDragActive = useDrawerStore((s) => s.draggingId !== null)
+  const resizeActive = useObjectResizeStore((s) => s.preview !== null)
   const currentPreset = furnitureModel === 'dormdesk-v1' && preset === 'persp'
     ? FIXED_PERSPECTIVE : PRESETS[preset]
 
@@ -71,7 +73,7 @@ export function CameraRig({
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enabled={!objectDragActive && !drawerDragActive}
+      enabled={!objectDragActive && !drawerDragActive && !resizeActive}
       enableDamping
       dampingFactor={0.08}
       enablePan
