@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutPlan, Project } from '@/types/project'
-import { planFromProject } from '@/lib/plans'
+import { duplicatePlan, planFromProject } from '@/lib/plans'
 
 /**
  * 布局方案仓库：
  * - baselines：整理前状态快照（独立于当前方案保存）
- * - candidates：对比用方案（「保存方案」生成，供后续方案对比使用）
+ * - candidates：对比用方案（「保存方案」生成，0.8.0 起携带完整场景 / 线缆快照）
  * 当前方案实时保存在 Project.objects（projectsStore）。
+ *
+ * 持久化版本：v1（仅物品指派）→ v2（updatedAt / 场景快照 / 来源）。
+ * v1 数据迁移时仅补齐 updatedAt，其余字段保持缺失（界面按「旧版本方案」展示，不丢数据）。
  */
 interface PlansState {
   baselines: Record<string, LayoutPlan>
@@ -15,9 +18,18 @@ interface PlansState {
   captureBaseline: (project: Project) => void
   recaptureBaseline: (project: Project) => void
   saveCandidate: (project: Project, name?: string) => LayoutPlan
+  /** 重命名候选方案（空名称忽略；更新时间一并刷新） */
+  renameCandidate: (projectId: string, planId: string, name: string) => void
+  /** 复制候选方案（含场景快照深拷贝）；返回新方案 */
+  duplicateCandidate: (projectId: string, planId: string) => LayoutPlan | null
   removeCandidate: (projectId: string, planId: string) => void
   /** 清空项目的整理前快照与候选方案（演示重置 / 删除项目时使用） */
   clearProject: (projectId: string) => void
+}
+
+/** v1 → v2：为缺少 updatedAt 的方案补默认值（保持其余字段不动） */
+function migratePlan(plan: LayoutPlan): LayoutPlan {
+  return { ...plan, updatedAt: plan.updatedAt ?? plan.createdAt }
 }
 
 export const usePlansStore = create<PlansState>()(
@@ -60,6 +72,30 @@ export const usePlansStore = create<PlansState>()(
         }))
         return plan
       },
+      renameCandidate(projectId, planId, name) {
+        const trimmed = name.trim()
+        if (!trimmed) return
+        set((s) => ({
+          candidates: {
+            ...s.candidates,
+            [projectId]: (s.candidates[projectId] ?? []).map((p) =>
+              p.id === planId ? { ...p, name: trimmed, updatedAt: Date.now() } : p,
+            ),
+          },
+        }))
+      },
+      duplicateCandidate(projectId, planId) {
+        const source = (get().candidates[projectId] ?? []).find((p) => p.id === planId)
+        if (!source) return null
+        const copy = duplicatePlan(source, `${source.name} 副本`)
+        set((s) => ({
+          candidates: {
+            ...s.candidates,
+            [projectId]: [...(s.candidates[projectId] ?? []), copy],
+          },
+        }))
+        return copy
+      },
       removeCandidate(projectId, planId) {
         set((s) => ({
           candidates: {
@@ -78,6 +114,24 @@ export const usePlansStore = create<PlansState>()(
         })
       },
     }),
-    { name: 'dormtopology.plans', version: 1 },
+    {
+      name: 'dormtopology.plans',
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<PlansState>
+        if (version < 2) {
+          const baselines: Record<string, LayoutPlan> = {}
+          for (const [projectId, plan] of Object.entries(state.baselines ?? {})) {
+            if (plan) baselines[projectId] = migratePlan(plan)
+          }
+          const candidates: Record<string, LayoutPlan[]> = {}
+          for (const [projectId, plans] of Object.entries(state.candidates ?? {})) {
+            if (plans) candidates[projectId] = plans.map(migratePlan)
+          }
+          return { ...state, baselines, candidates } as PlansState
+        }
+        return state as PlansState
+      },
+    },
   ),
 )

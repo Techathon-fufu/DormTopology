@@ -431,7 +431,7 @@ export interface LayoutAssignment {
  * 布局方案快照。
  * - kind = 'baseline'：整理前状态（进入工作台时自动采集，独立保存）
  * - kind = 'current'：当前方案（工作台实时编辑，存于 Project.objects）
- * - kind = 'candidate'：对比用方案（「保存方案」生成）
+ * - kind = 'candidate'：对比用方案（「保存方案」生成，0.8.0 起携带场景快照）
  */
 export interface LayoutPlan {
   id: string
@@ -439,9 +439,58 @@ export interface LayoutPlan {
   name: string
   kind: 'baseline' | 'current' | 'candidate'
   createdAt: number
+  /** 最近一次重命名 / 复制等变更时间（旧数据缺失时按 createdAt 处理） */
+  updatedAt?: number
   assignments: LayoutAssignment[]
+  /** 场景快照（0.8.0 起随「保存方案」写入；旧数据缺失时按「旧版本方案」展示） */
+  scene?: PlanSceneSnapshot
+  /** 方案来源（布局 / 走线算法来源；旧数据缺失时为 undefined） */
+  source?: PlanSourceInfo
   score?: number
   summary?: string
+}
+
+// ───────────────────────────── 方案快照与来源 ─────────────────────────────
+
+/** 方案场景快照格式版本 */
+export const PLAN_SCENE_SNAPSHOT_VERSION = 1
+
+/**
+ * 方案场景快照：保存方案时的房间 / 物品 / 线缆深拷贝。
+ * 用于候选方案对比——当前方案继续编辑后，已保存方案不被覆盖。
+ */
+export interface PlanSceneSnapshot {
+  version: number
+  room: RoomConfig
+  objects: SceneObject[]
+  cables: CableConnection[]
+}
+
+/** 方案布局来源 */
+export type PlanLayoutSource = 'rule' | 'algorithm' | 'manual' | 'unknown'
+
+/** 方案走线来源 */
+export type PlanCableSource = 'rule' | 'algorithm' | 'manual' | 'mixed' | 'none' | 'unknown'
+
+export const PLAN_LAYOUT_SOURCE_LABELS: Record<PlanLayoutSource, string> = {
+  rule: '规则式布局（演示）',
+  algorithm: '真实布局算法',
+  manual: '手动摆放',
+  unknown: '未记录',
+}
+
+export const PLAN_CABLE_SOURCE_LABELS: Record<PlanCableSource, string> = {
+  rule: '规则式走线（演示）',
+  algorithm: '真实走线算法',
+  manual: '手动调整',
+  mixed: '混合来源',
+  none: '无线缆',
+  unknown: '未记录',
+}
+
+export interface PlanSourceInfo {
+  layout: PlanLayoutSource
+  cable: PlanCableSource
 }
 
 // ───────────────────────────── 生成任务 ─────────────────────────────
@@ -495,5 +544,9 @@ export interface Project {
   cables: CableConnection[]
   /** 空间整理偏好（打字活动区 / 水杯活动区 / 偏好收纳分区等，用户可调整） */
   organization?: OrganizationPreferences
+  /** 最近一次接受的整理方案来源（用于「保存方案」记录布局来源；未记录 = undefined） */
+  layoutSource?: 'rule' | 'algorithm'
+  /** 最近一次「设为当前方案」使用的候选方案（用于候选方案列表标识当前方案；后续编辑可能已使场景偏离该方案） */
+  lastAppliedPlan?: { planId: string; at: number }
   stage: ProjectStage
 }

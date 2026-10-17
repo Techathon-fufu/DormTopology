@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import type { GenerationJob, SceneObject } from '@/types/project'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
@@ -19,6 +19,7 @@ import { LeftPanel } from '@/ui/workspace/LeftPanel'
 import { CableListPanel } from '@/ui/workspace/CableListPanel'
 import { CablePanel } from '@/ui/workspace/CablePanel'
 import { OrganizePanel } from '@/ui/workspace/OrganizePanel'
+import { PlanPanel } from '@/ui/workspace/PlanPanel'
 import { RightPanel } from '@/ui/workspace/RightPanel'
 import { StatusBar } from '@/ui/workspace/StatusBar'
 import { Viewport } from '@/ui/workspace/Viewport'
@@ -62,6 +63,7 @@ export function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
   const project = useProject(id)
   const navigate = useNavigate()
+  const location = useLocation()
 
   const captureBaseline = usePlansStore((s) => s.captureBaseline)
   const saveCandidate = usePlansStore((s) => s.saveCandidate)
@@ -80,6 +82,7 @@ export function WorkspacePage() {
   const [flash, setFlash] = useState<string | null>(null)
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
+  const [plansOpen, setPlansOpen] = useState(false)
   const flashTimer = useRef<number | null>(null)
 
   const projectId = project?.id
@@ -106,6 +109,15 @@ export function WorkspacePage() {
     useCableStore.getState().setNotice(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cableNotice])
+
+  // 从方案对比页返回时携带的提示（设为当前方案的结果）：展示后清除，避免刷新重复出现
+  useEffect(() => {
+    const state = location.state as { flash?: string } | null
+    if (!state?.flash) return
+    showFlash(state.flash)
+    navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, location.pathname])
 
   // 离开走线模式：清理连线 / 拖拽 / 收拢动画等会话状态
   useEffect(() => {
@@ -218,6 +230,14 @@ export function WorkspacePage() {
   const handleOpenOrganize = () => {
     useOrganizeStore.getState().openPanel()
     // 宽屏为右侧停靠面板；窄屏同步打开右侧抽屉展示整理面板
+    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
+      setRightOpen(true)
+    }
+  }
+
+  const handleOpenPlans = () => {
+    setPlansOpen((v) => !v)
+    // 宽屏为右侧停靠面板（优先于整理面板展示）；窄屏同步打开右侧抽屉
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
       setRightOpen(true)
     }
@@ -339,7 +359,9 @@ export function WorkspacePage() {
     const p = useProjectsStore.getState().projects[projectId ?? '']
     if (!p) return
     const plan = saveCandidate(p)
-    showFlash(`已保存「${plan.name}」，后续版本可用于方案对比`)
+    showFlash(
+      `已保存「${plan.name}」（含布局 / 线缆 / 来源快照）；可在「方案对比」中查看与对比`,
+    )
   }
 
   const handleRetryJob = (job: GenerationJob) => {
@@ -381,6 +403,8 @@ export function WorkspacePage() {
         onOpenOrganize={handleOpenOrganize}
         onPlanCables={() => void runPlanCables()}
         onSavePlan={handleSavePlan}
+        onOpenPlans={handleOpenPlans}
+        plansOpen={plansOpen}
         busy={busy}
         onToggleLeftPanel={() => setLeftOpen((v) => !v)}
         onToggleRightPanel={() => setRightOpen((v) => !v)}
@@ -434,7 +458,14 @@ export function WorkspacePage() {
           </p>
         </div>
 
-        {organizeOpen ? (
+        {plansOpen ? (
+          <PlanPanel
+            project={project}
+            onFlash={showFlash}
+            className="hidden w-80 shrink-0 border-l xl:flex"
+            onClose={() => setPlansOpen(false)}
+          />
+        ) : organizeOpen ? (
           <OrganizePanel
             project={project}
             onFlash={showFlash}
@@ -498,7 +529,17 @@ export function WorkspacePage() {
         onClose={() => setRightOpen(false)}
         className="w-80 max-w-[85vw]"
       >
-        {organizeOpen ? (
+        {plansOpen ? (
+          <PlanPanel
+            project={project}
+            onFlash={showFlash}
+            className="h-full w-full border-l"
+            onClose={() => {
+              setPlansOpen(false)
+              setRightOpen(false)
+            }}
+          />
+        ) : organizeOpen ? (
           <OrganizePanel
             project={project}
             onFlash={showFlash}

@@ -2,12 +2,14 @@ import { create } from 'zustand'
 import type {
   CableConnection,
   LayoutAssignment,
+  LayoutPlan,
   PowerStripConfig,
   SceneObject,
   Vec3,
 } from '@/types/project'
 import { ensureDefaultPorts as defaultPortsForObject } from '@/scene/ports'
-import { computePowerStripSpecChange } from '@/scene/powerStrip'
+import { computePowerStripSpecChange, stripLengthFor } from '@/scene/powerStrip'
+import { clonePlanData } from '@/lib/plans'
 import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
@@ -59,6 +61,22 @@ interface HistorySnapshot {
 }
 
 const HISTORY_LIMIT = 40
+
+/** 「设为当前方案」执行结果（供界面提示） */
+export interface PlanApplySummary {
+  /** 已恢复位姿 / 插排规格的物品数 */
+  objects: number
+  /** 已还原的方案内线缆数 */
+  cables: number
+  /** 保留的保存之后新增的线缆数 */
+  keptCables: number
+  /** 方案中有、但当前项目已不存在的物品数 */
+  skippedObjects: number
+  /** 快照线缆中引用的物品 / 接口已不存在而跳过的条数 */
+  skippedCables: number
+  /** true = 旧版本方案（无场景快照，仅恢复物品位姿） */
+  legacy: boolean
+}
 
 function pushPast(past: HistorySnapshot[], snapshot: HistorySnapshot): HistorySnapshot[] {
   const next = [...past, snapshot]
@@ -128,6 +146,13 @@ interface WorkspaceState {
     assignments: Pick<LayoutAssignment, 'objectId' | 'position' | 'rotationY'>[],
     record?: boolean,
   ) => void
+  /**
+   * 将候选方案设为当前方案：恢复物品位姿 / 插排规格 / 接口与线缆（一次提交，可撤销）。
+   * - 全量快照：以快照为准还原；保存之后新增的设备与其线缆保留（不删除用户新工作）；
+   * - 旧版本方案（无快照）：仅恢复物品位姿，线缆不动；
+   * - 只读取方案数据（深拷贝），不修改原方案。
+   */
+  applyPlanSnapshot: (projectId: string, plan: LayoutPlan) => PlanApplySummary | null
   resetToBaseline: (projectId: string) => void
   /** 为缺少接口的电气设备补充默认接口（返回补充数量） */
   ensureDefaultPorts: (projectId: string) => number
@@ -335,6 +360,108 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         { objects: next, cables: markStaleCables(project.cables, movedIds) },
         record,
       )
+    },
+
+    applyPlanSnapshot(projectId, plan) {
+      const project = useProjectsStore.getState().projects[projectId]
+      if (!project) return null
+      const now = Date.now()
+      const finish = (summary: PlanApplySummary): PlanApplySummary => {
+        useProjectsStore.getState().update(projectId, (p) => ({
+          ...p,
+          lastAppliedPlan: { planId: plan.id, at: now },
+        }))
+        return summary
+      }
+
+      // 旧版本方案（0.8.0 之前保存）：仅有物品位姿，按现状恢复（线缆保持不动）
+      if (!plan.scene) {
+        const exists = new Set(project.objects.map((o) => o.id))
+        const assignments = plan.assignments
+          .filter((a) => exists.has(a.objectId))
+          .map((a) => ({
+            objectId: a.objectId,
+            position: [...a.position] as Vec3,
+            rotationY: a.rotationY,
+          }))
+        get().applyAssignments(projectId, assignments, true)
+        return finish({
+          objects: assignments.length,
+          cables: 0,
+          keptCables: project.cables.length,
+          skippedObjects: plan.assignments.length - assignments.length,
+          skippedCables: 0,
+          legacy: true,
+        })
+      }
+
+      // 全量快照：恢复物品位姿 / 插排规格（含长度重算）/ 接口，再合并线缆
+      const snapshotById = new Map(plan.scene.objects.map((o) => [o.id, o]))
+      let appliedObjects = 0
+      const nextObjects = project.objects.map((o) => {
+        const snap = snapshotById.get(o.id)
+        if (!snap) return o
+        appliedObjects += 1
+        const strip = snap.powerStrip
+        return {
+          ...o,
+          transform: {
+            ...o.transform,
+            position: [...snap.transform.position] as Vec3,
+            rotationY: snap.transform.rotationY,
+          },
+          ...(strip
+            ? {
+                powerStrip: clonePlanData(strip),
+                dimensions: {
+                  ...o.dimensions,
+                  width: stripLengthFor(strip.socketCount, strip.socketSpacing),
+                },
+              }
+            : {}),
+          ports: snap.ports ? clonePlanData(snap.ports) : o.ports,
+        }
+      })
+
+      const portIdsByObject = new Map(nextObjects.map((o) => [o.id, new Set(o.ports.map((p) => p.id))]))
+      const endpointOk = (end: CableConnection['from']): boolean => {
+        const ports = portIdsByObject.get(end.objectId)
+        if (!ports) return false
+        return !end.portId || ports.has(end.portId)
+      }
+      const endpointPairKey = (c: CableConnection): string =>
+        `${c.from.objectId}:${c.from.portId ?? ''}→${c.to.objectId}:${c.to.portId ?? ''}`
+
+      const restoredCables: CableConnection[] = []
+      let skippedCables = 0
+      for (const cable of plan.scene.cables) {
+        if (!endpointOk(cable.from) || !endpointOk(cable.to)) {
+          skippedCables += 1
+          continue
+        }
+        restoredCables.push(clonePlanData(cable))
+      }
+      // 保留保存之后新增、且不引用方案内设备的线缆（同一接口对以方案为准）
+      const planCableIds = new Set(plan.scene.cables.map((c) => c.id))
+      const planPairKeys = new Set(plan.scene.cables.map(endpointPairKey))
+      let keptCables = 0
+      for (const cable of project.cables) {
+        if (planCableIds.has(cable.id)) continue
+        if (planPairKeys.has(endpointPairKey(cable))) continue
+        if (snapshotById.has(cable.from.objectId) || snapshotById.has(cable.to.objectId)) continue
+        restoredCables.push(cable)
+        keptCables += 1
+      }
+
+      commit(projectId, { objects: nextObjects, cables: restoredCables }, true)
+      return finish({
+        objects: appliedObjects,
+        cables: restoredCables.length - keptCables,
+        keptCables,
+        skippedObjects: plan.scene.objects.length - appliedObjects,
+        skippedCables,
+        legacy: false,
+      })
     },
 
     resetToBaseline(projectId) {
