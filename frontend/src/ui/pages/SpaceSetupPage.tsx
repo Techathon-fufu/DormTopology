@@ -86,7 +86,7 @@ function SectionCard({
   )
 }
 
-/** 空间配置页：床桌 / 房间 / 立柱为固定模型；编辑书架 / 出线孔 / 插座（仅左右），实时同步简化三维预览 */
+/** 空间配置页：床桌 / 房间 / 立柱为固定模型；编辑书架 / 出线孔 / 插座（仅左右），实时同步三维预览（正式模型） */
 export function SpaceSetupPage() {
   const { id } = useParams<{ id: string }>()
   const project = useProject(id)
@@ -204,7 +204,7 @@ export function SpaceSetupPage() {
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
             <p>
-              床桌 / 房间 / 立柱采用预设固定模型（尺寸不可编辑；后续将接入正式模型资产），页面无需再填写这些尺寸。
+              床桌 / 房间 / 立柱采用预设固定模型（尺寸不可编辑；右侧预览加载与三维工作台同源的正式模型），页面无需再填写这些尺寸。
             </p>
           </div>
 
@@ -321,10 +321,10 @@ export function SpaceSetupPage() {
         {/* ── 预览 / 校验 / 操作 ───────────────────────────────── */}
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
-            <h2 className="mb-2 text-sm font-semibold">简化三维预览</h2>
+            <h2 className="mb-2 text-sm font-semibold">三维预览</h2>
             <SpacePreview3D room={previewRoom} />
             <p className="mt-2 text-xs leading-relaxed text-faint">
-              预览为简化示意：床桌 / 房间 / 立柱按固定标准款生成；书架 / 出线孔 / 插座随当前表单实时更新。
+              预览加载正式模型（与三维工作台同源）；书架 / 出线孔 / 插座随当前表单实时更新；模型加载失败时自动回退简化几何。
             </p>
           </div>
 

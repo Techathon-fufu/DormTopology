@@ -237,7 +237,7 @@ C、D 的核心分别位于 `backend/app/domain/packing/` 与 `routing/`，共�
 - [ ] 对齐桌体网格与桌面、四格书架、抽屉内部的碰撞体及支撑面，并核验穿线孔与背板后通道。
 - [ ] 验证导入模型与简化几何使用相同单位和坐标，不重复旋转或缩放。
 
-桌体 GLB 已于 2026-10-17（前端 0.9.0）入库并接入运行时：`Prefabmodel/dormdesk.glb` → `frontend/public/models/dorm_desk_assembled.glb`，资产契约检查 `scripts/check-desk-model.ts`；独立单品 GLB 仍未入库。`models/` 相关验收保留。参数化桌体继续用于加载失败回退与空间配置预览。最终加载指定桌体 GLB、提供独立单品 GLB 并导入至少 1 件真实 Rodin 模型均为必需验收。精细材质、视觉美化和额外单品导出可后续补充。
+桌体 GLB 已于 2026-10-17（前端 0.9.0）入库并接入运行时：`Prefabmodel/dormdesk.glb` → `frontend/public/models/dorm_desk_assembled.glb`，资产契约检查 `scripts/check-desk-model.ts`；独立单品 GLB 仍未入库。`models/` 相关验收保留。参数化桌体仅用于加载失败回退（空间配置三维预览同轮改为与工作台同源的正式模型，叠加书架 / 出线孔 / 插座实时标记）。最终加载指定桌体 GLB、提供独立单品 GLB 并导入至少 1 件真实 Rodin 模型均为必需验收。精细材质、视觉美化和额外单品导出可后续补充。
 
 ## 7. 集成与路演（H28–H48，四人共同验收）
 

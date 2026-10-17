@@ -20,6 +20,7 @@ export function DormDeskModel({
   position = [0, 0, 0],
   rotationY = 0,
   visible = true,
+  respectToolbar = true,
   hideBedParts = false,
 }: {
   room: RoomConfig
@@ -29,6 +30,8 @@ export function DormDeskModel({
   rotationY?: number
   /** 组件级显示开关（与工具栏「显示桌体」开关取与） */
   visible?: boolean
+  /** 是否叠加工具栏「显示桌体」总开关：工作台 / 对比页 true；空间配置预览 false 始终显示家具 */
+  respectToolbar?: boolean
   /** 显示-only 剖切：俯视时隐藏床体 / 护栏 / 爬梯（整组家具模型；碰撞与校验几何不变） */
   hideBedParts?: boolean
 }) {
@@ -112,7 +115,7 @@ export function DormDeskModel({
 
   const useGlb = !forceFallback && status === 'loaded' && model !== null
   return (
-    <group position={position} rotation={[0, rotationY, 0]} visible={showDesk && visible}>
+    <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
       {useGlb && model ? <primitive object={model} /> : <ParametricDesk room={room} />}
     </group>
   )

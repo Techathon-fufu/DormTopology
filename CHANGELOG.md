@@ -18,7 +18,7 @@
 - 墙面插座规则修订（按 2026-10-17 最新需求）：不再支持 Y 轴（高度）调整，高度固定 350mm（`OUTLET_FIXED_Y_M`）；改为仅沿后墙左右移动（滑块 + 数值，距墙面左右边缘 ≥ 60mm 内），保存后受影响的既有走线仍标记「需要重新规划」。表单 / 场景渲染 / 走线节点与右侧信息面板随之更新。
 - 插座收敛为一块面板（`PowerOutlet`）：删除「后墙插座·左 / 右」两个独立插座与增删按钮，后墙只有一块「双插孔 ×2」面板（`slots: 2`，面板上两个双插孔插座）；三维渲染为一块 86 面板 + 两组双插孔。`projectsStore` 持久化 v2 → v3 迁移（与示例重种 v1 → v2 机制合并）：历史数据中的多个插座自动合并为一块（保留第一个插座的 id 与左右位置、高度归一到固定值），内置示例项目按种子版本重种为固定模型口径。
 - 配套文案更新：新建项目页、空间配置页摘要 / 预览说明 /「恢复标准空间」按钮、工作台右侧「空间尺寸」信息行。
-- 桌体正式模型接入运行时：`Prefabmodel/dormdesk.glb` 复制为运行时副本 `frontend/public/models/dorm_desk_assembled.glb`（整组上床下桌：床架 / 上层四格书架 / L 形桌面 / 三抽屉侧柜 / 衣柜 / 护栏 / 爬梯 / 四立柱，实测 2.0 × 2.25 × 1.21 m）。归一化按固定模型定制：x 居中、背面贴后墙 z = 0、桌面锚点（`Desk_Top_Main` / `Desk_Top_L_Return`）对齐 750mm（模型标称 770mm，整体下沉 20mm 藏于地面内）；工作台 / 方案对比页在 GLB 就绪时隐藏参数化床架（避免重复）、叠加逻辑出线孔标记，俯视剖切隐藏床体 / 护栏 / 爬梯（显示 only，碰撞几何不变）。新增资产契约检查 `scripts/check-desk-model.ts`（23 个命名节点、包围盒、锚点匹配防误匹配、摆放复算）。抽屉推拉（桌柜分离模型）设计与模型契约见 `frontend/docs/drawer-interaction.md`。
+- 桌体正式模型接入运行时：`Prefabmodel/dormdesk.glb` 复制为运行时副本 `frontend/public/models/dorm_desk_assembled.glb`（整组上床下桌：床架 / 上层四格书架 / L 形桌面 / 三抽屉侧柜 / 衣柜 / 护栏 / 爬梯 / 四立柱，实测 2.0 × 2.25 × 1.21 m）。归一化按固定模型定制：x 居中、背面贴后墙 z = 0、桌面锚点（`Desk_Top_Main` / `Desk_Top_L_Return`）对齐 750mm（模型标称 770mm，整体下沉 20mm 藏于地面内）；工作台 / 方案对比页 / 空间配置预览（与工作台同源，书架搁板 / 出线孔 / 插座以叠加标记随表单实时更新，加载失败自动回退简化几何；相机支持小画布拉远取景）在 GLB 就绪时隐藏参数化床架（避免重复）、叠加逻辑出线孔标记，俯视剖切隐藏床体 / 护栏 / 爬梯（显示 only，碰撞几何不变）。新增资产契约检查 `scripts/check-desk-model.ts`（23 个命名节点、包围盒、锚点匹配防误匹配、摆放复算）。抽屉推拉（桌柜分离模型）设计与模型契约见 `frontend/docs/drawer-interaction.md`。
 
 ### 已知限制
 
@@ -31,6 +31,7 @@
 ### 验证
 
 - 合并协作方大合入后（含桌体模型接入）：`npm run typecheck` / `npm run build` 通过（主包 1,592.91 kB JS + 43.15 kB CSS，GLTFLoader 45.89 kB 按需加载块）；完整 `npm run test:e2e` 80 项通过、6 项需真实后端的用例跳过；状态 / 转换脚本（`check-desk-model`、`check-project-persist-migrate`、`check-demo-seed`、`check-collision-volumes`、`check-organization-playback`、`check-floor-placement`）全部通过；表单 / 校验冒烟 14 项断言通过；工作台 / 对比页 GLB 场景经目视截图核对（整组家具摆放、俯视剖切、出线孔叠加）。空间配置页暂无浏览器自动化用例（既有专项不含该页面）。
+- 空间配置预览接入正式模型后复检：`npm run typecheck` / `npm run build` 通过（主包 1,597.33 kB JS + 43.15 kB CSS）；`scripts/check-desk-model.ts` 通过；完整 `npm run test:e2e` 仍为 80 通过、6 跳过；预览透视 / 正视 / 俯视三视角经临时 Playwright 截图目视核对（正式模型完整入镜，床架隐藏、出线孔与配置层书架叠加、俯视剖切生效，截图用后删除）。
 
 ## 2026-10-17（物品落地规则修复）
 
