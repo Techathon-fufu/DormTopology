@@ -64,7 +64,7 @@
 | `placement_priority` | 可选整数 `0..100`，缺省为 `0`；数值越高越先摆放，先于允许区域数量、面积和使用频率，不放宽任何几何硬约束 |
 | `allowed_region_ids` | 自动收纳的目标区域 ID，非固定物品必须非空；原位保留规则见第 3 节，固定墙面设备可为空 |
 | `allowed_rotations_y_rad` | 自动推荐允许的朝向，采用 0 与 π/2 的非空子集；手动朝向可为任意有限弧度，固定物品保持输入朝向 |
-| `collision` | 首版 `type: "box"`，使用 `size_m` 与物品变换；可保守包围圆柱物品 |
+| `collision` | 碰撞体，`type` 为 `"box"` 或 `"compound"`；`box` 使用 `size_m` 与物品变换，`compound` 见 2.2 节 |
 | `ports` | 接口数组，字段见下文 |
 | `image_url`, `model_url` | 图片与已归一化模型 URL，无资产时为 `null` |
 | `generation` | `{task_id, status, source, error}`；无任务时 `task_id` 为 `null` |
@@ -90,6 +90,12 @@
 - 四格书架每格单独配置区域；右侧抽屉区域使用内部底面、内边界与净高，内壁纳入 `obstacles`。抽屉在固定可访问状态规划，不要求开合动画，不允许通过忽略壁厚扩大收纳容积。
 - 墙插与网口使用 `category: "wall_socket"` / `"wall_network"`、`fixed: true`、`rotation_y_rad: 0` 和空 `allowed_region_ids`，不受水平支撑面限制；其底面中心 Z 等于 `wall.z_m`，面板 X/Y 投影必须在 `bounds_xy_m` 内。仍参与物品与障碍碰撞检查，用户只可沿墙面平移，不旋转面板。其他物品的 `fixed` 同样只禁止自动移动，不禁止用户手动编辑。
 - `obstacles[]` 与 `reserved_zones[]`：`id`、`min: [x,y,z]`、`max: [x,y,z]`，均为世界坐标 AABB。区域接触作为支撑处理，体积相交作为冲突处理；几何容差固定为 0.001m，不能用容差豁免明确的穿透。
+- `items[].collision`：`type` 为 `"box"` 或 `"compound"`，二者互斥，按 `type` 分支解释。
+  - `"box"`：不写额外字段，几何由 `size_m` 与物品变换推导；保守包围圆柱、锥体等非长方体物品。
+  - `"compound"`：写 `parts[]`，每个 `part` 为 `{vertices_m: [[x,y,z], ...], faces: [[i,j,k], ...]}`，即物品**局部坐标系**下的凸多面体，面为三角形顶点索引。局部原点仍是物品底面中心，局部轴与 `rotation_y_rad` 前的物品朝向一致；世界几何 = 绕 Y 旋转 `rotation_y_rad` 后平移到 `position`，坐标变换与第 1 节一致。
+  - 校验：`parts` 为 1..128 个；每个 part 4..128 个顶点、4..256 个三角形面；坐标全部有限；顶点不得重复；面必须外凸且一致定向，构成闭合流形；体积为正。容差 `1e-7`。几何容差与 `obstacles` 一致为 0.001m。
+  - 渲染几何与碰撞几何必须同源：可见实体与 `parts` 由同一份实体描述符导出，不允许出现"看得见的是 A、算碰撞的是 B"。显示器、台灯等带支杆的物品应给出分离实体，使支杆之间的空隙在碰撞中保持为空，而不是被整体包围盒填实。
+  - `"compound"` 只描述物品自身凸体；固定家具（桌面板、桌腿、桌下横梁、书架搁板与侧板、立柱）属于场景固定结构，按第 2.2 节 `obstacles[]` 表达，二者共同参与碰撞检查。
 - 桌板穿线孔必须同时体现在桌板碰撞体分割和走线通道中，不能仅给封闭桌板添加路径节点。
 - `routing_graph.nodes[]`：`id`、`position`、`kind`，kind 为 `corner` / `slot` / `fixing_point` / `endpoint`。
 - `routing_graph.edges[]`：`id`、`from_node_id`、`to_node_id`、`modes`、`clearance_radius_m`、`exposed`；边首版表示直线通道，需通过碰撞检查，净空半径不得小于线缆半径。`modes` 为 `slot` / `backboard` 的非空子集，图边为双向。

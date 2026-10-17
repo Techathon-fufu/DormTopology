@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { DeskSurfaceMetrics } from '@/scene/deskModel'
-import { bottomContacts, containedInCavity, objectsCollide, worldCollision } from './collisionGeometry'
+import { bottomContacts, containedInCavity, objectRoomHits, objectsCollide, worldCollision } from './collisionGeometry'
+import { cachedRoomSolids } from './roomCollision'
 
 /**
  * 场景摆放校验与支撑面计算（本地真实计算，非模拟）。
@@ -43,6 +44,11 @@ export function deskBeamTopY(room: RoomConfig): number {
 const FLOATING_TOLERANCE = 0.001
 /** 越界判定容差（米） */
 const BOUNDS_EPSILON = 0.001
+/**
+ * 场地穿模判定容差（米）：贴面摆放与拖拽 / 旋转的浮点噪声不算穿模，
+ * 超过该深度才报告与桌体实体相交。
+ */
+const ROOM_CLEARANCE = 0.001
 
 /** 桌面高度：优先采用桌体 GLB 实测锚点（deskModelStore.metrics），否则回退 RoomConfig */
 export function deskTopY(room: RoomConfig, metrics?: DeskSurfaceMetrics | null): number {
@@ -167,7 +173,7 @@ export function raycastSupports(
 // ── 校验 ────────────────────────────────────────────────────────────────
 
 export interface SceneIssue {
-  type: 'outOfBounds' | 'overlap' | 'floating'
+  type: 'outOfBounds' | 'overlap' | 'roomCollision' | 'floating'
   message: string
   relatedId?: string
 }
@@ -228,6 +234,17 @@ export function placementIssues(
   }
   if (overlapCount > 2) {
     issues.push({ type: 'overlap', message: `另有 ${overlapCount - 2} 件物品相交` })
+  }
+
+  // 3) 与场地固定实体（桌面 / 桌腿 / 横梁 / 书架搁板与侧板 / 立柱）穿模
+  const roomHits = objectRoomHits(object, position, cachedRoomSolids(room), ROOM_CLEARANCE)
+  if (roomHits.length > 0) {
+    const labels = [...new Set(roomHits.map((hit) => hit.label))]
+    issues.push({
+      type: 'roomCollision',
+      message: `穿模：与${labels.join('、')}相交，超出声明的允许间隙`,
+      relatedId: roomHits[0].id,
+    })
   }
 
   // Every bottom contact must rest on a declared room plane or a real horizontal solid face.

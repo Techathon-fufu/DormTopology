@@ -89,7 +89,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       ]
       const others = useProjectsStore.getState().projects[project.id]?.objects ?? project.objects
       const issues = placementIssues(object, position, others, project.room, metrics)
-      const valid = !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap' || i.type === 'floating')
+      const valid = !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap' || i.type === 'roomCollision' || i.type === 'floating')
       moved = true
       lastPos = position
       lastPreviewValid = valid

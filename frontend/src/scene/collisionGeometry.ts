@@ -112,6 +112,57 @@ export function collisionsOverlap(a:ObjectCollision,b:ObjectCollision):boolean {
 export function objectsCollide(a:SceneObject,aPos:Vec3,b:SceneObject,bPos:Vec3):boolean {
   return collisionsOverlap(worldCollision(a,aPos),worldCollision(b,bPos))
 }
+/** Axis-aligned box as a convex part so room solids reuse the same SAT core. */
+export function boxPart(min:Vec3,max:Vec3):ConvexPart {
+  const vertices:Vec3[] = [0,1].flatMap(x=>[0,1].flatMap(y=>[0,1].map(z=>[x?max[0]:min[0],y?max[1]:min[1],z?max[2]:min[2]] as Vec3)))
+  const faces:[number,number,number][]=[[0,2,3],[0,3,1],[4,5,7],[4,7,6],[0,1,5],[0,5,4],[2,6,7],[2,7,3],[0,4,6],[0,6,2],[1,3,7],[1,7,5]]
+  return {vertices_m:vertices,faces}
+}
+export interface BoxHit { id:string; label:string }
+/**
+ * Room solids the object penetrates at ``position``.
+ *
+ * Uses the real convex parts, so an item resting in the void under a monitor stand or
+ * inside an open storage cavity is not reported. Exact face contact is *not* penetration
+ * (the SAT core already treats a touching face as separated), which is what lets items
+ * rest on the desk top, the shelf board and the beam. ``clearance`` is the penetration
+ * depth tolerated before a hit is reported; pass the same tolerance the rest of placement
+ * validation uses so float noise from a drag or rotation is not treated as penetration.
+ */
+export function objectRoomHits(
+  object:SceneObject,
+  position:Vec3,
+  solids:Array<{id:string;label:string;min:Vec3;max:Vec3}>,
+  clearance=0,
+):BoxHit[] {
+  const hits:BoxHit[]=[]
+  const body=worldCollision(object,position)
+  for(const volume of solids) {
+    const target=solid(boxPart(volume.min,volume.max))
+    if(!boundsOverlap(body.bounds,target.bounds)) continue
+    // Exact contact is separated by SAT; only a real overlap needs the depth test.
+    if(!body.parts.some(part=>solidsOverlap(part,target))) continue
+    if(clearance>0 && penetrationDepth(body,volume.max,volume.min)<=clearance) continue
+    hits.push({id:volume.id,label:volume.label})
+  }
+  return hits
+}
+
+/**
+ * Deepest overlap between the body's AABB and the solid on each axis.
+ *
+ * A positive value means the envelopes truly interpenetrate on all three axes; the
+ * minimum across axes is the shallowest separating-distance estimate. Face-touching
+ * rests give 0 or less, so they never pass the clearance gate.
+ */
+function penetrationDepth(body:ObjectCollision,max:Vec3,min:Vec3):number {
+  let depth=Number.POSITIVE_INFINITY
+  for(let i=0;i<3;i+=1) {
+    const overlap=Math.min(body.bounds.max[i],max[i])-Math.max(body.bounds.min[i],min[i])
+    depth=Math.min(depth,overlap)
+  }
+  return depth
+}
 export function worldToObject(point:Vec3,object:SceneObject,position=object.transform.position):Vec3 {
   const [x,y,z]=point.map((v,i)=>v-position[i]),a=object.transform.rotationY
   return [Math.cos(a)*x-Math.sin(a)*z,y,Math.sin(a)*x+Math.cos(a)*z]

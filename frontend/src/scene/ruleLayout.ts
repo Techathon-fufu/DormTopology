@@ -161,7 +161,7 @@ function canPlace(
     transform: { position: p.position, rotationY: p.rotationY },
   }))
   const issues = placementIssues(candidate, position, obstacles, ctx.room)
-  return !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap' || i.type === 'floating')
+  return !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap' || i.type === 'roomCollision' || i.type === 'floating')
 }
 
 interface BandOptions {
@@ -755,7 +755,8 @@ export function computeRuleBasedPlan(input: {
   let outOfBoundsCount = 0
   for (const o of finalScene) {
     const issues = placementIssues(o, o.transform.position, finalScene, room)
-    if (issues.some((i) => i.type === 'outOfBounds')) outOfBoundsCount += 1
+    // 越界与场地穿模都计入「未解决问题」，避免穿进桌体的落位被当作成功
+    if (issues.some((i) => i.type === 'outOfBounds' || i.type === 'roomCollision')) outOfBoundsCount += 1
   }
   let overlapCount = 0
   for (let i = 0; i < finalScene.length; i += 1) {
@@ -777,6 +778,7 @@ export function computeRuleBasedPlan(input: {
     '小件入盒：小件物品（最长边 ≤ 160mm）优先放入尺寸适配的收纳容器内部',
     '排插归位：排插优先放入已配置且高度足够的桌下隐藏区，靠后墙放置便于插拔',
     '包围盒检查：全部落位按物品包围盒（宽 × 高 × 深）检查分区分界、房间边界与明显相交；高件（显示器等）避让书架搁板投影',
+    '场地穿模检查：落位按真实碰撞实体检查桌面 / 桌腿 / 桌下横梁 / 书架搁板与侧板 / 立柱，超过 1mm 相交即判为不可放置',
   ]
 
   const metrics = {
