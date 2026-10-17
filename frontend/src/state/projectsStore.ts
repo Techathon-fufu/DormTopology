@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Project } from '@/types/project'
-import { createDemoProject, DEMO_PROJECT_ID, DEMO_SEED_VERSION } from '@/data/demoProject'
+import { OUTLET_FIXED_Y_M, type Project } from '@/types/project'
+import { createDemoProject, DEMO_PROJECT_ID, DEMO_ROOM_NOTE, DEMO_SEED_VERSION } from '@/data/demoProject'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -12,7 +12,7 @@ import { createDemoProject, DEMO_PROJECT_ID, DEMO_SEED_VERSION } from '@/data/de
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
-const PROJECTS_PERSIST_VERSION = 2
+const PROJECTS_PERSIST_VERSION = 3
 
 /** 内置示例项目是否需要按最新示例数据重种 */
 export function isDemoProjectStale(project: Project | undefined): boolean {
@@ -72,13 +72,28 @@ export const useProjectsStore = create<ProjectsState>()(
       name: 'dormtopology.projects',
       version: PROJECTS_PERSIST_VERSION,
       /**
-       * v1 → v2：早期版本把示例场景写进了本地存储，示例数据更新后不会自动生效。
-       * 迁移时仅按最新示例数据重种内置示例项目；用户自建项目原样保留（补默认种子版本除外）。
+       * 迁移历史（两轮改动合并后的口径）：
+       * v1 → v2：早期版本把旧示例场景写进了本地存储，示例数据更新后不生效；迁移时按种子版本重种内置示例项目。
+       * v2 → v3（0.9.0）：墙面插座收敛为一块「双插孔 ×2」面板（合并历史左右两个独立插座）；
+       *   示例项目同时按最新示例数据重种，用户自建项目仅归一插座，其余字段原样保留。
        */
       migrate: (persisted, from) => {
         const state = persisted as Partial<ProjectsState> | undefined
         if (!state?.projects) return persisted as ProjectsState
         const projects = { ...state.projects }
+        if (from < 3) {
+          for (const [id, p] of Object.entries(projects)) {
+            if (!p?.room) continue
+            projects[id] = {
+              ...p,
+              room: {
+                ...p.room,
+                outlets: [mergeOutletPanel(p.room.outlets?.[0])],
+                note: id === DEMO_PROJECT_ID ? DEMO_ROOM_NOTE : p.room.note,
+              },
+            }
+          }
+        }
         if (from < PROJECTS_PERSIST_VERSION && isDemoProjectStale(projects[DEMO_PROJECT_ID])) {
           projects[DEMO_PROJECT_ID] = createDemoProject()
         }
@@ -87,6 +102,16 @@ export const useProjectsStore = create<ProjectsState>()(
     },
   ),
 )
+
+/** 把旧的「左 / 右两个独立插座」合并为一块面板（保留第一个插座的 id 与左右位置） */
+function mergeOutletPanel(first: Project['room']['outlets'][number] | undefined): Project['room']['outlets'][number] {
+  return {
+    id: first?.id ?? 'outlet-1',
+    position: [first?.position?.[0] ?? 0, OUTLET_FIXED_Y_M, first?.position?.[2] ?? 0.01],
+    label: '后墙插座（双插孔 ×2）',
+    slots: 2,
+  }
+}
 
 /** 页面级读取项目；确保内置示例项目存在（任意深链都能进入同一示例项目） */
 export function useProject(id: string | undefined): Project | undefined {

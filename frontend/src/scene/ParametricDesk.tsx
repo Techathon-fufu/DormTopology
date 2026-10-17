@@ -1,4 +1,5 @@
 import type { RoomConfig } from '@/types/project'
+import { DeskShelf } from './DeskShelf'
 import { boxGeometry, standardMaterial, torusGeometry } from './resources'
 import {
   DESK_BEAM_DEPTH,
@@ -62,29 +63,8 @@ export function ParametricDesk({ room }: { room: RoomConfig }) {
         material={standardMaterial(METAL, { metalness: 0.5, roughness: 0.45 })}
       />
 
-      {/* 书架（床板下沿的搁板） */}
-      {room.shelf.enabled ? (
-        <group>
-          <mesh
-            castShadow
-            position={[0, desk.height + room.shelf.heightAboveDesk, DESK_GAP + room.shelf.depth / 2]}
-            geometry={boxGeometry(desk.width - 0.2, 0.018, room.shelf.depth)}
-            material={standardMaterial(WOOD, { roughness: 0.65 })}
-          />
-          {[-1, 1].map((sx) => (
-            <mesh
-              key={sx}
-              position={[
-                sx * (desk.width / 2 - 0.12),
-                desk.height + room.shelf.heightAboveDesk / 2,
-                DESK_GAP + room.shelf.depth / 2,
-              ]}
-              geometry={boxGeometry(0.016, room.shelf.heightAboveDesk, room.shelf.depth)}
-              material={standardMaterial('#C9A06A', { roughness: 0.7 })}
-            />
-          ))}
-        </group>
-      ) : null}
+      {/* 书架（床板下沿的搁板）：与正式模型预览共用同一几何口径 */}
+      <DeskShelf room={room} />
 
       {/* 四根立柱（截面相同则复用同一几何体与材质） */}
       {room.posts.map((post) => (

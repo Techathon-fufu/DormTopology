@@ -120,6 +120,9 @@ export function Viewport({
   const compare = useOrganizeStore((s) => s.compare)
   const playbackStatus = useOrganizeStore((s) => s.status)
   const deskMetrics = useDeskModelStore((s) => s.metrics)
+  const deskModelStatus = useDeskModelStore((s) => s.status)
+  /** GLB 整组家具已加载：隐藏参数化床架（避免与模型床重复），出线孔标记改为叠加渲染 */
+  const deskGlbLoaded = deskModelStatus === 'loaded'
   const previewIssues = useMemo(() => {
     if (!plan || compare === 'before') return issuesById
     if (playbackStatus !== 'finished' && playbackStatus !== 'preview') return new Map<string, SceneIssue[]>()
@@ -176,9 +179,15 @@ export function Viewport({
             shadow-camera-far={14}
           />
           <Suspense fallback={null}>
-            {/* 房间外壳与桌体分离：桌体优先加载 dormdesk_body.glb，失败 / 未就绪回退参数化几何 */}
-            <RoomShell room={project.room} deskMode="none" showBed={viewPreset !== 'top'} />
-            <DormDeskModel room={project.room} />
+            {/* 房间外壳与桌体分离：桌体优先加载 dorm_desk_assembled.glb，失败 / 未就绪回退参数化几何；
+                GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}
+            <RoomShell
+              room={project.room}
+              deskMode="none"
+              showBed={viewPreset !== 'top' && !deskGlbLoaded}
+              showCableHoles={deskGlbLoaded}
+            />
+            <DormDeskModel room={project.room} hideBedParts={viewPreset === 'top'} />
             {organizeZonesVisible ? (
               <ZoneOverlay room={project.room} preferences={resolveOrganizationPreferences(project)} />
             ) : null}

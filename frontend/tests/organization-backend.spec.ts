@@ -144,7 +144,7 @@ test('rejects a consumed result after a later backend edit without changing loca
   expect((await readProject(page, id)).objects).toEqual(original.objects)
 })
 
-test('keeps ordinary demo objects above the floor through Python planning and apply', async ({ page }, testInfo) => {
+test('centres the monitor, places the printer beside it and keeps ordinary objects above the floor', async ({ page }, testInfo) => {
   test.setTimeout(120_000)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/projects/demo-dorm-101/workspace')
@@ -171,6 +171,17 @@ test('keeps ordinary demo objects above the floor through Python planning and ap
   expect(plan.serviceMeta.status).toBe('success')
   expect(plan.serviceMeta.applicable).toBe(true)
   expect(plan.unplaced).toEqual([])
+  const monitor = plan.assignments.find((assignment: { objectId: string }) => assignment.objectId === 'demo-monitor')
+  expect(monitor.position[0]).toBeCloseTo(plan.preferences.typingOffsetX, 3)
+  expect(monitor.rotationY).toBe(0)
+  expect(monitor.reason).toContain('中央主视位')
+  expect(plan.serviceMeta.warnings ?? []).not.toContainEqual(expect.stringContaining('显示器'))
+  const printer = plan.assignments.find((assignment: { objectId: string }) => assignment.objectId === 'demo-printer')
+  expect(printer.targetRegionId).toMatch(/^printer-side-/)
+  expect(printer.rotationY).toBe(0)
+  const screenWidth = original.objects.find((object: { id: string }) => object.id === 'demo-monitor').dimensions.width
+  const printerWidth = original.objects.find((object: { id: string }) => object.id === 'demo-printer').dimensions.width
+  expect(Math.abs(printer.position[0] - monitor.position[0])).toBeGreaterThan((screenWidth + printerWidth) / 2)
   expect((await readProject(page, id)).objects).toEqual(original.objects)
   for (const assignment of plan.assignments) {
     const object = original.objects.find((entry: { id: string }) => entry.id === assignment.objectId)
@@ -184,6 +195,12 @@ test('keeps ordinary demo objects above the floor through Python planning and ap
   await page.getByRole('button', { name: '接受方案', exact: true }).click()
   await expect.poll(async () => (await readProject(page, id)).layoutSource).toBe('algorithm')
   const applied = await readProject(page, id)
+  const appliedMonitor = applied.objects.find((object: { id: string }) => object.id === 'demo-monitor')
+  expect(appliedMonitor.transform.position[0]).toBeCloseTo(plan.preferences.typingOffsetX, 3)
+  expect(appliedMonitor.transform.rotationY).toBe(0)
+  const appliedPrinter = applied.objects.find((object: { id: string }) => object.id === 'demo-printer')
+  expect(appliedPrinter.transform.position).toEqual(printer.position)
+  expect(appliedPrinter.transform.rotationY).toBe(0)
   const saved = await page.request.get(`/api/v1/projects/${id}/scene`)
   expect(saved.status()).toBe(200)
   const scene = await saved.json()
@@ -193,7 +210,7 @@ test('keeps ordinary demo objects above the floor through Python planning and ap
     if (!object.fixed && !object.locked && object.transform.position[1] === 0) expect(object.model.shape).toBe('computerTower')
   }
   await page.keyboard.press('Escape')
-  const screenshot = testInfo.outputPath('floor-policy-demo-applied.png')
+  const screenshot = testInfo.outputPath('devices-demo-applied.png')
   await page.screenshot({ path: screenshot, animations: 'disabled' })
-  await testInfo.attach('floor-policy-demo-applied', { path: screenshot, contentType: 'image/png' })
+  await testInfo.attach('devices-demo-applied', { path: screenshot, contentType: 'image/png' })
 })

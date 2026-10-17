@@ -3,7 +3,8 @@ import type { RoomConfig, Vec3 } from '@/types/project'
 import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
 
 /**
- * 桌体 GLB 模型（models/dormdesk_body.glb）接入：配置、归一化与实测锚点。
+ * 桌体 GLB 模型接入：配置、归一化与实测锚点。
+ * 运行时副本 `frontend/public/models/`，源资产见 `Prefabmodel/dormdesk_parts/`。
  *
  * 口径说明（与 sceneValidation / deskModelStore 的分工）：
  * - 逻辑坐标（吸附面 / 碰撞边界 / 校验）仍以 RoomConfig 为单一事实来源；
@@ -31,8 +32,13 @@ export interface DeskModelConfig {
   axisRotationY: number
   /** 统一等比缩放到该宽度（米）：null = 保持源文件尺寸（仅做单位换算） */
   fitWidthM: number | null
-  /** 居中到桌面基准（x = 0，z = 桌面中心）；false 时仅做垂直对齐 */
+  /** 居中到桌面基准（x = 0，z = 桌面中心）；false 时仅做垂直对齐。未给 backWallZ 时 x / z 一起居中 */
   centerXZ: boolean
+  /**
+   * 后墙对齐（米）：给出时把模型背面（最小 z）贴到该 z 平面（整组固定家具用，如 0 = 后墙）；
+   * 同时保留 x 居中。未给出（null）时按 centerXZ 在进深方向居中（单桌体模型用）。
+   */
+  backWallZ?: number | null
   /** 垂直对齐：'bottom' 底部贴地；'deskTop' 桌面锚点对齐到 RoomConfig 桌面高度（需锚点，否则退回底部对齐） */
   verticalAlign: 'bottom' | 'deskTop'
   /** 手工微调（米） */
@@ -41,25 +47,37 @@ export interface DeskModelConfig {
 }
 
 /**
- * 默认配置。资产位于 `Prefabmodel/dormdesk_parts/dormdesk_body.glb`，放入
- * frontend/public/models/ 后即按本配置生效（单位 / 朝向 / 命名建议见 docs/desk-model.md）。
+ * 默认配置：仓库内置的整组「上床下桌」固定家具（Blender 源 dormdesk.blend 导出；
+ * 运行时副本 frontend/public/models/dorm_desk_assembled.glb）。
  *
- * `centerXZ: false`：该模型的 `x` 最小与 `y` 最小均为 0，已符合数据契约第 1 节原点，
- * 无需再居中。桌体与抽屉共用同一原点，抽屉是独立的绝对坐标文件，居中桌体会使两者错位
+ * 摆放口径（固定模型，实测见 frontend/docs/desk-model.md）：
+ * - 单位已是米、Y-up、正面朝 +z，无需单位换算或轴校正；
+ * - 尺寸保持原始比例（fitWidthM = null）；
+ * - x 居中到桌面中心，背面（最小 z）贴后墙 z = 0；
+ * - 桌面锚点（Desk_Top_Main / Desk_Top_L_Return）对齐到逻辑桌面高度 room.desk.height，
+ *   使物品摆放面与模型桌面一致（模型标称 770mm → 对齐后整体下沉约 20mm，底脚藏于地面内）。
+ *
+ * 注：`Prefabmodel/dormdesk_parts/` 另提供拆分版资产（无抽屉桌体 + 三个独立抽屉，
+ * 共用世界原点、抽屉可抽拉）；切换到拆分版时需改为
+ * `centerXZ: false` + `verticalAlign: 'bottom'`，且不得居中，否则抽屉会与柜体错位
  * （见 docs/data_contract.md 第 1.1 节）。
  */
 export const DORM_DESK_MODEL_CONFIG: DeskModelConfig = {
-  url: 'models/dormdesk_body.glb',
+  url: 'models/dorm_desk_assembled.glb',
   unitScale: 1,
   axisRotationY: 0,
   fitWidthM: null,
-  centerXZ: false,
-  verticalAlign: 'bottom',
+  centerXZ: true,
+  backWallZ: 0,
+  verticalAlign: 'deskTop',
   offset: [0, 0, 0],
   anchorPatterns: {
-    deskTop: ['desktop', 'desk_top', 'desk-top', 'tabletop', '桌面'],
-    shelf: ['shelf', '搁板', '书架'],
-    cableHole: ['cable_hole', 'cablehole', '出线孔', 'hole'],
+    deskTop: ['desk_top', 'desktop', 'desk-top', 'tabletop', '桌面'],
+    // 模型自带上层四格书架（Bookshelf_*，y 1.46–1.9）与配置层的「桌面书架」不是同一支撑面；
+    // 支撑面 / 分区对齐随分区重构单独处理（见 docs/desk-model.md 已知差异），此处不参与锚点匹配。
+    shelf: [],
+    // 不含裸 'hole'：Cabinet_Lock_Keyhole（锁孔）会被误匹配；当前模型无出线孔节点。
+    cableHole: ['cable_hole', 'cablehole', '出线孔'],
   },
 }
 
@@ -119,6 +137,8 @@ export function extractDeskAnchors(root: THREE.Object3D, patterns: DeskModelAnch
 export interface DeskNormalizeOptions {
   fitWidthM: number | null
   centerXZ: boolean
+  /** 后墙对齐（米）：模型背面（最小 z）贴到该 z 平面；见 DeskModelConfig.backWallZ */
+  backWallZ?: number | null
   verticalAlign: 'bottom' | 'deskTop'
   offset: Vec3
   deskCenter: { x: number; z: number; topY: number }
@@ -176,9 +196,14 @@ export function normalizeDeskModel(root: THREE.Object3D, options: DeskNormalizeO
     if (options.centerXZ) {
       _box.getCenter(_center)
       root.position.x += options.deskCenter.x - _center.x
-      root.position.z += options.deskCenter.z - _center.z
+      if (options.backWallZ == null) root.position.z += options.deskCenter.z - _center.z
       root.updateMatrixWorld(true)
       _box.setFromObject(root)
+    }
+    if (options.backWallZ != null) {
+      // 整组固定家具：背面贴后墙，不按桌面中心在进深方向居中
+      root.position.z += options.backWallZ - _box.min.z
+      root.updateMatrixWorld(true)
     }
   }
 
@@ -273,6 +298,7 @@ export function mountDeskModel(root: THREE.Object3D, config: DeskModelConfig, ro
   const normalize = normalizeDeskModel(root, {
     fitWidthM: config.fitWidthM,
     centerXZ: config.centerXZ,
+    backWallZ: config.backWallZ ?? null,
     verticalAlign: config.verticalAlign,
     offset: config.offset,
     deskCenter: deskCenterOf(room),
@@ -281,4 +307,19 @@ export function mountDeskModel(root: THREE.Object3D, config: DeskModelConfig, ro
   const anchors = extractDeskAnchors(root, config.anchorPatterns)
   const metrics = resolveDeskSurfaceMetrics(room, anchors, normalize)
   return { normalize, anchors, metrics }
+}
+
+/** 床体 / 护栏 / 爬梯节点名前缀（整组家具模型俯视剖切用） */
+export const DORM_DESK_BED_NODE_PREFIXES = ['bed_', 'guardrail_', 'ladder_'] as const
+
+/**
+ * 显示-only 剖切：俯视时隐藏床体 / 护栏 / 爬梯，便于查看桌面与地面布局。
+ * 碰撞体与校验几何不受影响（与参数化模式 showBed 的既有口径一致）；恢复时重设为可见。
+ */
+export function applyBedCutaway(root: THREE.Object3D, hidden: boolean): void {
+  root.traverse((node) => {
+    const name = node.name.trim().toLowerCase()
+    if (name.length === 0) return
+    if (DORM_DESK_BED_NODE_PREFIXES.some((prefix) => name.startsWith(prefix))) node.visible = !hidden
+  })
 }

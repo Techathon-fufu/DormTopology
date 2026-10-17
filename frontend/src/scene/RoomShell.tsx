@@ -1,7 +1,7 @@
 import { Grid } from '@react-three/drei'
 import type { RoomConfig } from '@/types/project'
 import { ParametricDesk } from './ParametricDesk'
-import { boxGeometry, standardMaterial } from './resources'
+import { boxGeometry, standardMaterial, torusGeometry } from './resources'
 
 const WALL = '#EFECE6'
 const FLOOR = '#E9E4DB'
@@ -19,12 +19,18 @@ export function RoomShell({
   room,
   deskMode = 'parametric',
   showBed = true,
+  showCableHoles = false,
 }: {
   room: RoomConfig
   /** 'parametric' 渲染参数化桌体（默认）；'none' 不渲染桌体（由 DormDeskModel 接管） */
   deskMode?: 'parametric' | 'none'
   /** Display-only cutaway; collision geometry is unchanged. */
   showBed?: boolean
+  /**
+   * 叠加逻辑出线孔标记（工作台 GLB 模式用：模型无孔位节点，出线孔仍以 RoomConfig 为事实来源；
+   * 参数化模式由 ParametricDesk 渲染，勿同时开启以免重复）。
+   */
+  showCableHoles?: boolean
 }) {
   const L = room.length
   const D = room.width
@@ -79,6 +85,19 @@ export function RoomShell({
 
       {/* 桌体（参数化简化几何）：工作台由 DormDeskModel 接管；桌面 / 桌腿 / 书架 / 立柱 / 出线孔见 ParametricDesk */}
       {deskMode === 'parametric' ? <ParametricDesk room={room} /> : null}
+
+      {/* 逻辑出线孔标记（工作台 GLB 模式叠加；参数化模式见 ParametricDesk） */}
+      {showCableHoles
+        ? room.cableHoles.map((hole) => (
+            <mesh
+              key={hole.id}
+              rotation={[-Math.PI / 2, 0, 0]}
+              position={hole.position}
+              geometry={torusGeometry(hole.diameter / 2, 0.004, 10, 24)}
+              material={standardMaterial(METAL, { metalness: 0.4, roughness: 0.5 })}
+            />
+          ))
+        : null}
 
       <group visible={showBed}>
         {/* 床架横梁（位于床板下方，跨度随立柱位置自适应） */}
@@ -149,24 +168,42 @@ export function RoomShell({
         ))}
       </group>
 
-      {/* 墙面电源插座 */}
-      {room.outlets.map((outlet) => (
-        <group key={outlet.id} position={outlet.position}>
-          <mesh
-            castShadow
-            geometry={boxGeometry(0.086, 0.086, 0.018)}
-            material={standardMaterial('#F5F2EC', { roughness: 0.6 })}
-          />
-          {[-0.02, 0.02].map((dx) => (
+      {/* 墙面插座面板（固定模型）：一块 86 面板，含 slots 个双插孔插座（各 2 个插孔） */}
+      {room.outlets.map((outlet) => {
+        const sockets = Math.max(1, Math.min(4, outlet.slots))
+        const stepX = 0.038
+        return (
+          <group key={outlet.id} position={outlet.position}>
             <mesh
-              key={dx}
-              position={[dx, 0, 0.012]}
-              geometry={boxGeometry(0.014, 0.022, 0.004)}
-              material={standardMaterial('#4A5560')}
+              castShadow
+              geometry={boxGeometry(0.086, 0.086, 0.018)}
+              material={standardMaterial('#F5F2EC', { roughness: 0.6 })}
             />
-          ))}
-        </group>
-      ))}
+            {Array.from({ length: sockets }, (_, i) => {
+              const sx = (i - (sockets - 1) / 2) * stepX
+              return (
+                <group key={i} position={[sx, 0, 0]}>
+                  {/* 单个双插孔插座底板 */}
+                  <mesh
+                    position={[0, 0, 0.0105]}
+                    geometry={boxGeometry(0.034, 0.044, 0.003)}
+                    material={standardMaterial('#E7E1D4', { roughness: 0.7 })}
+                  />
+                  {/* 双插孔（两个插孔并排） */}
+                  {[-0.0065, 0.0065].map((dx) => (
+                    <mesh
+                      key={dx}
+                      position={[dx, -0.002, 0.0128]}
+                      geometry={boxGeometry(0.008, 0.02, 0.004)}
+                      material={standardMaterial('#4A5560')}
+                    />
+                  ))}
+                </group>
+              )
+            })}
+          </group>
+        )
+      })}
     </group>
   )
 }
