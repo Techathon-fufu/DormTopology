@@ -1,4 +1,5 @@
 import type { ObjectCategory, ObjectDimensions, PrimitiveShape } from '@/types/project'
+import { stripSocketOffsetX } from './powerStrip'
 import {
   boxGeometry,
   cylinderGeometry,
@@ -192,14 +193,16 @@ function StorageBox({ w, h, d }: Dims) {
   )
 }
 
-function PowerStrip({ w, h, d }: Dims) {
+function PowerStrip({ w, h, d, sockets }: Dims & { sockets: number }) {
+  // 插孔布局与端口偏移共用同一公式（scene/powerStrip.ts）：切换 4 / 6 / 8 位后插孔同步重排
+  const count = Math.max(1, Math.min(12, Math.round(sockets)))
   return (
     <group>
       <mesh castShadow geometry={boxGeometry(w, h, d)} material={standardMaterial('#E5E2DA', { roughness: 0.5 })} />
-      {[0, 1, 2, 3].map((i) => (
+      {Array.from({ length: count }, (_, i) => (
         <mesh
           key={i}
-          position={[(i - 1.5) * (w / 4), h / 2 + 0.002, 0]}
+          position={[stripSocketOffsetX(i, count, w), h / 2 + 0.002, 0]}
           geometry={cylinderGeometry(0.008, 0.008, 0.004, 12)}
           material={standardMaterial('#6B7280', { roughness: 0.6 })}
         />
@@ -230,10 +233,13 @@ export function PrimitiveModel({
   shape,
   dims,
   color,
+  sockets,
 }: {
   shape?: PrimitiveShape
   dims: ObjectDimensions
   color: string
+  /** 插排插孔数量（shape = 'powerStrip' 时使用，默认 4） */
+  sockets?: number
 }) {
   const { width: w, height: h, depth: d } = dims
   switch (shape) {
@@ -254,7 +260,7 @@ export function PrimitiveModel({
     case 'storageBox':
       return <StorageBox w={w} h={h} d={d} />
     case 'powerStrip':
-      return <PowerStrip w={w} h={h} d={d} />
+      return <PowerStrip w={w} h={h} d={d} sockets={sockets ?? 4} />
     default:
       return <GenericBox w={w} h={h} d={d} color={color} />
   }

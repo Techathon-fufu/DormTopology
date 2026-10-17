@@ -1,6 +1,7 @@
 import { mockSleep } from '@/lib/mockPacing'
 import { planCableRoute } from '@/scene/cableRoute'
 import { computeCableAvoidZones } from '@/scene/routeNodes'
+import { CABLE_VISIBILITY_META } from '@/types/project'
 import type { CableConnection } from '@/types/project'
 import type { CablePlanningService, CablePlanningResult } from '../types'
 
@@ -9,11 +10,13 @@ import type { CablePlanningService, CablePlanningResult } from '../types'
  *
  * 流程（分阶段延时，不伪造精确百分比阶段之外的进度）：
  * 1. 收集避让区（打字活动区 / 水杯活动区 / 桌下腿部活动区）；
- * 2. 对每条目标线缆：在候选节点链（桌边 / 桌底 / 桌腿 / 出线孔 / 地面）中
- *    挑选第一条通过「平滑采样障碍检查」的路径；
+ * 2. 对每条目标线缆：按线材类型（可见线 = 出线槽策略 / 隐藏线 = 背板后策略）
+ *    在候选节点链（桌边 / 桌底 / 背板 / 桌腿 / 出线孔 / 地面）中挑选第一条通过
+ *    「平滑采样障碍检查」的路径；
  * 3. 首次规划时把规划前的走线留存为「原始走线」快照（用于对比与收拢动画）；
  * 4. 全部候选失败 → 标记 conflict 并附具体问题（用户可调整路径节点）。
  *
+ * 线缆间距为界面上的咨询级检查（不参与规划通过判定，见 scene/cableRoute.ts）。
  * 重要：结果为演示数据，未经过真实算法验证（algorithmVerified 恒为 false）。
  */
 export const mockCablePlanningService: CablePlanningService = {
@@ -63,6 +66,7 @@ export const mockCablePlanningService: CablePlanningService = {
       if (result.ok) {
         plannedCount += 1
         const nodeSummary = result.route.nodeIds.filter(Boolean).length
+        const visLabel = CABLE_VISIBILITY_META[result.visibility].label
         updated.push({
           ...cable,
           route: {
@@ -70,19 +74,21 @@ export const mockCablePlanningService: CablePlanningService = {
             points: result.route.points,
             nodeIds: result.route.nodeIds,
             smooth: true,
+            strategy: result.strategy,
           },
           originalRoute,
           status: 'planned',
           planSource: 'demo-rule',
           note:
             nodeSummary > 0
-              ? `演示规划：沿 ${nodeSummary} 个场景路径节点走线（未经真实算法验证）`
-              : '演示规划：就近直连（未经真实算法验证）',
+              ? `演示规划（${visLabel}）：沿 ${nodeSummary} 个场景路径节点走线（未经真实算法验证）`
+              : `演示规划（${visLabel}）：就近直连（未经真实算法验证）`,
           updatedAt: Date.now(),
         })
       } else {
         conflictCount += 1
         const firstIssue = result.issues[0]?.message ?? '未知障碍'
+        const visLabel = CABLE_VISIBILITY_META[result.visibility].label
         updated.push({
           ...cable,
           route: {
@@ -90,11 +96,12 @@ export const mockCablePlanningService: CablePlanningService = {
             points: result.route.points,
             nodeIds: result.route.nodeIds,
             smooth: true,
+            strategy: result.strategy,
           },
           originalRoute,
           status: 'conflict',
           planSource: 'demo-rule',
-          note: `未找到无碰撞的演示路径：${firstIssue}（共 ${result.issues.length} 处，可调整路径节点后重新检查）`,
+          note: `${visLabel}未找到无碰撞的演示路径：${firstIssue}（共 ${result.issues.length} 处，可调整路径节点后重新检查）`,
           updatedAt: Date.now(),
         })
       }

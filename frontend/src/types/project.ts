@@ -204,6 +204,37 @@ export interface RecognitionMeta {
   dimensionSource?: 'estimated' | 'user'
 }
 
+// ───────────────────────────── 插排规格 ─────────────────────────────
+
+/** 插排可选插孔位数（4 / 6 / 8 位） */
+export const POWER_STRIP_SOCKET_COUNTS = [4, 6, 8] as const
+
+export type PowerStripSocketCount = (typeof POWER_STRIP_SOCKET_COUNTS)[number]
+
+/** 插排两端留边（米）：插孔区之外的壳体长度 */
+export const POWER_STRIP_MARGIN = 0.03
+
+/**
+ * 插排规格（仅对「排插」类物品生效；长度 = 两端留边 + (孔数-1) × 孔间距，保存在 dimensions.width）。
+ * 切换孔数 / 间距时长度自动重算；插孔端口按其规格自动重建（端口 id 约定 port-strip-<n>）。
+ */
+export interface PowerStripConfig {
+  socketCount: PowerStripSocketCount
+  /** 相邻插孔中心间距（米） */
+  socketSpacing: number
+  /** 最大建议负载（瓦）：已连接设备的额定功率合计超过该值时给出警告（估算值） */
+  maxLoadW: number
+}
+
+export const POWER_STRIP_DEFAULTS: PowerStripConfig = {
+  socketCount: 4,
+  socketSpacing: 0.05,
+  maxLoadW: 2500,
+}
+
+/** 插排孔距可取范围（米，20–80 mm） */
+export const POWER_STRIP_SPACING_RANGE = { min: 0.02, max: 0.08 }
+
 export interface SceneObject {
   id: string
   projectId: string
@@ -224,6 +255,8 @@ export interface SceneObject {
   frequent: boolean
   source: 'demo' | 'recognized' | 'manual'
   recognition?: RecognitionMeta
+  /** 插排规格（仅排插类物品；长度/宽度/高度仍由 dimensions 管理，长度随规格自动重算） */
+  powerStrip?: PowerStripConfig
   note?: string
 }
 
@@ -248,16 +281,66 @@ export const CABLE_GROUP_META: Record<CableGroup, { label: string; description: 
   data: { label: '数据线', description: 'USB / 网线等数据线' },
 }
 
-/** 走线通道：桌沿 / 桌底 / 立柱 / 地面 / 自由（未规划） */
-export type CableChannel = 'deskEdge' | 'deskUnderside' | 'post' | 'floor' | 'free'
+/** 走线通道：桌沿 / 桌底 / 背板 / 立柱 / 地面 / 自由（未规划） */
+export type CableChannel = 'deskEdge' | 'deskUnderside' | 'backboard' | 'post' | 'floor' | 'free'
 
 export const CABLE_CHANNEL_LABELS: Record<CableChannel, string> = {
   deskEdge: '桌沿',
   deskUnderside: '桌底走线',
+  backboard: '背板走线',
   post: '立柱绑扎',
   floor: '地面',
   free: '自由摆放',
 }
+
+/** 线材可见性类型：可见线 = 从桌面出线槽（穿线孔）走线；隐藏线 = 从桌面背板后面走线 */
+export type CableVisibility = 'visible' | 'hidden'
+
+export const CABLE_VISIBILITY_META: Record<
+  CableVisibility,
+  { label: string; description: string; strategy: CableRouteStrategy }
+> = {
+  visible: {
+    label: '可见线',
+    description: '从桌面出线槽（穿线孔）走线，看得见但顺滑不凌乱',
+    strategy: 'cableHole',
+  },
+  hidden: {
+    label: '隐藏线',
+    description: '从桌面背板后面走线，尽量不穿桌面、看不见',
+    strategy: 'backboard',
+  },
+}
+
+/** 走线策略：cableHole = 出线槽（穿线孔）策略；backboard = 背板后走线策略 */
+export type CableRouteStrategy = 'cableHole' | 'backboard'
+
+export const CABLE_STRATEGY_META: Record<CableRouteStrategy, { label: string }> = {
+  cableHole: { label: '出线槽走线' },
+  backboard: { label: '背板后走线' },
+}
+
+/** 线径档位：粗线 / 细线（影响渲染管径、最小弯曲半径与线缆间距检查） */
+export type CableThickness = 'thick' | 'thin'
+
+export const CABLE_THICKNESS_META: Record<
+  CableThickness,
+  {
+    label: string
+    /** 真实参考线径（米，含外被） */
+    diameterM: number
+    /** 三维渲染半径（米，约按真实半径 1.7 倍放大以便观察，界面需标注） */
+    renderRadiusM: number
+    /** 最小弯曲半径参考值（米） */
+    minBendRadiusM: number
+  }
+> = {
+  thick: { label: '粗线', diameterM: 0.0065, renderRadiusM: 0.0055, minBendRadiusM: 0.0325 },
+  thin: { label: '细线', diameterM: 0.0035, renderRadiusM: 0.0032, minBendRadiusM: 0.0175 },
+}
+
+/** 线缆间最小净间隙（米）：两根线缆表面之间至少留出的距离（本地咨询级检查） */
+export const CABLE_CLEARANCE_M = 0.008
 
 export interface CableEndpoint {
   objectId: string
@@ -274,6 +357,8 @@ export interface CableRoute {
   nodeIds?: (string | null)[]
   /** 渲染时是否按平滑曲线（Catmull-Rom）采样 */
   smooth?: boolean
+  /** 本条路径实际采用的走线策略（由线材类型推导；用于「类型变更后需重算」判定） */
+  strategy?: CableRouteStrategy
 }
 
 export type CableRouteStatus = 'existing' | 'planned' | 'adjusted' | 'stale' | 'conflict'
@@ -305,6 +390,10 @@ export interface CableConnection {
   id: string
   projectId: string
   kind: CableKind
+  /** 线径档位（粗 / 细）：未填写时按线缆类型推导（电源 / 视频 / 网线 = 粗线，其余 = 细线） */
+  thickness?: CableThickness
+  /** 线材类型：可见线（出线槽）/ 隐藏线（背板后）；未填写时按两端设备名称推断（见 @/scene/cables.ts） */
+  visibility?: CableVisibility
   from: CableEndpoint
   to: CableEndpoint
   route: CableRoute

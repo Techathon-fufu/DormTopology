@@ -42,6 +42,15 @@ export function computeRouteNodes(room: RoomConfig): RouteNode[] {
   push('edge-front-l', 'deskEdge', '桌边·前左', [-w2 + 0.03, yTop, zFront])
   push('edge-front-r', 'deskEdge', '桌边·前右', [w2 - 0.03, yTop, zFront])
 
+  // 背板走线位（桌后沿与后墙之间的走线面，隐藏线优先经过；上 / 中及后中三点）
+  const bbZ = g * 0.5
+  const bbY = y + 0.012
+  push('back-l-top', 'backboard', '背板·后左上', [-w2 + 0.06, bbY, bbZ])
+  push('back-r-top', 'backboard', '背板·后右上', [w2 - 0.06, bbY, bbZ])
+  push('back-l-mid', 'backboard', '背板·后左中', [-w2 + 0.06, yUnder, bbZ])
+  push('back-r-mid', 'backboard', '背板·后右中', [w2 - 0.06, yUnder, bbZ])
+  push('back-mid', 'backboard', '背板·后中', [0, yUnder, bbZ])
+
   // 桌底（桌面下沿，内收避开桌腿）
   push('under-l-front', 'deskUnder', '桌底·左前', [-w2 + 0.06, yUnder, zFront - 0.03])
   push('under-l-back', 'deskUnder', '桌底·左后', [-w2 + 0.06, yUnder, zBack + 0.03])
@@ -70,11 +79,21 @@ export function computeRouteNodes(room: RoomConfig): RouteNode[] {
     push(`post-${post.id}-low`, 'post', `立柱·${sideLabel}${posLabel}下`, [outX, 0.05, pz])
   }
 
-  // 出线孔（桌面上 / 桌底下两个走线点）
+  // 出线孔（桌面上「入口」/ 桌底下「出口」两个走线点）
   for (const hole of room.cableHoles) {
     const [hx, , hz] = hole.position
-    push(`hole-${hole.id}-top`, 'hole', `出线孔·上（⌀${Math.round(hole.diameter * 1000)}mm）`, [hx, yTop, hz])
-    push(`hole-${hole.id}-under`, 'hole', `出线孔·下（⌀${Math.round(hole.diameter * 1000)}mm）`, [hx, yUnder, hz])
+    push(
+      `hole-${hole.id}-top`,
+      'hole',
+      `出线孔·入口（桌面进入 ⌀${Math.round(hole.diameter * 1000)}mm）`,
+      [hx, yTop, hz],
+    )
+    push(
+      `hole-${hole.id}-under`,
+      'hole',
+      `出线孔·出口（桌下穿出 ⌀${Math.round(hole.diameter * 1000)}mm）`,
+      [hx, yUnder, hz],
+    )
   }
 
   // 插座

@@ -11,7 +11,7 @@ import type { DeskSurfaceMetrics } from '@/scene/deskModel'
  * - 相交检测使用旋转矩形 SAT（x-z 平面）+ 高度区间重叠，旋转角不同也能正确判断
  */
 
-export type SupportKind = 'desk' | 'shelf' | 'floor' | 'none'
+export type SupportKind = 'desk' | 'shelf' | 'beam' | 'floor' | 'none'
 
 export interface SupportInfo {
   kind: SupportKind
@@ -24,6 +24,20 @@ export interface SupportInfo {
 export const SHELF_THICKNESS = 0.018
 /** 桌面后沿与后墙留缝（与 RoomShell 一致） */
 export const DESK_GAP = 0.05
+
+/** 桌下横梁（排插推荐放置位）截面高度（米，与 ParametricDesk 渲染一致） */
+export const DESK_BEAM_SECTION = 0.03
+/** 桌下横梁截面深度（米） */
+export const DESK_BEAM_DEPTH = 0.06
+/** 桌下横梁中心距后墙距离（米）：位于桌面下方后侧 */
+export const DESK_BEAM_Z = DESK_GAP + 0.05
+/** 桌下横梁两端距桌边内收（米） */
+export const DESK_BEAM_INSET = 0.05
+
+/** 桌下横梁上表面高度（米）：排插放在横梁上的放置面 */
+export function deskBeamTopY(room: RoomConfig): number {
+  return room.desk.height - room.desk.thickness - 0.05
+}
 /** 判定为「贴合支撑面」的高度容差（米） */
 const FLOATING_TOLERANCE = 0.035
 /** 判定为「相交」的最小重叠深度（米） */
@@ -59,6 +73,13 @@ export function supportsContaining(
   }
   if (Math.abs(x) <= desk.width / 2 && z >= DESK_GAP && z <= DESK_GAP + desk.depth) {
     list.push({ kind: 'desk', y: deskTopY(room, metrics), label: '桌面' })
+  }
+  // 桌下横梁：排插推荐放置位（展开为支撑面，便于「放到桌下横梁」与悬空校验）
+  if (
+    Math.abs(x) <= (desk.width - DESK_BEAM_INSET * 2) / 2 &&
+    Math.abs(z - DESK_BEAM_Z) <= DESK_BEAM_DEPTH / 2
+  ) {
+    list.push({ kind: 'beam', y: deskBeamTopY(room), label: '桌下横梁' })
   }
   if (Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width) {
     list.push({ kind: 'floor', y: 0, label: '地面' })
@@ -122,6 +143,14 @@ export function raycastSupports(
         Math.abs(x) <= (room.desk.width - 0.2) / 2 && z >= DESK_GAP && z <= DESK_GAP + room.shelf.depth,
     )
   }
+  tryPlane(
+    deskBeamTopY(room),
+    'beam',
+    '桌下横梁',
+    (x, z) =>
+      Math.abs(x) <= (room.desk.width - DESK_BEAM_INSET * 2) / 2 &&
+      Math.abs(z - DESK_BEAM_Z) <= DESK_BEAM_DEPTH / 2,
+  )
 
   if (hits.length === 0) return null
   let best = hits[0]

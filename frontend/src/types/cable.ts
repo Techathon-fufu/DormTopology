@@ -12,11 +12,20 @@ import type { Vec3 } from './project'
 
 // ───────────────────────────── 场景路由节点 ─────────────────────────────
 
-export type RouteNodeKind = 'deskEdge' | 'deskUnder' | 'leg' | 'post' | 'hole' | 'outlet' | 'floor'
+export type RouteNodeKind =
+  | 'deskEdge'
+  | 'deskUnder'
+  | 'backboard'
+  | 'leg'
+  | 'post'
+  | 'hole'
+  | 'outlet'
+  | 'floor'
 
 export const ROUTE_NODE_META: Record<RouteNodeKind, { label: string; color: string }> = {
   deskEdge: { label: '桌边', color: '#0F9D8A' },
   deskUnder: { label: '桌底', color: '#2563EB' },
+  backboard: { label: '背板走线位', color: '#0891B2' },
   leg: { label: '桌腿立柱', color: '#7C3AED' },
   post: { label: '床架立柱', color: '#7C3AED' },
   hole: { label: '出线孔', color: '#D97706' },
@@ -54,7 +63,7 @@ export interface CableAvoidZone {
 
 // ───────────────────────────── 路径检查 ─────────────────────────────
 
-export type CableIssueKind = 'zone' | 'object' | 'slab' | 'bounds' | 'endpoint'
+export type CableIssueKind = 'zone' | 'object' | 'slab' | 'bounds' | 'endpoint' | 'cable'
 
 export interface CableCheckIssue {
   kind: CableIssueKind
@@ -68,7 +77,13 @@ export interface CableCheckResult {
   samples: Vec3[]
   /** 平滑路径长度（米） */
   lengthM: number
+  /** 硬性问题（阻断「无碰撞路径」判定）：避让区 / 物品 / 桌板 / 越界 / 端点 */
   issues: CableCheckIssue[]
+  /**
+   * 咨询级提示（不阻断通过）：如与其它线缆的间距过近（受线径影响）。
+   * 仅用于界面提示，规划器的通过判定只看 issues。
+   */
+  advisories: CableCheckIssue[]
   ok: boolean
 }
 

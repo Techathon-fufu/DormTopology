@@ -11,10 +11,13 @@
 
 import { uid } from '@/lib/utils'
 import { localDirVec, resolvePortOffset } from '@/scene/ports'
+import { resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
+import { CABLE_THICKNESS_META } from '@/types/project'
 import type {
   CableChannel,
   CableConnection,
   CableKind,
+  CableRouteStrategy,
   LayoutAssignment,
   ObjectCategory,
   ObjectDimensions,
@@ -272,10 +275,19 @@ export interface WireScenePayload {
   client_note: string
 }
 
-/** 线径预设（演示用默认值，待用户确认字段接入后替换；仅随请求发送，不改内部模型） */
+/**
+ * 线径预设：与内部 `CABLE_THICKNESS_META` 保持同源（仅随请求发送，不改内部模型）。
+ * @deprecated 新代码请直接使用 `CABLE_THICKNESS_META`（types/project.ts）。
+ */
 export const CABLE_DIAMETER_PRESETS: Record<'thick' | 'thin', { diameter_m: number; min_bend_radius_m: number }> = {
-  thick: { diameter_m: 0.0065, min_bend_radius_m: 0.0325 },
-  thin: { diameter_m: 0.0035, min_bend_radius_m: 0.0175 },
+  thick: {
+    diameter_m: CABLE_THICKNESS_META.thick.diameterM,
+    min_bend_radius_m: CABLE_THICKNESS_META.thick.minBendRadiusM,
+  },
+  thin: {
+    diameter_m: CABLE_THICKNESS_META.thin.diameterM,
+    min_bend_radius_m: CABLE_THICKNESS_META.thin.minBendRadiusM,
+  },
 }
 
 const CABLE_TYPE_WIRE: Record<CableKind, string> = {
@@ -284,10 +296,6 @@ const CABLE_TYPE_WIRE: Record<CableKind, string> = {
   video: 'hdmi',
   network: 'network',
   data: 'usb',
-}
-
-function cableThickness(kind: CableKind): 'thick' | 'thin' {
-  return kind === 'power' || kind === 'network' || kind === 'video' ? 'thick' : 'thin'
 }
 
 export function toWireItem(o: SceneObject): WireItemPayload {
@@ -321,18 +329,19 @@ export function toWireItem(o: SceneObject): WireItemPayload {
   }
 }
 
-export function toWireCable(c: CableConnection): WireCablePayload {
-  const thickness = cableThickness(c.kind)
-  const preset = CABLE_DIAMETER_PRESETS[thickness]
+export function toWireCable(c: CableConnection, objects: SceneObject[]): WireCablePayload {
+  const thickness = resolveCableThickness(c)
+  const visibility = resolveCableVisibility(c, objects).visibility
+  const meta = CABLE_THICKNESS_META[thickness]
   return {
     id: c.id,
     cable_type: CABLE_TYPE_WIRE[c.kind],
     thickness,
     from: { object_id: c.from.objectId, port_id: c.from.portId },
     to: { object_id: c.to.objectId, port_id: c.to.portId },
-    mode: 'slot',
-    diameter_m: preset.diameter_m,
-    min_bend_radius_m: preset.min_bend_radius_m,
+    mode: visibility === 'hidden' ? 'backboard' : 'slot',
+    diameter_m: meta.diameterM,
+    min_bend_radius_m: meta.minBendRadiusM,
     length_m: c.actualLengthM ?? null,
   }
 }
@@ -356,7 +365,7 @@ export function toWireScenePayload(input: {
       top_height_m: input.room.desk.height,
     },
     items: input.objects.map(toWireItem),
-    cables: input.cables.map(toWireCable),
+    cables: input.cables.map((c) => toWireCable(c, input.objects)),
     client_note: SCENE_CLIENT_NOTE,
   }
 }
@@ -750,6 +759,8 @@ export interface WireRoutingCablePayload {
   path_points?: unknown
   channel?: unknown
   channels?: unknown
+  mode?: unknown
+  strategy?: unknown
   length_m?: unknown
 }
 
@@ -780,6 +791,16 @@ function mapWireChannels(raw: unknown, fallback: unknown): CableChannel[] {
   if (Array.isArray(raw)) raw.forEach(push)
   push(fallback)
   return list.length > 0 ? list : ['free']
+}
+
+/** 后端走线方式（mode / strategy）→ 前端线材策略；未提供时返回 undefined（视为未记录） */
+function mapWireStrategy(mode: unknown, strategy: unknown): CableRouteStrategy | undefined {
+  const raw = typeof strategy === 'string' ? strategy : typeof mode === 'string' ? mode : undefined
+  if (raw === 'backboard' || raw === 'behind_backboard') return 'backboard'
+  if (raw === 'slot' || raw === 'cable_hole' || raw === 'cableHole' || raw === 'floor') {
+    return raw === 'floor' ? undefined : 'cableHole'
+  }
+  return undefined
 }
 
 export function mapCablePlanResult(
@@ -859,7 +880,7 @@ export function mapCablePlanResult(
       conflictCount += 1
       updated.push({
         ...cable,
-        route: { channels, points, smooth: true },
+        route: { channels, points, smooth: true, strategy: mapWireStrategy(it.mode, it.strategy) },
         originalRoute,
         status: 'conflict',
         planSource: 'algorithm',
@@ -872,7 +893,7 @@ export function mapCablePlanResult(
     plannedCount += 1
     updated.push({
       ...cable,
-      route: { channels, points, smooth: true },
+      route: { channels, points, smooth: true, strategy: mapWireStrategy(it.mode, it.strategy) },
       originalRoute,
       status: 'planned',
       planSource: 'algorithm',

@@ -2,10 +2,12 @@ import { create } from 'zustand'
 import type {
   CableConnection,
   LayoutAssignment,
+  PowerStripConfig,
   SceneObject,
   Vec3,
 } from '@/types/project'
 import { ensureDefaultPorts as defaultPortsForObject } from '@/scene/ports'
+import { computePowerStripSpecChange } from '@/scene/powerStrip'
 import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
@@ -23,7 +25,7 @@ export interface DragState {
   /** 已吸附的预览位置（米） */
   position: Vec3
   /** 吸附到的支撑面 */
-  support: 'desk' | 'shelf' | 'floor' | 'none'
+  support: 'desk' | 'shelf' | 'beam' | 'floor' | 'none'
   /** 预览位置是否通过越界 / 相交校验 */
   valid: boolean
   /** 上一次有效预览位置（指针未命中支撑面时回退用） */
@@ -111,6 +113,16 @@ interface WorkspaceState {
   addObject: (projectId: string, object: SceneObject) => void
   removeObject: (projectId: string, objectId: string) => void
   replaceObjects: (projectId: string, objects: SceneObject[], record?: boolean) => void
+  /**
+   * 切换插排规格（4/6/8 位 / 孔距 / 负载上限）：
+   * 一次提交完成「长度重算 + 插孔端口重建 + 线缆状态更新」（可一次撤销）；
+   * 超出新容量的连接标记 conflict（保留不删除），保留插孔上的连接标记 stale（需重算）。
+   */
+  applyPowerStripSpec: (
+    projectId: string,
+    objectId: string,
+    next: Partial<PowerStripConfig>,
+  ) => { removed: number; affected: number; socketCount: number } | null
   applyAssignments: (
     projectId: string,
     assignments: Pick<LayoutAssignment, 'objectId' | 'position' | 'rotationY'>[],
@@ -263,6 +275,40 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     replaceObjects(projectId, objects, record = true) {
       commit(projectId, { objects }, record)
+    },
+
+    applyPowerStripSpec(projectId, objectId, next) {
+      const project = useProjectsStore.getState().projects[projectId]
+      if (!project) return null
+      const strip = project.objects.find((o) => o.id === objectId)
+      if (!strip) return null
+      const change = computePowerStripSpecChange(strip, project.cables, next)
+      const removed = new Set(change.removedPortCableIds)
+      const affected = new Set(change.affectedCableIds)
+      const cables = project.cables.map((c) => {
+        if (removed.has(c.id)) {
+          return {
+            ...c,
+            status: 'conflict' as const,
+            note: `排插规格调整为 ${change.config.socketCount} 位：该连接所在插孔已被移除，请改插到保留插孔（连接未删除）`,
+            updatedAt: Date.now(),
+          }
+        }
+        if (affected.has(c.id) && c.status !== 'stale' && c.status !== 'conflict') {
+          return { ...c, status: 'stale' as const, updatedAt: Date.now() }
+        }
+        return c
+      })
+      commit(
+        projectId,
+        { objects: project.objects.map((o) => (o.id === objectId ? change.object : o)), cables },
+        true,
+      )
+      return {
+        removed: change.removedPortCableIds.length,
+        affected: change.affectedCableIds.length,
+        socketCount: change.config.socketCount,
+      }
     },
 
     applyAssignments(projectId, assignments, record = true) {
