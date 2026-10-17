@@ -79,7 +79,7 @@ frontend/src/
 
 ## 未完成事项（对应[任务清单](../docs/project_tasks.md)成员 A）
 
-- 桌体固定模型已接入运行时（0.9.0 起空间为固定模型口径）：源资产 `Prefabmodel/dormdesk.glb`，运行时副本 `frontend/public/models/dorm_desk_assembled.glb`（整组上床下桌：床架 / 上层四格书架 / L 形桌面 / 三抽屉侧柜 / 衣柜 / 护栏 / 爬梯 / 四立柱）。归一化按固定模型定制：x 居中、背面贴后墙、桌面锚点对齐 750mm；工作台 / 对比页 GLB 就绪时隐藏参数化床架并叠加逻辑出线孔标记，俯视剖切隐藏床体 / 护栏 / 爬梯（显示 only）。加载 / 归一化 / 锚点管线与 `importModel(url, name, position)` 动态导入已实现（0.5.1），资产契约检查见 `scripts/check-desk-model.ts`，细节与已知差异见 [docs/desk-model.md](docs/desk-model.md)。仍待：上层四格书架与「桌面书架」支撑面 / 分区对齐（与「桌柜分离模型」一起做，抽屉推拉设计与模型契约见 [docs/drawer-interaction.md](docs/drawer-interaction.md)）；独立单品 GLB（Rodin）仍未接入。
+- 桌体固定模型已接入运行时（0.9.0 起空间为固定模型口径）：源资产 `Prefabmodel/dormdesk.glb`，运行时副本 `frontend/public/models/dorm_desk_assembled.glb`（整组上床下桌：床架 / 上层四格书架 / L 形桌面 / 三抽屉侧柜 / 衣柜 / 护栏 / 爬梯 / 四立柱）。归一化按固定模型定制：x 居中、背面贴后墙、桌面锚点对齐 750mm；工作台 / 对比页 / 空间配置三维预览在 GLB 就绪时隐藏参数化床架并叠加逻辑出线孔标记（预览与工作台同源，另叠加书架搁板 / 插座实时标记，小画布自动拉远取景，加载失败自动回退简化几何），俯视剖切隐藏床体 / 护栏 / 爬梯（显示 only）。加载 / 归一化 / 锚点管线与 `importModel(url, name, position)` 动态导入已实现（0.5.1），资产契约检查见 `scripts/check-desk-model.ts`，细节与已知差异见 [docs/desk-model.md](docs/desk-model.md)。仍待：上层四格书架与「桌面书架」支撑面 / 分区对齐（与「桌柜分离模型」一起做，抽屉推拉设计与模型契约见 [docs/drawer-interaction.md](docs/drawer-interaction.md)）；独立单品 GLB（Rodin）仍未接入。
 - 真实走线、识别与 Rodin 服务，以及整理后接线、重算和指南的完整联调；物品整理已单独接入真实后端。
 - 照片框选补标与后端裁剪、Rodin 生成任务对接。
 - 最小弯曲半径编辑控件、「任意物品表面取点」（当前以接口 / 插孔为连接单位）；墙面插座坐标进入后端载荷（转换边界见 [docs/api-integration.md](docs/api-integration.md) 第 3 节）。
@@ -90,6 +90,13 @@ frontend/src/
 ## 验证记录
 
 独立算法工作台的真实样例生成、构建、桌面/模拟手机 Chromium 自动检查及数量见[算法可视化验证](../docs/algorithm_visual_testing.md#验证记录2026-10-17)。产品工作台新增的专项自动回归如下；后续各阶段记录仍为历史验证，手动交互和状态层冒烟不计为自动化验收。
+
+## 验证记录（2026-10-17，空间配置预览接入正式模型）
+
+- `npm run typecheck` / `npm run build` 通过（主包 1,597.33 kB JS + 43.15 kB CSS；含 Three.js 单块体积警告，属预期）；`npx tsx scripts/check-desk-model.ts` 通过。
+- 完整 `npm run test:e2e` 86 项中 80 通过、6 项需真实后端用例跳过（与改造前一致）。
+- 目视核对（临时 Playwright 截图，用后删除）：右侧预览透视 / 正视 / 俯视三视角均加载正式模型（整组家具完整入镜；小画布相机自动拉远并抬高注视点）；GLB 就绪时隐藏参数化床架、叠加逻辑出线孔与配置层书架搁板标记；俯视剖切隐藏床体 / 护栏 / 爬梯；工作台工具栏「显示桌体」开关不影响预览（预览恒显示家具）。
+- 实现：书架几何抽为共享组件 `DeskShelf`（ParametricDesk 与预览复用同一口径）；`DormDeskModel` 新增 `respectToolbar`；`CameraRig` 新增 `zoomOut` / `targetShiftY`（默认值下工作台取景不变）。
 
 ## 验证记录（2026-10-17，桌体模型接入与抽屉设计）
 

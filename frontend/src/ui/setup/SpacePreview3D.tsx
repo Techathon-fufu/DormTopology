@@ -2,16 +2,24 @@ import { useMemo, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { MonitorOff } from 'lucide-react'
 import { CameraRig } from '@/scene/CameraRig'
+import { DeskShelf } from '@/scene/DeskShelf'
+import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
 import { Segmented } from '@/ui/kit/segmented'
 import { detectWebGL } from '@/lib/webgl'
+import { useDeskModelStore } from '@/state/deskModelStore'
 import type { ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
 
-/** 简化三维预览：由当前表单实时生成（桌面 / 书架 / 立柱 / 出线孔 / 插座 / 床架示意） */
+/**
+ * 空间配置三维预览（正式模型）：家具加载与三维工作台同源的 dorm_desk_assembled.glb，
+ * 书架搁板 / 出线孔 / 插座等可编辑项以叠加标记随表单实时更新；
+ * 模型加载失败时 DormDeskModel 自动回退参数化几何（提示见工作台）。
+ */
 export function SpacePreview3D({ room }: { room: RoomConfig }) {
   const [view, setView] = useState<ViewPreset>('persp')
   const webglOk = useMemo(detectWebGL, [])
+  const deskGlbLoaded = useDeskModelStore((s) => s.status === 'loaded')
 
   if (!webglOk) {
     return (
@@ -37,8 +45,18 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
           shadow-mapSize={[1024, 1024]}
         />
         <directionalLight position={[-4, 3, 3]} intensity={0.35} />
-        <RoomShell room={room} showBed={view !== 'top'} />
-        <CameraRig preset={view} />
+        {/* 桌体由 DormDeskModel 接管（GLB / 回退几何）；GLB 就绪时床架由模型自带、隐藏参数化床架 */}
+        <RoomShell
+          room={room}
+          deskMode="none"
+          showBed={view !== 'top' && !deskGlbLoaded}
+          showCableHoles={deskGlbLoaded}
+        />
+        <DormDeskModel room={room} hideBedParts={view === 'top'} respectToolbar={false} />
+        {/* GLB 无「离桌高度」可调搁板（模型自带的是上层四格固定书架）：叠加配置层书架实时反馈 */}
+        {deskGlbLoaded ? <DeskShelf room={room} /> : null}
+        {/* 小画布取景：拉远 + 抬高注视点，容纳整组家具（默认机位按桌面区域取景会裁掉床） */}
+        <CameraRig preset={view} zoomOut={1.75} targetShiftY={0.3} />
       </Canvas>
       <div className="absolute right-2 top-2">
         <Segmented
@@ -53,7 +71,7 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
         />
       </div>
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/35 to-transparent px-2.5 py-1.5 text-[11px] text-white">
-        简化预览 · 由当前表单实时生成 · 可拖拽旋转
+        正式模型 · 由当前表单实时生成 · 可拖拽旋转
       </div>
     </div>
   )
