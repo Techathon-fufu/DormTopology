@@ -242,6 +242,7 @@ export function WorkspacePage() {
   }
 
   const handleOpenPlans = () => {
+    if (useOrganizeStore.getState().applying) return
     setPlansOpen((v) => !v)
     // 宽屏为右侧停靠面板（优先于整理面板展示）；窄屏同步打开右侧抽屉
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
@@ -543,7 +544,9 @@ export function WorkspacePage() {
       <Drawer
         open={rightOpen}
         side="right"
-        onClose={() => setRightOpen(false)}
+        onClose={() => {
+          if (!useOrganizeStore.getState().applying) setRightOpen(false)
+        }}
         className="w-80 max-w-[85vw]"
       >
         {plansOpen ? (

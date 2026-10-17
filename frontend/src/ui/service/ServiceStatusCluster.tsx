@@ -5,6 +5,8 @@ import {
   cancelRemoteJob,
   isDemoFallbackMode,
   isMockMode,
+  isOrganizationMockMode,
+  hasRealServices,
   refreshRemoteJob,
   setApiModeOverride,
 } from '@/api'
@@ -93,6 +95,7 @@ export function ServiceStatusCluster({
 
   const active = records.filter((r) => REMOTE_JOB_ACTIVE.includes(r.status))
   const failed = records.filter((r) => r.status === 'failed')
+  const modeLabel = isMockMode ? '真实整理 / 其余演示' : isOrganizationMockMode ? '整理演示 / 其余真实' : '真实后端'
 
   const handleRefresh = (id: string) => {
     setActionError(null)
@@ -110,11 +113,11 @@ export function ServiceStatusCluster({
 
   return (
     <div ref={rootRef} className={cn('relative flex items-center gap-2', className)}>
-      {isMockMode ? (
+      {!hasRealServices ? (
         <DataBadge kind="mock" label={isDemoFallbackMode ? '演示模式（已切换）' : '演示模式'} />
       ) : (
         <>
-          <DataBadge kind="real" label="真实后端" />
+          <DataBadge kind="real" label={modeLabel} />
           <button
             type="button"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -131,7 +134,7 @@ export function ServiceStatusCluster({
         </>
       )}
 
-      {!isMockMode || records.length > 0 ? (
+      {hasRealServices || records.length > 0 ? (
         <button
           type="button"
           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -154,7 +157,7 @@ export function ServiceStatusCluster({
         >
           <div className="flex items-center justify-between px-1 pb-1.5">
             <span className="font-medium text-foreground">服务状态</span>
-            {!isMockMode ? (
+            {hasRealServices ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -167,7 +170,7 @@ export function ServiceStatusCluster({
             ) : null}
           </div>
 
-          {!isMockMode ? (
+          {hasRealServices ? (
             <div className="space-y-1 rounded-md border border-border p-2">
               <div className="flex items-center gap-1.5">
                 <span className={cn('h-1.5 w-1.5 rounded-full', HEALTH_DOT[health.status])} />
@@ -217,9 +220,9 @@ export function ServiceStatusCluster({
           <ul className="mt-2 space-y-1.5">
             {records.length === 0 ? (
               <li className="px-1 py-2 text-[11px] text-faint">
-                {isMockMode
+                {!hasRealServices
                   ? '演示模式下不产生后端任务。'
-                  : '暂无后端任务：识别 / 模型生成 / 整理 / 走线将以 jobId 长任务方式提交，并在此留痕。'}
+                  : '暂无后端任务。'}
               </li>
             ) : (
               records.map((r) => (
@@ -251,7 +254,7 @@ export function ServiceStatusCluster({
                     </p>
                   ) : null}
                   <div className="flex items-center gap-1 pt-0.5">
-                    {REMOTE_JOB_ACTIVE.includes(r.status) || r.lastQueryError ? (
+                    {hasRealServices && (REMOTE_JOB_ACTIVE.includes(r.status) || r.lastQueryError) ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -261,7 +264,7 @@ export function ServiceStatusCluster({
                         重查
                       </Button>
                     ) : null}
-                    {REMOTE_JOB_ACTIVE.includes(r.status) ? (
+                    {hasRealServices && REMOTE_JOB_ACTIVE.includes(r.status) ? (
                       <Button
                         variant="ghost"
                         size="sm"

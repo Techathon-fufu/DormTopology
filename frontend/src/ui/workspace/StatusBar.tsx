@@ -4,7 +4,7 @@ import { formatMeters } from '@/lib/units'
 import type { SceneIssue } from '@/scene/sceneValidation'
 import { cableDisplayPoints } from '@/scene/cables'
 import { estimateCableLength } from '@/scene/cableRoute'
-import { isMockMode } from '@/api'
+import { isMockMode, isOrganizationMockMode } from '@/api'
 import { useProjectJobs } from '@/state/jobsStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
@@ -44,7 +44,7 @@ export function StatusBar({
   )
   const staleCableCount = project.cables.filter((c) => c.status === 'stale').length
   const conflictCableCount = project.cables.filter((c) => c.status === 'conflict').length
-  const mock = isMockMode
+  const activeJobIsMock = active[0]?.mock ?? false
 
   const modelCounts = { none: 0, generating: 0, placeholder: 0, ready: 0, failed: 0 }
   for (const o of project.objects) modelCounts[o.model.status] += 1
@@ -60,8 +60,8 @@ export function StatusBar({
         </span>
         <span className="hidden xl:inline">
           {mode === 'organize'
-            ? '规则式演示 · 本地保存'
-            : '规则式演示 · 结果需核查'}
+            ? isOrganizationMockMode ? '规则式演示 · 本地保存' : '真实后端整理 · 本地保存'
+            : isMockMode ? '规则式演示 · 结果需核查' : '真实后端 · 结果需核查'}
         </span>
       </span>
 
@@ -72,7 +72,7 @@ export function StatusBar({
         {active.length > 0 ? (
           <span className="inline-flex items-center gap-2">
             <span className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-              {mock ? (
+              {activeJobIsMock ? (
                 <span className="block h-full w-1/3 animate-pulse rounded-full bg-primary" />
               ) : (
                 <span
@@ -87,7 +87,7 @@ export function StatusBar({
               {awaitingCount > 0 ? ` · ${awaitingCount} 待确认` : ''}
               {active.length > 1 ? ` +${active.length - 1}` : ''}
             </span>
-            {mock ? <FastForwardToggle compact /> : null}
+            {activeJobIsMock ? <FastForwardToggle compact /> : null}
           </span>
         ) : null}
         {failed.length > 0 ? (

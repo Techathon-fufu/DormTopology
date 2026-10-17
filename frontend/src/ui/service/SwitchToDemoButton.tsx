@@ -1,4 +1,4 @@
-import { isMockMode, setApiModeOverride } from '@/api'
+import { hasRealServices, setApiModeOverride } from '@/api'
 import { Button } from '@/ui/kit/button'
 import { cn } from '@/lib/utils'
 
@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
  * 写入 localStorage 后刷新页面生效（刷新后仍保持，可随时恢复真实模式）。
  */
 export function SwitchToDemoButton({ className }: { className?: string }) {
-  if (isMockMode) return null
+  if (!hasRealServices) return null
   return (
     <Button
       variant="outline"

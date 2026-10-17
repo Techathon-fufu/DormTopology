@@ -16,7 +16,7 @@ function collectRuntimeFailures(page: Page) {
 
 async function openWorkspace(page: Page) {
   await page.goto(`/projects/${demoProjectId}/workspace`)
-  await expect(page.getByTitle('示例：上床下桌·四人间')).toBeVisible()
+  await expect(page.getByRole('banner').getByTitle('示例：上床下桌·四人间')).toBeVisible()
   await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
   await expect(page.locator('canvas')).toBeVisible()
 }
@@ -51,6 +51,18 @@ async function attachViewport(page: Page, testInfo: TestInfo, name: string) {
   await testInfo.attach(name, { path, contentType: 'image/png' })
 }
 
+async function selectView(page: Page, value: 'top' | 'front') {
+  const select = page.getByRole('combobox', { name: '场景视角', exact: true })
+  if (await select.isVisible()) {
+    await select.selectOption(value)
+  } else {
+    const menu = page.locator('summary[aria-label="更多操作"]')
+    await menu.click()
+    await page.getByRole('combobox', { name: '更多操作中的场景视角', exact: true }).selectOption(value)
+    await menu.click()
+  }
+}
+
 type JobMutation =
   | { action: 'create'; projectId: string; title: string }
   | { action: 'update'; id: string; patch: Partial<GenerationJob> }
@@ -79,9 +91,9 @@ test('opens the example workspace without a render loop and keeps its scene visi
   const failures = collectRuntimeFailures(page)
   await openWorkspace(page)
   await expectNonblankCanvas(page)
-  await page.getByRole('button', { name: '俯视', exact: true }).click()
+  await selectView(page, 'top')
   await expectNonblankCanvas(page)
-  await page.getByRole('button', { name: '正视', exact: true }).click()
+  await selectView(page, 'front')
   await expectNonblankCanvas(page)
   await attachViewport(page, testInfo, 'workspace-rendered')
   await page.reload()

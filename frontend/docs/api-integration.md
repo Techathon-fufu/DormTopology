@@ -1,330 +1,135 @@
-# 服务适配层与后端接口约定
+# 前后端服务接入
 
-本文档记录前端「后端服务适配层」的实现口径：运行模式切换、统一 HTTP 客户端、四项能力的 wire 契约、
-前端本地校验、任务留痕与刷新恢复，以及**当前无法联调的字段缺口**。
+产品工作台的物品整理已接入仓库内 FastAPI 与 Python 领域算法。识别、Rodin、走线和遗留布局端点仍未接入应用服务，真实请求返回 `501`；原有 Mock 演示继续保留。完整场景字段与几何语义以[数据契约](../../docs/data_contract.md)为准，本文只记录实际 HTTP 编排和产品转换。
 
-> 状态声明（重要）：
-> - 仓库内后端 FastAPI 服务尚未实现（`backend/app/domain/` 仅有算法层）。本文记录当前前端 HTTP
->   适配的请求与响应形式；与[权威数据契约](../../docs/data_contract.md)的差异列于第 6 节，正式接入前须完成转换与字段补齐；
-> - 适配层已实现并通过本地「假 HTTP 服务器」冒烟验证（超时 / 网络错误 / 非 2xx / 坏 JSON / 任务 404 /
->   轮询状态流转 / 取消 / 校验器 / 存储持久化 / 模式解析，详见第 9 节），**尚未与真实后端联调**；
-> - 前端不持有任何服务密钥（Rodin 等第三方密钥只在后端）。
+## 1. 本地运行
 
----
+从仓库根目录启动后端：
 
-## 1. 运行模式与切换
+```sh
+python3 -m pip install -r backend/requirements.txt
+python3 -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
 
-| 项 | 说明 |
+在 `frontend/` 启动前端：
+
+```sh
+npm install
+VITE_ORGANIZATION_API_MODE=real npm run dev
+```
+
+打开终端输出的前端地址，进入工作台的「生成整理方案」，核对尺寸与整理前位置并勾选确认。旧版原始快照没有完整场景时，需要重新采集。生成后先预览，接受时后端复查并保存新版本。取消预览保留原布局，已同步的场景与任务记录仍保留。
+
+Vite 将 `/api/v1` 代理到 `http://127.0.0.1:8000`；端口被占用时前端会另选端口。生产部署须配置同源反向代理，或设置后端地址与允许的 CORS origin，后端环境变量见 [backend/README.md](../../backend/README.md)。
+
+| 环境变量 | 用途 |
 | --- | --- |
-| `VITE_API_MODE` | `mock`（默认，本地模拟服务）/ `real`（调用应用后端） |
-| `VITE_SERVICE_MODE` | 旧变量兼容：`mock` / `service`（`service` 等价 `real`）；同时存在时 `VITE_API_MODE` 优先 |
-| `VITE_API_BASE_URL` | 后端地址前缀；留空 = 与前端同源。拼接规则：`${base}/api/v1/<path>` |
-| `VITE_API_TIMEOUT_MS` | 单次 HTTP 请求超时（默认 15000 ms）；长任务轮询使用独立节奏，不受此值影响 |
+| `VITE_API_MODE` | `mock`（默认）或 `real`，控制所有能力 |
+| `VITE_ORGANIZATION_API_MODE` | 单独选择整理的 `mock` 或 `real`；留空跟随全局模式 |
+| `VITE_SERVICE_MODE` | 兼容旧值 `mock/service`；`VITE_API_MODE` 优先 |
+| `VITE_API_BASE_URL` | 应用后端地址；默认空字符串，走同源 `/api/v1` |
+| `VITE_DEV_API_TARGET` | Vite 开发代理目标，默认 `http://127.0.0.1:8000` |
+| `VITE_API_TIMEOUT_MS` | 单请求超时，默认 15000 ms；后台任务独立轮询 |
 
-运行时可切换：「切换到演示模式」按钮（任一失败提示、服务状态面板内）写入 localStorage
-`dormtopology.api-mode-override` 并刷新页面；刷新后仍生效，可在服务状态面板「恢复真实模式」
-（清除覆盖键）。环境变量本身是 `mock` 时不会出现切换入口。
+运行时覆盖键为 `dormtopology.api-mode-override`，优先于环境变量。「切换到演示模式」关闭全部真实能力，「恢复真实模式」清除覆盖并恢复环境配置；混合配置显示「真实整理 / 其余演示」，同时启用健康检查与真实任务恢复。真实服务失败不会静默采用 Mock 结果。
 
-**不会静默降级**：`real` 模式下任何失败（网络 / 超时 / 非 2xx / 响应格式错误 / 任务失败 / 任务不存在）
-都直接展示真实原因与重试入口，不会回退到 mock 结果假冒成功。
+## 2. 已实现的整理 API
 
-## 2. 统一 HTTP 客户端（`src/api/core/client.ts`）
-
-| 情况 | 处理 | 错误分类 `ApiError.kind` |
-| --- | --- | --- |
-| 连接失败 / 断网 / 服务未启动 | 抛错，提示「可切换到演示模式」 | `network` |
-| 超过 `VITE_API_TIMEOUT_MS` | AbortController 中止并抛超时 | `timeout` |
-| 非 2xx | 提取响应体 `detail`/`message`/`error` 作为原因 | `http`（`status` 保留） |
-| 404（默认） | 视为「任务或资源不存在（可能过期 / 后端重启）」 | `not-found` |
-| 2xx 但响应不是 JSON | 抛格式错误（不猜测内容） | `malformed` |
-| 请求前置条件不满足（如未选照片） | 提交前直接拒绝 | `input` |
-| 用户取消 | `POST /jobs/{id}/cancel` 后按 cancelled 处理 | `cancelled` |
-| 调用方中止（组件卸载） | 任务留存，由 watcher 继续查询 | `aborted` |
-
-## 3. 通用 wire 约定
-
-- 路径前缀 `/api/v1`，字段一律 `snake_case`，长度米制、角度弧度、时间 ISO 8601；
-- 任务状态枚举：`queued` / `running` / `succeeded` / `failed` / `cancelled`；
-- 所有长任务统一「提交 → jobId → 轮询」两段式：
-
-```jsonc
-// POST /api/v1/<capability>  →  202
-{ "job_id": "job_...", "status": "queued", "created_at": "2026-10-17T09:00:00Z" }
-```
-
-```jsonc
-// GET /api/v1/jobs/{job_id}
-{
-  "job_id": "job_...",
-  "kind": "cable",
-  "status": "running",            // queued | running | succeeded | failed | cancelled
-  "progress": 0.62,               // 可选 0~1；缺省时界面只显示阶段文字（不伪造百分比）
-  "stage": "避障检查",
-  "created_at": "2026-10-17T09:00:00Z",
-  "updated_at": "2026-10-17T09:00:05Z",
-  "algorithm_version": "routing-0.3.1",   // 整理 / 走线等算法任务应回报（界面留痕展示）
-  "cancellable": true,
-  "result": { /* 见各能力 */ },
-  "error": { "code": "E_NO_PATH", "message": "…" }   // failed 时
-}
-```
-
-- 轮询节奏：首次 0.8 s，×1.3 退避，封顶 4 s；**连续 3 次查询失败**才判定任务失败
-  （瞬时网络抖动容忍，但不静默成功）；页面刷新后由 `ApiRuntime` 每 10 s（及 focus / online 事件）
-  继续查询非终态任务；
-- 取消：`POST /api/v1/jobs/{job_id}/cancel` → 返回更新后的任务信封（或 202 接受，前端置 cancelled）；
-- 健康检查：`GET /api/v1/health` → `{ "status": "ok" | "degraded", "version": "0.3.0" }`
-  （5 s 超时；无法识别的结构按 `degraded` 处理）。
-
-## 4. 四项能力契约
-
-### 4.1 照片识别 `POST /api/v1/recognition`
-
-请求：`multipart/form-data`
-
-| 字段 | 说明 |
+| 方法与路径 | 行为 |
 | --- | --- |
-| `project_id` | 项目 id |
-| `photos` | 照片文件（可多张；前端从 IndexedDB 读取原图上传） |
+| `GET /api/v1/health` | 状态、算法版本、已实现能力列表 |
+| `PUT /api/v1/projects/{project_id}/scene` | 保存完整场景，创建或核对正式基线，条件更新版本 |
+| `GET /api/v1/projects/{project_id}/scene` | 读取项目当前正式场景 |
+| `GET /api/v1/projects/{project_id}/scene-state` | 同次读取 `{scene, baseline_source_id}`，用于安全复查同步中断 |
+| `GET /api/v1/scenes/{scene_id}` | 按正式场景 ID 读取 |
+| `POST /api/v1/organization/plan` | 提交当前版本的真实布局任务，返回 `202` 与 `job_id` |
+| `GET /api/v1/jobs/{job_id}` | 读取状态、结果或失败原因 |
+| `POST /api/v1/jobs/{job_id}/cancel` | 取消未终结任务；后台返回不能覆盖取消状态 |
+| `POST /api/v1/jobs/{job_id}/apply` | 重新校验并原子应用该任务结果，版本加一，结果只消费一次 |
 
-响应 `result`：
-
-```jsonc
-{
-  "items": [
-    {
-      "temp_id": "r_1",
-      "name": "台灯",
-      "category": "electrical",       // electrical | nonElectrical | storage（兼容 power_strip 等细分）
-      "size_m": [0.18, 0.35, 0.18],
-      "quantity": 1,
-      "needs_power": true,
-      "fixed": false,
-      "dimensions_source": "estimated", // estimated（估计值，界面强制标注待确认）| user
-      "confidence": 0.86,               // 0~1；缺失按 0.5 且计入待确认
-      "ports": [
-        { "id": "p1", "type": "power_sink", "local_position": [-0.03, 0.05, -0.07], "local_direction": [0, 0, -1] }
-      ]
-    }
-  ],
-  "low_confidence": 1,
-  "note": "可选说明"
-}
-```
-
-- 接口类型映射（wire → 内部）：`power_source|power_sink|power|power-ac → power-ac`、`usb|usb-a → usb-a`、
-  `usb-c`、`dc`、`network|rj45 → rj45`、`hdmi`、`audio`、`wireless`；未知类型丢弃并计入 warnings；
-- `local_position` 为相对物品中心（模型坐标系）的偏移；`local_direction` 取最接近的 6 向之一；
-- 前端不信任「估计值＝确认值」：`dimensions_source=estimated` 一律保持「待确认」状态。
-
-### 4.2 模型生成 `POST /api/v1/models/generate`
-
-请求（JSON）：
+首次同步：
 
 ```jsonc
 {
-  "project_id": "…",
-  "object": { /* WireItem，见 4.5 场景载荷 */ },
-  "attempt": 0,
-  "photo_id": "照片记录 id 或 null"
+  "scene": { /* 完整契约 Scene */ },
+  "expected_revision": null,
+  "baseline_source_id": "前端整理前快照 ID",
+  "baseline": { /* 用户已核对的完整原始 Scene */ }
 }
 ```
 
-响应 `result`：`{ "object_id": "…", "status": "ready" | "failed", "asset_url": "https://…/x.glb", "format": "glb", "note": "…" }`
+后端分配 `scene_id`、`baseline_id`，初始 `scene_revision=1`。后续同步携带已知 `expected_revision`；相同内容保留版本，变更才加一。新 `baseline_source_id` 必须同时提供完整新基线，旧基线不可改写。保存初始凌乱布局只校验结构与引用，允许碰撞等待整理。
 
-- 适配层规则：`status=failed` → 整体按失败（抛 `job` 错误），不写「成功」；
-- `asset_url` 就绪时写入 `ModelRef.assetUrl` 且状态置 `ready`；**三维场景暂未接入 URL 模型渲染**，
-  仍以匹配尺寸占位几何显示（界面注明），这是本轮如实限制。
+提交和应用请求均为：
 
-### 4.3 空间整理 `POST /api/v1/organization/plan`
-
-请求（JSON）：
-
-```jsonc
-{
-  "project_id": "…",
-  "scene": { /* 场景载荷，见 4.5 */ },
-  "preferences": {
-    "typing_offset_x": 0.0,       // -0.6 ~ 0.6（相对桌面中心，米）
-    "typing_width": 0.6,          // 打字活动区宽度
-    "cup_corner": "rightFront",   // leftFront | rightFront | leftBack | rightBack | none
-    "preferred_storage_zone": "underDesk"  // desk | shelf | underDesk
-  }
-}
+```json
+{ "scene_id": "scene_...", "scene_revision": 1 }
 ```
 
-响应 `result`（当前适配层接受的整理结果子集；完整领域输出见 `docs/data_contract.md` 的 `packing_result`）：
+任务状态为 `queued/running/succeeded/failed/cancelled`；结果保留输入场景身份和版本。后端以两个工作线程、最多八个运行及排队任务执行算法，容量满返回 `503`。重启后保留正式场景、基线与已结束任务，未完成任务标为失败并说明原因，用户可重新提交。
 
-```jsonc
-{
-  "status": "success",              // success | partial | infeasible
-  "algorithm_version": "packing-0.2.0",
-  "items": [
-    {
-      "item_id": "…",
-      "name": "台灯",
-      "target_pos": [0.35, 0.77, 0.30],
-      "target_rotation_y_rad": 1.5708,
-      "target_region_id": null,       // 前端暂无 region 概念，可空
-      "placement_status": "placed",   // placed | unchanged | unplaced
-      "reason_code": null,
-      "reason": "靠桌角，避让打字区"
-    }
-  ],
-  "issues": [],
-  "metrics": { "desk_free_before": 0.21, "desk_free_after": 0.34, "overlap_count": 0, "out_of_bounds_count": 0 }
-}
+应用只接受同一场景当前版本的 `success/partial`，检查完整物品覆盖、固定物品、残留物品、区域、朝向、碰撞、支撑与边界。几何检查在写事务外进行，版本 CAS 和一次消费在 SQLite 同一事务内完成。`infeasible`、重复应用、过期版本均被拒绝。后端不接受前端提交的目标位置替代已保存的算法结果。
+
+错误按 HTTP 返回：`422` 为输入或结构错误，`404` 为资源不存在，`409` 为版本、几何或已消费冲突，`503` 为任务容量耗尽，未实现能力为 `501`。客户端显示具体错误，单次请求超时或网络中断不会标记成功。
+
+## 3. 场景转换与结果接收
+
+`src/api/core/packingWire.ts` 专门转换整理场景，HTTP 集中在 `src/api/http/`。旧 `toWireScenePayload` 仍用于未接入的走线等历史适配器，不是完整算法场景输入。
+
+- 前端原点在桌面中心后墙线，契约原点在桌面左后角地面投影；去程平移 `[desk.width/2, 0, -0.05]`，结果反向平移。局部端口与碰撞部件不平移。
+- 导出当前实际桌面、搁板、横梁、地面支撑，及桌体实体障碍。区域按常用区、杯区、收纳偏好限制允许摆放，大型显示器与打印机优先级高于普通物品。
+- 所有项目物品均保留，隐藏状态不免除碰撞检查。使用实际凸体部件，保留复合物体的空隙；算法不依赖展示模型就绪。
+- 用户勾选确认绑定当前尺寸、位姿和原始快照，修改后需重新确认。`estimated` 的来源保留，不因确认改写为 `user`。
+- 本次为布局场景：`cables`、`exposure_zones` 和走线网络为空，端口保持未确认；插排补未确认的总线输入结构。不据此声称接线或三线走线已验收。
+- `scene_revision`、基线引用与后端任务 ID 随整理结果保留。前端拒绝身份、版本、覆盖、状态或几何不合法的结果，固定与未放置物品不得被偷偷移动。
+- 接受前再次检查当前完整场景，等待后端确认新版本后才写入本地。应用期间锁定取消、手机面板关闭、其它布局写入和重复操作。
+- 候选方案及整理前状态恢复也先按当前家具、尺寸、固定及隐藏物品复查，失败不写入项目或撤销历史。
+
+连续桌面面积来自领域 `measure_free_area`，前后采用同一网格口径。物品集合、尺寸、碰撞体或桌面、保留区改变时，原始比较值为 `null`，界面显示未知。无原始线长时不生成走线改善比例。
+
+## 4. 任务与持久化边界
+
+前端 `organizationScenes` 按后端地址和项目保存正式 ID、基线 ID、修订号；同一页面的同项目整理请求互斥。服务端仍以 CAS 防护多页面或并发写入，不能靠浏览器锁代替事务。版本冲突需核对服务端当前场景，不能盲目重试覆盖。
+
+场景保存遇到网络中断、超时或 `409` 时，客户端读取 `scene-state`，仅在基线来源与本次快照完全相同、场景内容与本次提交一致且身份版本合法时恢复；核对包括名称、使用频率、图片、尺寸、位姿、碰撞与布局约束，展示模型和生成状态仍以后端权威值为准。首次保存只能恢复版本 1；已有引用要求场景 ID 不变、同基线 ID、版本原值或加一；重建基线必须加一且基线 ID 改变。复查失败保留原错误和旧引用，稍后可再次核对已提交的保存；用户取消不发起恢复。
+
+应用成功但响应中断时，客户端读取同一任务及正式场景，仅在该任务确已应用、正式版本恰好加一且全部目标几何一致时恢复成功；否则保留错误。网络持续中断可重试接受，后续有新编辑的场景不会被当作原结果恢复。
+
+`remoteJobsStore` 留存最多 30 条任务元数据及摘要。轮询首次 0.8 s、退避至 4 s，连续三次查询失败才报告失败；刷新后每 10 s 及 focus/online 继续查询未终结任务。刷新恢复只更新状态和摘要，不会自动应用历史结果。
+
+前端不配置第三方密钥，识别与模型生成适配器仍只能请求应用后端。Rodin 脚本或适配器存在不等于产品应用已接入真实生成；当前应用服务对识别、模型生成、走线和遗留 `/layout/plan` 明确返回未实现。
+
+## 5. 验证
+
+服务/API 回归：
+
+```sh
+python3 -m unittest backend.tests.test_organization_service backend.tests.test_organization_api -v
 ```
 
-前端本地校验（不通过即丢弃该条目并汇总 warnings，**不静默采用**）：
-引用物品存在、数值有限、目标位置在房间边界内、固定 / 锁定物品强制保持原位（即使后端给了移动目标）；
-相交数会在本地复核（轴对齐包围盒，0 / π/2 朝向考虑，旋转角未精确建模）并写入方案指标；
-`status=infeasible` 的方案只读展示，界面提示未应用任何移动。
+前端构建与转换回归（在 `frontend/`）：
 
-### 4.4 走线规划 `POST /api/v1/cables/plan`
-
-请求（JSON）：
-
-```jsonc
-{
-  "project_id": "…",
-  "scene": { /* 场景载荷，含 cables 与各接口局部几何 */ },
-  "target_cable_ids": ["c1"],         // null = 全部线缆
-  "preferences": { /* 同 4.3 */ }
-}
+```sh
+npm run build
+./node_modules/.bin/esbuild scripts/check-organization-backend.ts --bundle --platform=node --format=esm --outfile=/tmp/check-organization-backend.mjs '--define:import.meta.env={}'
+node /tmp/check-organization-backend.mjs
+./node_modules/.bin/esbuild scripts/check-organization-playback.ts --bundle --platform=node --format=cjs --outfile=/tmp/check-organization-playback.cjs
+node /tmp/check-organization-playback.cjs
 ```
 
-响应 `result`：
+后端启动后，另跑真实 HTTP、同步/应用响应中断恢复与完整 17 件样例：
 
-```jsonc
-{
-  "status": "ok",                     // ok | partial（供参考；前端不据此判成败）
-  "verified": false,                  // 后端避障验证标记；非 true 时前端不标注「已验证」
-  "algorithm_version": "routing-0.3.1",
-  "cables": [
-    {
-      "cable_id": "c1",
-      "path_points": [[0.1,0.77,0.3],[0.1,0.62,0.3]],     // ≥ 2 点；首末点应为端点附近（前端以端点坐标贴合首末点）
-      "channels": ["deskUnderside", "post"],               // deskEdge | deskUnderside | post | floor | free（兼容 snake_case）
-      "length_m": 1.42
-    }
-  ],
-  "issues": [
-    { "cable_id": "c2", "code": "E_BEND_RADIUS", "message": "弯折半径不足" }
-  ]
-}
+```sh
+./node_modules/.bin/esbuild scripts/check-organization-backend.ts --bundle --platform=node --format=esm --outfile=/tmp/check-organization-backend-http.mjs '--define:import.meta.env={"VITE_API_BASE_URL":"http://127.0.0.1:8000","VITE_ORGANIZATION_API_MODE":"real"}'
+node /tmp/check-organization-backend-http.mjs --http
 ```
 
-前端本地校验：点数 ≥ 2、逐点为有限数且粗边界内（容差 0.2 m，允许贴墙 / 端点）；不合格路径整条丢弃并
-计入 warnings（界面显示未采用数量），其余正常采用；`issues` 中的线缆标记为冲突并展示原因。
+启动上述真实前后端后运行浏览器专项（地址按实际端口替换）：
 
-### 4.5 场景载荷（`scene`，请求侧）
-
-以下是当前产品适配层发送的字段子集，包含尚未填写线长的草稿示例，不能直接作为领域算法输入；缺少的结构和确认条件见第 6 节。
-
-```jsonc
-{
-  "schema_version": "1.0",
-  "scene_id": "项目 id",
-  "desk": { "width_m": 1.45, "depth_m": 0.6, "top_height_m": 0.77 },
-  "items": [
-    {
-      "id": "o1", "name": "显示器", "category": "electrical",
-      "size_m": [0.6, 0.4, 0.2],
-      "position": [0, 0.77, 0.3], "rotation_y_rad": 0,
-      "dimensions_source": "user", "dimensions_confirmed": true,
-      "fixed": false, "usage_frequency": "high",
-      "ports": [ { "id": "p1", "type": "power-ac", "local_position": [0.1, 0.1, -0.1], "local_direction": [0,0,-1], "powered": true, "confirmed": true } ],
-      "model_url": null
-    }
-  ],
-  "cables": [ { "id": "c1", "cable_type": "power", "thickness": "thick", "from": {"object_id":"o1","port_id":"p1"}, "to": {"object_id":"o2"}, "mode": "slot", "diameter_m": 0.0065, "min_bend_radius_m": 0.0325, "length_m": null } ],
-  "client_note": "前端字段子集说明"
-}
+```sh
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_REAL_ORGANIZATION=1 npm run test:e2e -- tests/organization-backend.spec.ts tests/workspace.spec.ts
 ```
 
-- `cable_type`：内部 5 类（power / charging / video / network / data）映射为 `power|power|hdmi|network|usb`；
-  `thickness` 优先采用用户显式设置，未设置时电源 / 网线 / 视频线默认为 `thick`，充电 / 外设线默认为 `thin`；
-- `diameter_m` / `min_bend_radius_m` 当前使用前端演示预设（粗 6.5 mm / 32.5 mm，细 3.5 mm / 17.5 mm），
-  数值来自 `CABLE_THICKNESS_META`；前端保存粗细档位，尚无独立编辑这两个数值的控件，正式规划前仍须按实物确认；
-- `mode`：`resolveCableVisibility` 优先采用显式的可见 / 隐藏设置，否则根据两端设备名称推断，无匹配时默认可见；
-  `hidden` 映射为 `backboard`，`visible` 映射为 `slot`。该映射不表示已提供两种模式的真实通道图；
-- `length_m`：用户填写的实际线长；当前界面未填写时仍会发送 `null`，这是待修复的接入缺口。
-  [数据契约第 2.3 节](../../docs/data_contract.md#23-线缆输入)和领域校验要求有限正数，正式调用算法前须由应用层取得用户确认的线长并校验；未知时阻止规划，不能以 `null`、估算值或默认值绕过要求。
+真实专项使用独立测试项目，验证 Python 整理、原布局保留、正式版本应用、固定物品保持与过期结果拒绝。普通 `test:e2e` 默认跳过依赖真实后端的专项；独立 `/algorithm-lab` 继续读取离线领域结果，不用它替代产品 API 验收。
 
-### 4.6 布局规划（遗留能力）`POST /api/v1/layout/plan`
-
-请求：`{ "project_id": "…", "scene": { … } }`；响应 `result`：
-`{ "assignments": [{ "object_id": "…", "position": [x,y,z], "rotation_y_rad": 0, "zone": "deskBack" }], "score": 78, "summary": "…" }`
-（`zone`：`deskBack|deskFront|deskSide|floor|free`）。前端同样做引用 / 有限数 / 边界校验。
-说明：该服务当前没有界面调用点（历史服务层预留），契约仅为对齐而记录。
-
-## 5. 任务留痕与刷新恢复
-
-- 每次提交都会在 `state/remoteJobsStore`（localStorage `dormtopology.remote-jobs`，上限 30 条）留痕：
-  `id(job_id)`、项目、能力、状态、进度、阶段、算法版本、请求参数摘要、创建 / 更新时间、错误或结果摘要；
-  **不保存结果载荷**（避免存储膨胀与陈旧数据被误用）；
-- 刷新页面后：`ApiRuntime` 自动继续查询非终态任务（每 10 s + focus / online），更新的状态 / 错误 /
-  结果摘要写回任务列表；
-- **如实限制**：恢复查询只更新状态与摘要，**不会把结果自动重放应用到场景**（避免陈旧结果覆盖当前编辑）；
-  需要重放时请在原入口重新执行一次任务（如重新「生成整理方案」）；
-- 界面入口：工作台底栏 / 页头的「任务 N」服务状态面板（重查 / 取消 / 移除 / 清除已结束）。
-
-## 6. 字段缺口（正式接入前按数据契约补齐）
-
-独立 `/algorithm-lab` 已能解析完整领域载荷中的优先级、直插关系、支撑与集线槽字段；这不代表产品工作台的内部模型或 HTTP 载荷已经支持它们。以下缺口须在应用层和前端适配中对齐，不能让领域算法忽略必需结构。
-
-| 缺口 | 现状 | 影响 |
-| --- | --- | --- |
-| 坐标原点 | 前端发送内部坐标（x 以桌面中心为 0、后墙 z=0）；[data_contract](../../docs/data_contract.md) 约定「桌面左后角投影」原点 | 正式接入前须转换场景位置并核对 Z 偏移；物品及接口局部坐标已采用底面中心锚点，不重复做中心到底面的偏移 |
-| `scene_revision` | 前端暂无修订号 | 后端无法做乐观并发校验 |
-| `regions` / `target_region_id` | 前端无区域实体，发送 `null` | 后端区域相关优化不可用 |
-| `obstacles` / `reserved_zones` / `routing_graph` / `allowed_region_ids` | 未提供 | 不能直接调用领域算法；须补齐真实场景几何、收纳约束与两种允许通道 |
-| `placement_priority` / `plug_mount` | 未进入产品物品载荷 | 大型设备优先级、直插适配器的安装几何与孔位占用不能从当前产品请求还原 |
-| `routing_graph.support_policy` / `supports` / `tray_candidates` | 未进入产品载荷 | 尚不能传递安装条件或取得产品流程中的集线槽建议；接受、安装确认和版本保存仍待实现 |
-| `dimensions_confirmed` | 由尺寸来源推断（estimated→false） | 语义若不同需对齐 |
-| 线径 / 最小弯折半径 | 前端演示预设（见 4.5） | 数值与产品实物不符时结果不可用 |
-| `length_m` | 未填写时发送 `null` | 正式调用领域前须取得用户确认的有限正数；未知时阻止规划，不能要求算法容忍 |
-| `mode`（slot/backboard）与墙面锚点 | 隐藏线发送 `backboard`、可见线发送 `slot`；墙面安装细节未发送 | 模式字段已有区分，真实双策略图与墙面设备仍需按契约配置 |
-| 墙面插座默认高度 | 产品演示默认为 350mm，共享契约要求物品底面中心默认高度为 0.30m | 须按契约映射墙面设备并核验、统一默认值；不能以完成高度编辑界面视为已符合共享场景约定 |
-| `usage_frequency` | 频繁/常用 → high，其余 medium | 若后端分级不同需映射 |
-| 识别 `quantity` / `fixed` | 透传，缺省 1 / false | — |
-| `photo_id` | 仅透传本地上传记录 id（照片经 multipart 已上传） | 若后端需要照片引用 id 需改为服务端 id |
-
-## 7. 安全边界
-
-- 前端**不配置、不存储、不读取任何服务密钥**（无 token / apiKey 字段；localStorage 仅模式偏好与任务元数据）；
-- 第三方模型生成（Rodin 等）由后端代理持有密钥；前端只与「应用后端」通信；
-- 上传的照片仅发往应用后端；演示模式不产生任何网络请求。
-
-## 8. 本地校验与数据来源标注
-
-- 真实结果一律经 `src/api/core/wire.ts` 校验后使用；不合格条目显式丢弃并生成 warnings（界面展示原因）；
-- 界面数据来源徽标：`模拟`（mock）/ `真实服务`（real，已过本地校验）/ `计算值`（本地纯计算，如长度估算）/
-  `未接入` / `演示数据`；
-- 走线结果仅在 `verified === true` 时标注后端已验证；否则如实标注「后端未标记 verified」；
-- 识别尺寸估计值保持「待确认」，不标记为真实尺寸。
-
-## 9. 冒烟验证（本轮实测）
-
-适配层核心（客户端 / 轮询 / 校验器 / 存储 / 模式）通过临时的本地假 HTTP 服务器（Node `http`）验证：
-超时、网络错误（服务不可达端口）、HTTP 500、坏 JSON、任务 404、轮询 queued→running→succeeded、
-失败任务、取消、走线路径越界丢弃 + 有效路径采用、识别缺字段警告、整理固定物品保护、
-模式解析（env / override / 旧变量）、remoteJobsStore localStorage 持久化；验证后临时文件已删除。
-类型检查与生产构建通过（`npm run typecheck` / `npm run build`）。
-
-## 10. 联调与实现清单（对应 teammate 后端）
-
-后端需实现（FastAPI）：
-
-1. `POST /api/v1/recognition`（multipart，照片识别，返回 4.1 结构）
-2. `POST /api/v1/models/generate`（对接 Rodin 等生成服务，资产存对象存储 / 静态目录）
-3. `POST /api/v1/organization/plan`（`backend/app/domain` 打包算法接入）
-4. `POST /api/v1/cables/plan`（走线 / 避障算法接入）
-5. `POST /api/v1/layout/plan`（可选，暂无调用点）
-6. `GET /api/v1/jobs/{id}`、`POST /api/v1/jobs/{id}/cancel`（统一任务表）
-7. `GET /api/v1/health`
-8. CORS 允许前端 origin；错误响应体使用 `{ "detail": "…" }`（与 FastAPI 默认一致）
-
-联调步骤：后端就绪后设置 `VITE_API_MODE=real` 与 `VITE_API_BASE_URL`，先看服务状态面板「后端在线」，
-再依次验证四项能力与取消 / 刷新恢复；字段缺口（第 6 节）需在此前确认。
+2026-10-17 验证：领域 144 项、整理 service/API 22 项、旧入口兼容 1 项通过；构建、5 个前端转换/状态脚本及新增后端 Ruff 通过。浏览器分轮通过算法工作台 76 项、工作台与真实整理专项 8 项，已复核桌面和模拟手机截图及非空 Canvas。真实 HTTP 故障注入通过 16 个场景同步恢复/拒绝案例，并保留应用响应中断恢复检查。未执行实体手机、真实走线及 Rodin 的完整流程验收。
