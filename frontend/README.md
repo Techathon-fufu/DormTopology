@@ -1,6 +1,6 @@
 # DormTopology 3D 前端（成员 A）
 
-React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线演示应用。默认为**本地演示模式**（`VITE_API_MODE=mock`）：照片识别、模型生成、布局整理与走线规划由本地 Mock 适配器与规则式演示实现；`VITE_API_MODE=real` 时切换为真实后端适配层（统一 HTTP 客户端 + jobId 长任务轮询 + 结果本地校验，契约见 [docs/api-integration.md](docs/api-integration.md)），后端 FastAPI 服务尚未实现、暂无法联调。界面已就地标注各处数据的真实来源（演示数据 / 模拟 / 计算值 / 真实服务 / 未接入）。
+React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线应用。默认 `VITE_API_MODE=mock` 保留本地演示；`VITE_ORGANIZATION_API_MODE=real` 单独将物品整理接到仓库的 Python/FastAPI 后端，其余能力仍跟随全局模式。真实整理包含完整场景转换、正式基线和版本、后台任务、预览及后端原子应用。识别、Rodin、走线和指南的真实服务仍待接入，契约与运行方式见 [docs/api-integration.md](docs/api-integration.md)。
 
 独立的 `/algorithm-lab` 可读取真实 Python 领域算法导出的 JSON，查看布局、路径和失败原因；这不代表产品流程或 Rodin 真实联调已完成。
 
@@ -17,7 +17,7 @@ npm run build      # tsc --noEmit && vite build
 ```
 
 - 开发及浏览器测试使用 Node.js ≥ 20（算法工作台验证 Node 22 / npm 10，前端 0.5–0.8 阶段验证 Node 24 / npm 11），依赖版本已固定（`package.json` 无 `^` 范围）。
-- 环境变量见 `.env.example`（契约与字段缺口见 [docs/api-integration.md](docs/api-integration.md)）：`VITE_API_MODE=mock`（默认，本地模拟）或 `real`（调用应用后端）；兼容旧变量 `VITE_SERVICE_MODE=mock|service`；`VITE_API_BASE_URL` / `VITE_API_TIMEOUT_MS` 仅 real 模式使用。Rodin 等第三方凭证只在后端持有，前端不配置、不直接调用供应商接口。
+- 环境变量见 `.env.example` 与[接入说明](docs/api-integration.md)：`VITE_API_MODE=mock`（默认）或 `real`，可用 `VITE_ORGANIZATION_API_MODE=real npm run dev` 单独启用真实整理。先按[后端说明](../backend/README.md)启动 FastAPI；Vite 默认代理到 `127.0.0.1:8000`，其它端口用 `VITE_DEV_API_TARGET` 配置。Rodin 等第三方凭证只在后端持有。
 
 ## 算法验证入口
 
@@ -69,20 +69,20 @@ frontend/src/
 
 当前演示应用的内部约定与[数据契约](../docs/data_contract.md)存在以下差异；联调时在 `api/` 层转换或按契约调整，避免直接以内部模型充当 wire format：
 
-1. **坐标系原点**：本应用原点为「后墙面与地面交线上的桌面中心点」（x 以桌面中心为 0，后墙 z = 0）；契约为「桌面左后角在地面的投影」（X ≥ 0、Z ≥ 0）。转换需平移约 `[desk_width/2, 0, -0.05]`。
-2. **演示尺寸**：本应用演示桌 1.2 × 0.6 × 0.75 m（桌板厚 25 mm，穿线孔 ⌀50 mm）；契约演示配置 `demo_desk_v1` 为 1.45 × 0.60 × 0.77 m。需统一演示场景参数后再联调。
+1. **坐标系原点**：本应用原点为「后墙面与地面交线上的桌面中心点」（x 以桌面中心为 0，后墙 z = 0）；整理适配器已实现与契约原点间的 `[desk_width/2, 0, -0.05]` 双向转换，局部碰撞和端口不重复转换。走线历史载荷仍待对齐。
+2. **演示尺寸**：当前产品示例桌为 1.6 × 0.8 × 0.75 m、17 件物品；算法共同场景 `demo_desk_v1` 为 1.45 × 0.60 × 0.77 m、8 件待整理物品。整理发送当前实际配置，不强制改成模板尺寸；完整比赛场景验收仍按任务清单进行。
 3. **字段命名**：内部领域类型为 camelCase（`types/project.ts`），契约 JSON 为 snake_case（`scene.json` / `packing_result.json` / `cable_routing.json`）；`api/` 层负责双向转换。
-4. **接口与线缆模型**：前端已提供粗/细线预设、可见/隐藏策略、实际线长及部分 wire 字段映射；端口容量、独立确认状态、余量和统一失败原因等仍未完整对齐。`api/core/wire.ts` 的字段子集不是完整场景契约，区域、障碍、走线网络与墙面接口载荷仍需补齐，具体见 [docs/api-integration.md](docs/api-integration.md)。
+4. **接口与线缆模型**：前端已提供粗/细线预设、可见/隐藏策略、实际线长及部分 wire 字段映射；端口容量、独立确认状态、余量和统一失败原因等仍未完整对齐。真实整理由 `packingWire.ts` 导出完整布局场景（区域、障碍与允许朝向），线缆和走线网络为空；旧 `toWireScenePayload` 仍不能直接用于领域走线，见[接入说明](docs/api-integration.md)。
 5. **结果状态语义**：契约使用 `success/partial/infeasible`、`valid/failed` 与统一 `reason_code`；本应用内部状态（planned/stale/conflict 等）仅用于本地展示，需在 `api/` 层映射。
-6. **算法来源**：产品工作台仍使用前端本地规则式演示（`scene/ruleLayout.ts`、`scene/cableRoute.ts`）；Python 领域实现位于 `backend/app/domain/`。独立验证入口已解析其真实 JSON，产品 service 调用仍未接入。
-7. **新增算法字段**：`placement_priority`、`plug_mount`、支撑策略与可选集线槽已由独立算法工作台读取和验证；产品编辑、保存及 real 模式载荷尚未接入。前端默认墙面接口高度 350mm 与共享契约 0.30m 的差异也仍待统一。
+6. **算法来源**：默认仍为本地规则式演示；真实整理已通过 FastAPI 调用 `backend/app/domain/packing`，前端预览后由后端完整复查和原子应用。真实走线仍待接入，独立算法工作台继续使用离线 JSON。
+7. **新增算法字段**：真实整理已导出大型显示器、打印机的 `placement_priority`。`plug_mount`、支撑策略与可选集线槽仍只有独立算法验证，产品编辑与应用未接入；墙面设备默认高度 350mm 与共享契约 0.30m 的差异也仍待统一。
 
 ## 未完成事项（对应[任务清单](../docs/project_tasks.md)成员 A）
 
 - 桌体 `dorm_desk_assembled.glb` 实际资产未入库：加载管线、归一化与 `importModel(url, name, position)` 动态导入已实现（0.5.1，见 [docs/desk-model.md](docs/desk-model.md)），资产放入 `frontend/public/models/` 后自动启用；期间回退参数化简化几何。独立单品 GLB（Rodin）仍未接入。
-- 真实后端与两项算法联调（Mock 通过不代表真实联调完成）。
+- 真实走线、识别与 Rodin 服务，以及整理后接线、重算和指南的完整联调；物品整理已单独接入真实后端。
 - 照片框选补标与后端裁剪、Rodin 生成任务对接。
-- 最小弯曲半径编辑控件、「任意物品表面取点」（当前以接口 / 插孔为连接单位）；墙面插座坐标进入后端载荷（wire 契约缺口见 [docs/api-integration.md](docs/api-integration.md) 第 6 节）。
+- 最小弯曲半径编辑控件、「任意物品表面取点」（当前以接口 / 插孔为连接单位）；墙面插座坐标进入后端载荷（转换边界见 [docs/api-integration.md](docs/api-integration.md) 第 3 节）。
 - STL 导出与打印级配件几何：需要封闭（水密）几何生成能力（布尔合并），当前配件预览仅为外观预览。
 - 候选方案对比的口径限制（0.8.0 已交付对比 UI）：物品分区为支撑高度估算（与整理方案分区带口径不同）；旧版本方案（0.8.0 前保存）无场景 / 线缆快照，线缆与问题数不可比；对比视口为只读语义几何（不含 GLB 资产与线缆编辑）。
 - 手机端上传、预览与场景查看的实测记录。
@@ -90,6 +90,14 @@ frontend/src/
 ## 验证记录
 
 独立算法工作台的真实样例生成、构建、桌面/模拟手机 Chromium 自动检查及数量见[算法可视化验证](../docs/algorithm_visual_testing.md#验证记录2026-10-17)。产品工作台新增的专项自动回归如下；后续各阶段记录仍为历史验证，手动交互和状态层冒烟不计为自动化验收。
+
+## 验证记录（2026-10-17，真实整理接入）
+
+- Python 领域回归 144 项、整理 service/API 22 项及旧入口兼容 1 项通过；新增后端路径 Ruff 通过。
+- `npm run build` 及 5 个状态/转换脚本通过：`check-organization-backend`、`check-organization-playback`、`check-collision-volumes`、`check-demo-seed`、`check-project-persist-migrate`。构建仍有 Three.js 大产物提示。
+- 分轮浏览器检查通过：算法工作台 76 项；[工作台](tests/workspace.spec.ts)与[真实整理](tests/organization-backend.spec.ts)专项 8 项，覆盖桌面和模拟 Pixel 7、真实 Python 规划、预览保留原位置、版本递增、固定物品保持、应用期间操作锁定及过期拒绝。已检查截图与非空 Canvas；不计为实体手机、真实走线或 Rodin 验收。
+- 同步与应用响应中断后的恢复另经真实 HTTP 故障注入验证：同步须匹配基线来源、完整提交内容和合法版本；应用须匹配同一任务、相邻版本和完整目标几何。复查失败保留错误及旧引用，取消不触发恢复。
+- 默认 17 件产品场景经过真实 HTTP 规划、严格映射、应用及持久化回读：全部物品保留，零未放置、零布局问题，正式版本由 1 变为 2；该次规划约 19.2 秒。大型显示器与打印机保持高优先级，其允许区域避让键盘操作区。
 
 ## 验证记录（2026-10-17，工作台白屏修复）
 

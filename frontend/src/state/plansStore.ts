@@ -42,7 +42,7 @@ export const usePlansStore = create<PlansState>()(
         set((s) => ({
           baselines: {
             ...s.baselines,
-            [project.id]: planFromProject(project, 'baseline', '整理前状态'),
+            [project.id]: planFromProject(project, 'baseline', '整理前状态', { withScene: true }),
           },
         }))
       },
@@ -50,7 +50,7 @@ export const usePlansStore = create<PlansState>()(
         set((s) => ({
           baselines: {
             ...s.baselines,
-            [project.id]: planFromProject(project, 'baseline', '整理前状态（重新采集）'),
+            [project.id]: planFromProject(project, 'baseline', '整理前状态（重新采集）', { withScene: true }),
           },
         }))
       },

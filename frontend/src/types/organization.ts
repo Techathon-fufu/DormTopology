@@ -86,6 +86,8 @@ export interface PlanAssignment {
   zone: ZoneKind
   /** 该物品的落位理由（用于界面展示「为什么放这里」） */
   reason: string
+  targetRegionId?: string | null
+  placementStatus?: 'placed' | 'unchanged' | 'unplaced'
 }
 
 /** 动画批次：按物品组分批移动 */
@@ -105,8 +107,8 @@ export interface UnplacedItem {
 
 export interface PlanMetrics {
   /** 桌面可用面积估算（平方米，四舍五入到 0.01） */
-  deskFreeAreaBefore: number
-  deskFreeAreaAfter: number
+  deskFreeAreaBefore: number | null
+  deskFreeAreaAfter: number | null
   /** 已归位物品数（本次方案完成落位的可移动物品） */
   placedCount: number
   /** 可移动物品总数（固定 / 锁定物品不计入） */
@@ -142,6 +144,24 @@ export interface OrganizationPlan {
 export interface OrganizationServiceMeta {
   source: 'real'
   status: 'success' | 'partial' | 'infeasible'
+  sceneId: string
+  sceneRevision: number
+  jobId: string
+  applicable: boolean
+  issues: OrganizationIssue[]
+  inputSignature: string
   algorithmVersion?: string
   warnings?: string[]
+}
+
+export interface OrganizationIssue {
+  entity_id: string | null
+  code: string
+  message: string
+}
+
+export interface OrganizationSceneRef {
+  sceneId: string
+  sceneRevision: number
+  baselineId: string | null
 }

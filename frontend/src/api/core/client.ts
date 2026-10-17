@@ -8,7 +8,7 @@ import { ApiError } from './errors'
  */
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PUT'
   /** JSON 请求体（与 form 二选一） */
   body?: unknown
   /** multipart 请求体（上传照片等） */

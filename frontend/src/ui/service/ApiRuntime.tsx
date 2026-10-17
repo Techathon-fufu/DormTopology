@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { isMockMode, refreshActiveRemoteJobs } from '@/api'
+import { hasRealServices, refreshActiveRemoteJobs } from '@/api'
 import { runHealthCheck } from '@/state/apiHealthStore'
 
 /**
@@ -16,7 +16,7 @@ const JOBS_INTERVAL_MS = 10000
 
 export function ApiRuntime() {
   useEffect(() => {
-    if (isMockMode) return
+    if (!hasRealServices) return
     const controller = new AbortController()
 
     void runHealthCheck(controller.signal)
@@ -29,16 +29,21 @@ export function ApiRuntime() {
       void refreshActiveRemoteJobs(controller.signal)
     }
     window.addEventListener('online', onOnline)
+    const onVisibility = () => {
+      if (!document.hidden) void runHealthCheck(controller.signal)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
 
     return () => {
       controller.abort()
       clearInterval(healthTimer)
       window.removeEventListener('online', onOnline)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
   useEffect(() => {
-    if (isMockMode) return
+    if (!hasRealServices) return
     const controller = new AbortController()
 
     const tick = () => void refreshActiveRemoteJobs(controller.signal)

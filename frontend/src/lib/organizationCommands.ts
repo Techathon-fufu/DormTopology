@@ -1,5 +1,6 @@
-import type { SceneObject, Vec3 } from '@/types/project'
+import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import { ZONE_LABELS, type OrganizationPlan } from '@/types/organization'
+import { assertScenePlacement, objectsWithAssignments, organizationPlanFailure } from './organizationValidation'
 
 export interface OrganizationCommand {
   id: string
@@ -13,7 +14,9 @@ export interface OrganizationCommand {
 }
 
 /** Local display commands compiled from structured suggestions; never executable prose. */
-export function compileOrganizationCommands(plan: OrganizationPlan, objects: SceneObject[]): OrganizationCommand[] {
+export function compileOrganizationCommands(plan: OrganizationPlan, objects: SceneObject[], room?: RoomConfig): OrganizationCommand[] {
+  if (organizationPlanFailure(plan)) return []
+  if (room) assertScenePlacement(objectsWithAssignments(objects, plan.assignments), room, objects)
   const seen = new Set<string>()
   return plan.assignments.flatMap((a) => {
     const o = objects.find((item) => item.id === a.objectId)

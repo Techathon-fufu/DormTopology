@@ -36,7 +36,7 @@ tests/
 
 ## 模型资产布局（`Prefabmodel/`）
 
-全部 GLB 资产统一存放在仓库根的 `Prefabmodel/` 下，其中包含两类保真度层级，**共处一个平面目录**：
+Git 跟踪的归档 GLB 资产集中存放在仓库根的 `Prefabmodel/` 下，其中包含两类保真度层级，**共处一个平面目录**。前端部署用的运行时 GLB 可放在 `frontend/public/` 下，例如 `frontend/public/models/dorm_desk_assembled.glb`：
 
 | 类别 | 文件 | 是否参与 prefab 路由 |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ tests/
 - `resolve_prefab_rel_path()` 支持命名变体：去下划线（`mouse_pad` → `mousepad.glb`）、空格转下划线（`stainless bottle` → `stainless_bottle.glb`）、`expand`/`extend` 互换（`laptop_expand` → `laptop_extend.glb`）。目标文件一律为**轻量低模**，高模不得被路由命中。
 - 同名不同保真度用 `_detail` 后缀共存，不用覆盖：`charger.glb`（4.5 KB，prefab）与 `charger_detail.glb`（474 KB，Rodin 高模）是同一物品的两个层级。
 - 代码中统一使用 `vlm_adapter.ASSET_DIR_NAME` 常量拼接资产相对路径，不写死目录名字面量。
-- `objects/` **只保留 Blender / OBJ 源文件**（`.blend` / `.obj`），不再存放任何 GLB。
+- `objects/` 用于 Blender / OBJ 源文件（`.blend` / `.obj`）；归档 GLB 应提交到 `Prefabmodel/`。本地未跟踪的导出 GLB 不参与归档布局检查，也不由测试移动或删除。
 
 ---
 
@@ -64,10 +64,12 @@ python tests/test_rodin_pipeline/test_glb_inspection.py
 ### 2. 验证模型资产布局与 prefab 路由
 ```bash
 python tests/test_rodin_pipeline/test_prefab_routing.py
+python -m unittest discover -s tests/test_rodin_pipeline -p test_prefab_routing.py -v
 ```
 * 校验 12 个 `PREFAB_KEYWORDS` 全部解析到真实存在的**轻量低模**（体积上限 2 MB，防止高模误入路由）。
 * 校验 `_detail` 高模确实比对应低模大，且不可被任何 prefab key 命中。
-* 校验 Rodin 回退资产存在，并断言除 `Prefabmodel/` 外仓库内不存在游离 GLB。
+* 校验 Rodin 回退资产存在，使用 `git ls-files -z` 检查已跟踪 GLB，仅允许归档目录 `Prefabmodel/` 与前端运行时目录 `frontend/public/`；需要 Git 与仓库检出，枚举失败会明确报错。
+* 临时 Git 夹具覆盖本地未跟踪导出、已跟踪运行时资源、错误位置的已跟踪 GLB 与 Git 枚举失败，不改动项目资产或索引。
 
 ### 3. 验证 Rodin API 云端连接与余额
 ```bash

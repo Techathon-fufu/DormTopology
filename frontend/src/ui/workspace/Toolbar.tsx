@@ -92,6 +92,7 @@ export function Toolbar({
   const canRedo = useWorkspaceStore((s) => s.future.length > 0)
   /** 空间整理预览 / 动画进行中：禁止切到走线模式（避免两种会话状态互相干扰） */
   const previewBlocking = useOrganizeStore((s) => s.isPreviewBlocking())
+  const applying = useOrganizeStore((s) => s.applying)
   const staleCount = project.cables.filter((c) => c.status === 'stale').length
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
@@ -142,6 +143,7 @@ export function Toolbar({
           <Button
             variant={plansOpen ? 'primary' : 'outline'}
             size="sm"
+            disabled={applying}
             title={
               candidateCount > 0
                 ? `候选方案：查看列表与指标，最多选 3 个并排对比（已保存 ${candidateCount} 个）`

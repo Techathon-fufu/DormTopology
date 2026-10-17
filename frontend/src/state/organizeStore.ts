@@ -1,8 +1,9 @@
 import { create } from 'zustand'
-import type { SceneObject, Vec3 } from '@/types/project'
+import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationPlan } from '@/types/organization'
 import { compileOrganizationCommands } from '@/lib/organizationCommands'
 import { prefersReducedMotion } from '@/lib/motion'
+import { organizationPlanFailure } from '@/lib/organizationValidation'
 
 /**
  * 空间整理模式会话状态（不持久化）：
@@ -25,6 +26,7 @@ interface OrganizeState {
   panelVisible: boolean
   sessionToken: number
   sourceSignature: string | null
+  applying: boolean
   status: OrganizeStatus
   plan: OrganizationPlan | null
   commands: ReturnType<typeof compileOrganizationCommands>
@@ -44,7 +46,8 @@ interface OrganizeState {
   closePanel: () => void
   setStatus: (status: OrganizeStatus) => void
   setError: (message: string | null) => void
-  setPlan: (plan: OrganizationPlan, objects: SceneObject[], sourceSignature?: string) => void
+  setApplying: (applying: boolean) => void
+  setPlan: (plan: OrganizationPlan, objects: SceneObject[], sourceSignature?: string, room?: RoomConfig) => void
   setCompare: (compare: 'before' | 'after') => void
   setShowZones: (show: boolean) => void
   startPlayback: () => void
@@ -79,6 +82,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   panelVisible: false,
   sessionToken: 0,
   sourceSignature: null,
+  applying: false,
   open: false,
   status: 'config',
   plan: null,
@@ -100,6 +104,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   },
 
   hidePanel() {
+    if (get().applying) return
     if (!get().plan && get().status !== 'planning') { get().closePanel(); return }
     set({ panelVisible: false })
   },
@@ -109,6 +114,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
       commands: [],
       panelVisible: false,
       sourceSignature: null,
+      applying: false,
       sessionToken: get().sessionToken + 1,
       open: false,
       status: 'config',
@@ -125,9 +131,11 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
 
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
+  setApplying: (applying) => set({ applying }),
 
-  setPlan(plan, objects, sourceSignature) {
-    const commands = compileOrganizationCommands(plan, objects)
+  setPlan(plan, objects, sourceSignature, room) {
+    const failure = organizationPlanFailure(plan)
+    const commands = compileOrganizationCommands(plan, objects, room)
     const originals: Record<string, PoseOverride> = {}
     for (const o of objects) {
       originals[o.id] = {
@@ -136,9 +144,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
       }
     }
     const overrides: Record<string, PoseOverride> = {}
-    for (const a of plan.assignments) {
-      overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
-    }
+    if (!failure) for (const a of plan.assignments) overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
     set({
       plan,
       sourceSignature: sourceSignature ?? null,
@@ -146,19 +152,22 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
       originals,
       overrides,
       status: 'preview',
-      error: null,
+      error: failure,
       compare: 'after',
       batchIndex: 0,
       batchProgress: 0,
     })
   },
 
-  setCompare: (compare) => set({ compare, ...(compare === 'before' && get().status === 'playing' ? { status: 'paused' as const } : {}) }),
+  setCompare: (compare) => {
+    if (get().applying) return
+    set({ compare, ...(compare === 'before' && get().status === 'playing' ? { status: 'paused' as const } : {}) })
+  },
   setShowZones: (showZones) => set({ showZones }),
 
   startPlayback() {
     const { plan } = get()
-    if (!plan) return
+    if (get().applying || !plan || organizationPlanFailure(plan)) return
     // 尊重系统「减少动态效果」偏好：不播放分批动画，直接显示目标布局
     if (prefersReducedMotion()) {
       get().skipToEnd()
@@ -178,12 +187,12 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   },
 
   resumePlayback() {
-    if (get().status === 'paused') set({ status: 'playing', compare: 'after' })
+    if (!get().applying && get().status === 'paused') set({ status: 'playing', compare: 'after' })
   },
 
   skipToEnd() {
     const { plan } = get()
-    if (!plan) return
+    if (get().applying || !plan || organizationPlanFailure(plan)) return
     const overrides: Record<string, PoseOverride> = {}
     for (const a of plan.assignments) {
       overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
@@ -248,7 +257,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   isPreviewBlocking() {
     const s = get()
     return (
-      s.status === 'planning' || s.plan !== null
+      s.applying || s.status === 'planning' || s.plan !== null
     )
   },
 }))

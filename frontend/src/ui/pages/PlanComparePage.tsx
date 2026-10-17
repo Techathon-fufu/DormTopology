@@ -287,6 +287,7 @@ export function PlanComparePage() {
   const [sort, setSort] = useState<PlanSortKey>('updated')
   const [showCables, setShowCables] = useState(true)
   const [zoneTint, setZoneTint] = useState(false)
+  const [applyError, setApplyError] = useState<string | null>(null)
 
   // 初始选择：优先取 URL 传入的方案 id，其次最近更新的最多 3 个
   useEffect(() => {
@@ -384,9 +385,15 @@ export function PlanComparePage() {
 
   const handleSetCurrentAndBack = (plan: LayoutPlan) => {
     if (!project) return
-    if (useOrganizeStore.getState().isPreviewBlocking()) useOrganizeStore.getState().closePanel()
-    const summary = applyPlanSnapshot(project.id, plan)
+    let summary
+    try {
+      summary = applyPlanSnapshot(project.id, plan)
+    } catch (error) {
+      setApplyError(error instanceof Error ? error.message : String(error))
+      return
+    }
     if (!summary) return
+    if (useOrganizeStore.getState().isPreviewBlocking()) useOrganizeStore.getState().closePanel()
     const parts = [`已将「${plan.name}」设为当前方案`]
     if (summary.legacy) parts.push(`旧版本方案：仅恢复 ${summary.objects} 件物品位置（相关走线标记需重算）`)
     else parts.push(`恢复 ${summary.objects} 件物品与 ${summary.cables} 条走线`)
@@ -413,6 +420,7 @@ export function PlanComparePage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
+      {applyError ? <p role="alert" className="bg-danger/10 px-4 py-2 text-xs text-danger">{applyError}</p> : null}
       <header className="z-30 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-surface px-4 py-2">
         <Button
           variant="ghost"

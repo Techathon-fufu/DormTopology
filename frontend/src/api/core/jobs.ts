@@ -74,6 +74,7 @@ export interface RunRemoteJobOptions<TResult> {
   requestSummary?: Record<string, unknown>
   onProgress?: ServiceProgress
   signal?: AbortSignal
+  onAccepted?: (jobId: string) => void
   /** wire 结果 → 内部模型（含本地校验，见 core/wire.ts） */
   mapResult: (wire: unknown) => TResult
 }
@@ -117,6 +118,7 @@ async function pollUntilTerminal(jobId: string, opts: PollOptions): Promise<Wire
     if (!env || typeof env.job_id !== 'string') {
       throw new ApiError('任务状态响应格式错误（缺少 job_id）', { kind: 'malformed', jobId })
     }
+    if (env.job_id !== jobId) throw new ApiError('任务状态响应的任务号不匹配', { kind: 'malformed', jobId })
     opts.onEnvelope(env)
     if (env.status === 'succeeded' || env.status === 'failed' || env.status === 'cancelled') return env
     if (env.status !== 'queued' && env.status !== 'running') {
@@ -136,6 +138,7 @@ export async function runRemoteJob<TResult>(opts: RunRemoteJobOptions<TResult>):
   if (typeof jobId !== 'string' || !jobId) {
     throw new ApiError('后端未返回任务号（job_id），无法跟踪任务状态', { kind: 'malformed', path })
   }
+  opts.onAccepted?.(jobId)
 
   useRemoteJobsStore.getState().upsert({
     id: jobId,
