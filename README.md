@@ -19,7 +19,7 @@
 | `algorithm/cable_routing/` | 旧走线模块的兼容导出，不再承载业务实现 |
 | `backend/app/domain/` | C/D 的纯 Python 布局与走线算法、共享几何、输入校验及领域类型；调用与证据见[布局算法交接](docs/packing_algorithm.md)和[走线算法说明](docs/routing_algorithm_plan.md) |
 
-当前没有 `models/` 目录，也没有已导出的桌体 GLB。开发先用参数化简化几何跑通闭环，最终验收需加载 `models/dorm_desk_assembled.glb`，并按数据契约导出和接入独立单品资产。
+仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dorm_desk_assembled.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
 
 ## 首版目标
 
