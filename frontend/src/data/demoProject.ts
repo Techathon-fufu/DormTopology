@@ -1,0 +1,427 @@
+import type {
+  CableConnection,
+  CableEndpoint,
+  Project,
+  RoomConfig,
+  SceneObject,
+  Vec3,
+} from '@/types/project'
+import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
+
+/** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
+export const DEMO_PROJECT_ID = 'demo-dorm-101'
+
+export const DEMO_ROOM_NOTE =
+  '示例尺寸（可修改）：桌面 1200 × 600 × 750 mm，仅为演示默认值，请以实际测量为准'
+
+/** 默认空间：上床下桌标准款（单位：米） */
+export function createStandardRoom(): RoomConfig {
+  return {
+    template: 'loft-standard',
+    length: 2.6,
+    width: 2.0,
+    height: 2.7,
+    desk: { width: 1.2, depth: 0.6, thickness: 0.025, height: 0.75 },
+    shelf: { enabled: true, levels: 1, heightAboveDesk: 0.38, depth: 0.2 },
+    posts: [
+      { id: 'post-fl', position: [-0.93, 0, 0.07], section: 0.04 },
+      { id: 'post-fr', position: [0.93, 0, 0.07], section: 0.04 },
+      { id: 'post-bl', position: [-0.93, 0, 0.83], section: 0.04 },
+      { id: 'post-br', position: [0.93, 0, 0.83], section: 0.04 },
+    ],
+    cableHoles: [{ id: 'hole-1', position: [0.45, 0.75, 0.12], diameter: 0.05 }],
+    outlets: [
+      { id: 'outlet-l', position: [-0.6, 0.35, 0.01], label: '后墙插座·左', slots: 2 },
+      { id: 'outlet-r', position: [0.6, 0.35, 0.01], label: '后墙插座·右', slots: 2 },
+    ],
+    note: DEMO_ROOM_NOTE,
+  }
+}
+
+/** 演示物品库：笔记本、显示器、键鼠、台灯、书本、水杯、收纳盒、耳机、排插（单位：米） */
+export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject[] {
+  const deskY = 0.75
+  const base = {
+    projectId,
+    visible: true,
+    fixed: false,
+    locked: false,
+    frequent: false,
+  }
+
+  return [
+    {
+      id: 'demo-laptop',
+      ...base,
+      name: '笔记本电脑',
+      category: 'electrical',
+      dimensions: { width: 0.34, height: 0.24, depth: 0.24 },
+      transform: { position: [-0.3, deskY, 0.3], rotationY: -0.25 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'laptop' },
+      ports: [
+        {
+          id: 'port-laptop-usbc',
+          type: 'usb-c',
+          label: 'USB-C 供电',
+          powered: true,
+          maxWatt: 65,
+          offset: [0.172, 0.03, -0.06],
+          direction: 'right',
+        },
+        {
+          id: 'port-laptop-hdmi',
+          type: 'hdmi',
+          label: 'HDMI 输出',
+          powered: false,
+          offset: [0.172, 0.05, -0.01],
+          direction: 'right',
+        },
+        {
+          id: 'port-laptop-usba',
+          type: 'usb-a',
+          label: 'USB-A 数据',
+          powered: false,
+          offset: [0.172, 0.015, 0.06],
+          direction: 'right',
+        },
+      ],
+      quantity: 1,
+      needsPower: true,
+      frequent: true,
+      source: 'demo',
+      note: '演示物品：约 14 英寸',
+    },
+    {
+      id: 'demo-monitor',
+      ...base,
+      name: '显示器',
+      category: 'electrical',
+      dimensions: { width: 0.54, height: 0.46, depth: 0.18 },
+      transform: { position: [0.1, deskY, 0.13], rotationY: 0.1 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'monitor' },
+      ports: [
+        {
+          id: 'port-monitor-pwr',
+          type: 'power-ac',
+          label: '电源',
+          powered: true,
+          maxWatt: 40,
+          offset: [0.12, 0.05, -0.092],
+          direction: 'back',
+        },
+        {
+          id: 'port-monitor-hdmi',
+          type: 'hdmi',
+          label: 'HDMI 输入',
+          powered: false,
+          offset: [-0.12, 0.05, -0.092],
+          direction: 'back',
+        },
+      ],
+      quantity: 1,
+      needsPower: true,
+      source: 'demo',
+      note: '演示物品：约 24 英寸',
+    },
+    {
+      id: 'demo-keyboard',
+      ...base,
+      name: '键盘',
+      category: 'electrical',
+      dimensions: { width: 0.35, height: 0.03, depth: 0.13 },
+      transform: { position: [-0.26, deskY, 0.47], rotationY: -0.15 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'keyboard' },
+      ports: [
+        {
+          id: 'port-keyboard-usba',
+          type: 'usb-a',
+          label: 'USB 数据',
+          powered: false,
+          maxWatt: 2.5,
+          offset: [0, 0.015, -0.067],
+          direction: 'back',
+        },
+      ],
+      quantity: 1,
+      needsPower: false,
+      frequent: true,
+      source: 'demo',
+      note: '演示物品：有线键盘',
+    },
+    {
+      id: 'demo-mouse',
+      ...base,
+      name: '鼠标',
+      category: 'electrical',
+      dimensions: { width: 0.07, height: 0.04, depth: 0.11 },
+      transform: { position: [0.0, deskY, 0.49], rotationY: 0.2 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'mouse' },
+      ports: [{ id: 'port-mouse-wireless', type: 'wireless', label: '无线接收器', powered: false }],
+      quantity: 1,
+      needsPower: false,
+      frequent: true,
+      source: 'demo',
+      note: '演示物品：无线鼠标',
+    },
+    {
+      id: 'demo-lamp',
+      ...base,
+      name: '台灯',
+      category: 'electrical',
+      dimensions: { width: 0.16, height: 0.45, depth: 0.18 },
+      transform: { position: [0.47, deskY, 0.16], rotationY: 0.6 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'lamp' },
+      ports: [
+        {
+          id: 'port-lamp-pwr',
+          type: 'power-ac',
+          label: '电源',
+          powered: true,
+          maxWatt: 8,
+          offset: [0, 0.06, -0.092],
+          direction: 'back',
+        },
+      ],
+      quantity: 1,
+      needsPower: true,
+      source: 'demo',
+      note: '演示物品：LED 台灯',
+    },
+    {
+      id: 'demo-books',
+      ...base,
+      name: '书本（叠放）',
+      category: 'nonElectrical',
+      dimensions: { width: 0.21, height: 0.14, depth: 0.15 },
+      transform: { position: [0.33, deskY, 0.33], rotationY: 0.9 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'books' },
+      ports: [],
+      quantity: 3,
+      needsPower: false,
+      source: 'demo',
+      note: '演示物品：3 本教材',
+    },
+    {
+      id: 'demo-cup',
+      ...base,
+      name: '水杯',
+      category: 'nonElectrical',
+      dimensions: { width: 0.07, height: 0.17, depth: 0.07 },
+      transform: { position: [-0.47, deskY, 0.16], rotationY: 0 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'cup' },
+      ports: [],
+      quantity: 1,
+      needsPower: false,
+      frequent: true,
+      source: 'demo',
+      note: '演示物品：保温杯',
+    },
+    {
+      id: 'demo-storage-box',
+      ...base,
+      name: '收纳盒',
+      category: 'storage',
+      dimensions: { width: 0.24, height: 0.12, depth: 0.18 },
+      transform: { position: [0.45, deskY, 0.47], rotationY: 0.05 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'storageBox' },
+      ports: [],
+      quantity: 1,
+      needsPower: false,
+      source: 'demo',
+      note: '演示物品：文具收纳盒',
+    },
+    {
+      id: 'demo-earbuds',
+      ...base,
+      name: '无线耳机',
+      category: 'nonElectrical',
+      dimensions: { width: 0.09, height: 0.08, depth: 0.04 },
+      transform: { position: [0.36, deskY, 0.3], rotationY: 0.3 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'genericBox' },
+      ports: [],
+      quantity: 1,
+      needsPower: false,
+      source: 'demo',
+      note: '演示物品：小件（用于演示「小件优先入盒」规则）',
+    },
+    {
+      id: 'demo-power-strip',
+      ...base,
+      name: '排插',
+      category: 'electrical',
+      dimensions: { width: 0.21, height: 0.03, depth: 0.05 },
+      transform: { position: [-0.5, 0.015, 0.2], rotationY: 0.3 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'powerStrip' },
+      ports: [1, 2, 3, 4].map((n) => ({
+        id: `port-strip-${n}`,
+        type: 'power-ac' as const,
+        label: `排插·${n} 号口`,
+        powered: true,
+        maxWatt: 2500,
+        // 插孔位于排插顶面，沿长度方向均匀分布（局部坐标：+x 沿排插长边）
+        offset: [-0.075 + (n - 1) * 0.05, 0.031, 0] as Vec3,
+        direction: 'up' as const,
+      })),
+      quantity: 1,
+      needsPower: true,
+      fixed: true,
+      source: 'demo',
+      note: '演示物品：4 位排插（置于桌下地面）',
+    },
+  ]
+}
+
+function endpoint(objectId: string, portId: string | undefined, position: Vec3): CableEndpoint {
+  return { objectId, portId, position }
+}
+
+function makeCable(
+  projectId: string,
+  id: string,
+  kind: CableConnection['kind'],
+  from: CableEndpoint,
+  to: CableEndpoint,
+  points: Vec3[],
+  note: string,
+): CableConnection {
+  return {
+    id,
+    projectId,
+    kind,
+    from,
+    to,
+    route: { channels: ['free'], points },
+    status: 'existing',
+    planSource: 'manual',
+    accessories: [],
+    note,
+  }
+}
+
+/**
+ * 演示用「现状线缆」：略微散乱，尚未走线（电源 ×3、视频 ×1、数据 ×1）。
+ * 端点坐标在渲染时由接口实时推导；散乱的折线仅作「原始走线」示意。
+ */
+export function createDemoCables(
+  objects: SceneObject[],
+  projectId = DEMO_PROJECT_ID,
+): CableConnection[] {
+  const find = (id: string) => objects.find((o) => o.id === id)
+  const laptop = find('demo-laptop')
+  const monitor = find('demo-monitor')
+  const lamp = find('demo-lamp')
+  const strip = find('demo-power-strip')
+  const keyboard = find('demo-keyboard')
+  if (!laptop || !monitor || !lamp || !strip) return []
+
+  const s = strip.transform.position
+  const stripPoint: Vec3 = [s[0] + 0.03, s[1] + 0.03, s[2] + 0.01]
+
+  const lp = laptop.transform.position
+  const mp = monitor.transform.position
+  const la = lamp.transform.position
+  const kb = keyboard?.transform.position
+
+  const cables: CableConnection[] = [
+    makeCable(
+      projectId,
+      'demo-cable-laptop',
+      'power',
+      endpoint(laptop.id, 'port-laptop-usbc', [lp[0] - 0.06, 0.76, lp[2] - 0.06]),
+      endpoint(strip.id, 'port-strip-1', stripPoint),
+      [
+        [lp[0] - 0.06, 0.76, lp[2] - 0.06],
+        [lp[0] + 0.08, 0.72, lp[2] + 0.04],
+        [lp[0] - 0.02, 0.45, 0.04],
+        [lp[0] - 0.08, 0.02, 0.1],
+        [lp[0] - 0.14, 0.02, 0.24],
+        stripPoint,
+      ],
+      '现状：笔记本充电线斜跨桌面后垂落（待规划）',
+    ),
+    makeCable(
+      projectId,
+      'demo-cable-monitor',
+      'power',
+      endpoint(monitor.id, 'port-monitor-pwr', [mp[0] - 0.06, 0.76, mp[2] - 0.03]),
+      endpoint(strip.id, 'port-strip-2', stripPoint),
+      [
+        [mp[0] - 0.06, 0.76, mp[2] - 0.03],
+        [mp[0] - 0.03, 0.72, 0.06],
+        [mp[0] - 0.05, 0.4, 0.03],
+        [mp[0] - 0.15, 0.02, 0.14],
+        [mp[0] - 0.3, 0.02, 0.22],
+        stripPoint,
+      ],
+      '现状：显示器电源线横穿桌下（待规划）',
+    ),
+    makeCable(
+      projectId,
+      'demo-cable-lamp',
+      'power',
+      endpoint(lamp.id, 'port-lamp-pwr', [la[0] + 0.02, 0.77, la[2] - 0.04]),
+      endpoint(strip.id, 'port-strip-3', stripPoint),
+      [
+        [la[0] + 0.02, 0.77, la[2] - 0.04],
+        [la[0] - 0.06, 0.72, 0.08],
+        [la[0] + 0.02, 0.3, 0.03],
+        [la[0] - 0.1, 0.02, 0.1],
+        [la[0] - 0.35, 0.02, 0.18],
+        stripPoint,
+      ],
+      '现状：台灯电源线贴地散放（待规划）',
+    ),
+    makeCable(
+      projectId,
+      'demo-cable-hdmi',
+      'video',
+      endpoint(monitor.id, 'port-monitor-hdmi', [mp[0] - 0.16, 0.8, mp[2] - 0.06]),
+      endpoint(laptop.id, 'port-laptop-hdmi', [lp[0] - 0.2, 0.8, lp[2] - 0.02]),
+      [
+        [mp[0] - 0.16, 0.8, mp[2] - 0.06],
+        [mp[0] - 0.32, 0.79, (mp[2] + lp[2]) / 2],
+        [lp[0] - 0.2, 0.8, lp[2] - 0.02],
+      ],
+      '现状：HDMI 线斜跨桌面（待规划：可沿桌边走线）',
+    ),
+  ]
+
+  if (keyboard && kb) {
+    cables.push(
+      makeCable(
+        projectId,
+        'demo-cable-keyboard',
+        'data',
+        endpoint(keyboard.id, 'port-keyboard-usba', [kb[0], 0.765, kb[2] - 0.08]),
+        endpoint(laptop.id, 'port-laptop-usba', [lp[0] - 0.12, 0.8, lp[2] + 0.08]),
+        [
+          [kb[0], 0.765, kb[2] - 0.08],
+          [kb[0] + 0.1, 0.77, kb[2] - 0.16],
+          [lp[0] - 0.12, 0.8, lp[2] + 0.08],
+        ],
+        '现状：键盘数据线从显示器后方绕行（待规划）',
+      ),
+    )
+  }
+
+  return cables
+}
+
+/** 可复用的内置示例项目（每次调用返回全新对象） */
+export function createDemoProject(): Project {
+  const objects = createDemoSceneObjects()
+  const now = Date.now()
+  return {
+    id: DEMO_PROJECT_ID,
+    name: '示例：上床下桌·四人间',
+    isDemo: true,
+    source: 'demo',
+    createdAt: now,
+    updatedAt: now,
+    room: createStandardRoom(),
+    objects,
+    cables: createDemoCables(objects),
+    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backLeft' },
+    stage: 'organize',
+  }
+}
