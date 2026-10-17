@@ -14,6 +14,7 @@ from backend.app.domain.geometry import (
     item_intersects_box,
     items_overlap,
     local_to_world,
+    pose_extent,
     rectangle,
     world_to_local,
 )
@@ -682,6 +683,197 @@ class InputTests(unittest.TestCase):
         self.assertEqual(plan_packing(scene)["items"], [])
         self.assertTrue(validate_layout(scene)["geometry_valid"])
         self.assertEqual(measure_free_area(scene), 0.6)
+
+
+def compound_box(width, height, depth):
+    """An axis-aligned box expressed as a compound part (8 vertices, 12 triangles).
+
+    Vertex order is bottom ring (indices 0..3) then top ring (4..7), with the triangle
+    winding the validator requires: ``cross(b-a, c-a)`` must face outward.
+    """
+    half_w, half_d = width / 2, depth / 2
+    vertices = [
+        [-half_w, 0.0, -half_d], [half_w, 0.0, -half_d], [half_w, 0.0, half_d], [-half_w, 0.0, half_d],
+        [-half_w, height, -half_d], [half_w, height, -half_d], [half_w, height, half_d], [-half_w, height, half_d],
+    ]
+    faces = [
+        [0, 1, 2], [0, 2, 3],      # bottom
+        [4, 6, 5], [4, 7, 6],      # top
+        [0, 5, 1], [0, 4, 5],      # -z
+        [1, 6, 2], [1, 5, 6],      # +x
+        [2, 7, 3], [2, 6, 7],      # +z
+        [3, 4, 0], [3, 7, 4],      # -x
+    ]
+    return {"type": "compound", "parts": [{"vertices_m": vertices, "faces": faces}]}
+
+
+class CompoundCollisionTests(unittest.TestCase):
+    """The compound branch of the collision contract, exercised through real planning."""
+
+    def scene_with(self, obj):
+        scene = simple_scene()
+        scene.update(items=[obj], regions=[region("desktop", [-0.3, 0.3, 0.1, 0.5])])
+        return scene
+
+    def asymmetric_monitor(self):
+        obj = item("monitor", "monitor", (0.2, 0.5, 0.2), (0.9, 0.75, 0.9), ["desktop"])
+        parts = []
+        for size, bottom, offset_z in (
+            ((0.072, 0.0175, 0.16), 0.0, -0.01),
+            ((0.015, 0.11, 0.036), 0.0175, 0.05),
+            ((0.2, 0.3725, 0.022), 0.1275, 0.0),
+        ):
+            part = compound_box(*size)["parts"][0]
+            for vertex in part["vertices_m"]:
+                vertex[1] += bottom
+                vertex[2] += offset_z
+            parts.append(part)
+        obj["collision"] = {"type": "compound", "parts": parts}
+        return obj
+
+    def test_asymmetric_monitor_fits_exact_region_before_and_after_rotation(self):
+        for angle, bounds, axis in (
+            (0.0, [0.0, 1.0, 0.1, 0.26], 2),
+            (math.pi / 2, [0.1, 0.26, 0.1, 0.5], 0),
+        ):
+            with self.subTest(angle=angle):
+                obj = self.asymmetric_monitor()
+                obj["allowed_rotations_y_rad"] = [angle]
+                scene = self.scene_with(obj)
+                target = region("desktop", bounds)
+                scene["regions"] = [target]
+                result = plan_packing(scene)
+                self.assertEqual(result["status"], "success")
+                placed = result["items"][0]
+                self.assertEqual(placed["placement_status"], "placed")
+                self.assertEqual(placed["target_rotation_y_rad"], angle)
+                self.assertAlmostEqual(placed["target_pos"][axis], 0.19)
+                moved = {
+                    **obj, "position": placed["target_pos"], "rotation_y_rad": angle,
+                }
+                self.assertTrue(fits_region(moved, target))
+                box = aabb_from_item(moved)
+                self.assertAlmostEqual(box.minimum[axis], 0.1)
+                self.assertAlmostEqual(box.maximum[axis], 0.26)
+
+    def test_asymmetric_monitor_uses_real_offsets_next_to_blockers(self):
+        obj = self.asymmetric_monitor()
+        obj["allowed_rotations_y_rad"] = [0.0]
+        scene = self.scene_with(obj)
+        scene["regions"] = [region("desktop", [0.0, 1.0, 0.1, 0.6])]
+        scene["obstacles"] = [
+            zone("front", (0.0, 0.77, 0.1), (1.0, 1.4, 0.2)),
+            zone("back", (0.0, 0.77, 0.362), (1.0, 1.4, 0.6)),
+        ]
+        result = plan_packing(scene)
+        self.assertEqual(result["status"], "success")
+        placed = result["items"][0]
+        self.assertAlmostEqual(placed["target_pos"][2], 0.291)
+        moved = {**obj, "position": placed["target_pos"]}
+        for obstacle in scene["obstacles"]:
+            self.assertFalse(item_intersects_box(
+                moved, AABB(tuple(obstacle["min"]), tuple(obstacle["max"])),
+            ))
+
+    def test_pose_extent_is_relative_to_the_anchor_not_absolute(self):
+        obj = item("lamp", "electrical", (0.16, 0.45, 0.18), (0.47, 0.75, 0.46), ["desktop"])
+        obj["collision"] = compound_box(0.16, 0.45, 0.18)
+        half_width, half_depth, height = pose_extent(obj)
+        self.assertAlmostEqual(half_width, 0.08)
+        self.assertAlmostEqual(half_depth, 0.09)
+        self.assertAlmostEqual(height, 0.45)
+        # An absolute world box would report the anchor coordinate (~0.47), which is the
+        # regression this guards: the planner reads these as half-extents.
+        self.assertLess(half_width, 0.1)
+        self.assertLess(half_depth, 0.1)
+
+    def test_compound_item_is_planned_into_a_region(self):
+        obj = item("box", "storage", (0.2, 0.12, 0.18), (0.0, 0.75, 0.1), ["desktop"])
+        obj["collision"] = compound_box(0.2, 0.12, 0.18)
+        result = plan_packing(self.scene_with(obj))
+        self.assertEqual(result["status"], "success")
+        placed = result["items"][0]
+        self.assertEqual(placed["placement_status"], "placed")
+        self.assertIsNone(placed["reason_code"])
+        x, y, z = placed["target_pos"]
+        self.assertAlmostEqual(y, 0.77)
+        self.assertGreaterEqual(x, -0.3 + 0.1 - 1e-9)
+        self.assertLessEqual(x, 0.3 - 0.1 + 1e-9)
+        self.assertGreaterEqual(z, 0.1 + 0.09 - 1e-9)
+        self.assertLessEqual(z, 0.5 - 0.09 + 1e-9)
+
+    def test_real_volume_decides_region_fit_not_the_declared_box(self):
+        # Declared box 0.30 x 0.20; real volume 0.20 x 0.20. In a region 0.22 wide the real
+        # volume fits directly, while the declared box only survives by rotating 90 degrees —
+        # so forbid rotation and the two cases must diverge.
+        narrow = region("desktop", [-0.11, 0.11, 0.1, 0.5])
+
+        compound = item("lamp", "electrical", (0.30, 0.20, 0.20), (0.9, 0.75, 0.9), ["desktop"])
+        compound["collision"] = compound_box(0.20, 0.20, 0.20)
+        compound["allowed_rotations_y_rad"] = [0.0]
+        compound_scene = self.scene_with(compound)
+        compound_scene.update(items=[compound], regions=[narrow])
+        compound_result = plan_packing(compound_scene)
+        self.assertEqual(compound_result["status"], "success")
+        self.assertEqual(compound_result["items"][0]["placement_status"], "placed")
+        self.assertEqual(compound_result["items"][0]["target_region_id"], "desktop")
+        x, _, z = compound_result["items"][0]["target_pos"]
+        moved = {**compound, "position": [x, 0.77, z], "rotation_y_rad": 0.0}
+        self.assertTrue(fits_region(moved, narrow))
+
+        # Control: the declared 0.30 box cannot enter that region at all once rotation is off.
+        plain = item("plain", "electrical", (0.30, 0.20, 0.20), (0.9, 0.75, 0.9), ["desktop"])
+        plain["allowed_rotations_y_rad"] = [0.0]
+        plain_scene = self.scene_with(plain)
+        plain_scene.update(items=[plain], regions=[narrow])
+        plain_result = plan_packing(plain_scene)
+        self.assertIsNone(plain_result["items"][0]["target_region_id"])
+
+    def test_overlapping_compound_items_are_reported_infeasible(self):
+        # Two interpenetrating compound items cannot both satisfy the region, and the planner
+        # must say so rather than reporting a clean success.
+        first = item("a", "storage", (0.2, 0.12, 0.18), (0.0, 0.75, 0.2), ["desktop"])
+        first["collision"] = compound_box(0.2, 0.12, 0.18)
+        first["fixed"] = True
+        second = item("b", "storage", (0.2, 0.12, 0.18), (0.02, 0.75, 0.2), ["desktop"])
+        second["collision"] = compound_box(0.2, 0.12, 0.18)
+        scene = simple_scene()
+        scene.update(items=[first, second], regions=[region("desktop", [-0.3, 0.3, 0.1, 0.5])])
+        self.assertTrue(items_overlap(first, second))
+
+        result = plan_packing(scene)
+        self.assertEqual(result["status"], "infeasible")
+        codes = {i["code"] for i in result["issues"]}
+        self.assertIn("collision", codes)
+        self.assertTrue(any(i["placement_status"] == "unplaced" for i in result["items"]))
+        # The fixed item keeps its input pose; no fabricated success.
+        self.assertEqual(
+            {i["item_id"]: i["target_pos"] for i in result["items"]}["a"], [0.0, 0.75, 0.2]
+        )
+
+    def test_invalid_compound_geometry_is_rejected_before_planning(self):
+        obj = item("bad", "storage", (0.2, 0.12, 0.18), (0.0, 0.75, 0.2), ["desktop"])
+        obj["collision"] = compound_box(0.2, 0.12, 0.18)
+        # A truncated hull is not a closed manifold and must fail validation.
+        obj["collision"]["parts"][0]["faces"] = obj["collision"]["parts"][0]["faces"][:6]
+        with self.assertRaises(PackingInputError) as caught:
+            plan_packing(self.scene_with(obj))
+        self.assertEqual(caught.exception.code, "invalid_input")
+
+    def test_compound_and_box_items_coexist_in_one_plan(self):
+        compound = item("c", "storage", (0.2, 0.12, 0.18), (0.0, 0.75, 0.2), ["desktop"])
+        compound["collision"] = compound_box(0.2, 0.12, 0.18)
+        plain = item("p", "storage", (0.15, 0.1, 0.15), (0.15, 0.75, 0.4), ["desktop"])
+        scene = simple_scene()
+        scene.update(items=[compound, plain], regions=[region("desktop", [-0.3, 0.3, 0.1, 0.5])])
+        result = plan_packing(scene)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["items"]), 2)
+        self.assertEqual({i["placement_status"] for i in result["items"]}, {"placed"})
+        self.assertFalse(items_overlap(
+            {**compound, "position": result["items"][0]["target_pos"]},
+            {**plain, "position": result["items"][1]["target_pos"]},
+        ))
 
 
 if __name__ == "__main__":

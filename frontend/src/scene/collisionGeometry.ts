@@ -112,6 +112,66 @@ export function collisionsOverlap(a:ObjectCollision,b:ObjectCollision):boolean {
 export function objectsCollide(a:SceneObject,aPos:Vec3,b:SceneObject,bPos:Vec3):boolean {
   return collisionsOverlap(worldCollision(a,aPos),worldCollision(b,bPos))
 }
+/**
+ * Real geometry of an object, for *search* decisions.
+ *
+ * Search must not use ``dimensions.width``/``depth``/``height`` directly: those are the
+ * declared bounding box, while the collision volume can be narrower (a lamp's arm) or
+ * shallower (a monitor's panel). Placing with the declared box reserves space the object
+ * does not occupy and admits gaps it cannot pass through.
+ *
+ * Extents are reported in the object's **local** frame (unrotated), measured from the
+ * bottom-centre anchor. Callers that need to test containment in an axis-aligned zone must
+ * use :func:`objectFootprint`, which applies the rotation; sizing a gap must use the local
+ * extents, otherwise every candidate would be charged for its own rotation twice.
+ */
+export interface ObjectExtent {
+  /** Local extents, measured from the bottom-centre anchor. */
+  min:Vec3
+  max:Vec3
+  /** Footprint width/depth actually occupied (never smaller than EPSILON). */
+  width:number
+  depth:number
+  /** Real top height above the anchor. */
+  height:number
+  /** True when a single unrotated box already equals the declared box. */
+  exact:boolean
+}
+export function objectExtent(object:SceneObject):ObjectExtent {
+  const declared=object.dimensions
+  if(isExactBox(object)) {
+    return {min:[0,0,0],max:[declared.width,declared.height,declared.depth],
+      width:declared.width,depth:declared.depth,height:declared.height,exact:true}
+  }
+  // Identity pose (no rotation, no translation) yields the rotated-about-origin local hull,
+  // which is what the search needs to size gaps between neighbours.
+  const pose={...object,transform:{position:[0,0,0] as Vec3,rotationY:0}}
+  const bounds=worldCollision(pose,[0,0,0]).bounds
+  return {
+    min:bounds.min,max:bounds.max,
+    width:Math.max(bounds.max[0]-bounds.min[0],COLLISION_EPSILON),
+    depth:Math.max(bounds.max[2]-bounds.min[2],COLLISION_EPSILON),
+    height:Math.max(bounds.max[1]-bounds.min[1],COLLISION_EPSILON),
+    exact:false,
+  }
+}
+/**
+ * True when a single unrotated box part covers the whole shape, i.e. the declared
+ * ``size_m`` box is already exact and no hull arithmetic is needed.
+ */
+function isExactBox(object:SceneObject):boolean {
+  const parts=describePrimitive(object.model.shape,object.dimensions).parts
+  return parts.length===1 && parts[0].kind==='box' && parts[0].rotation.every(a=>a===0)
+}
+/**
+ * Footprint rectangle (xz) the real collision volume occupies when anchored at
+ * ``position`` with ``rotationY``; the union over parts, so a rotated L-shape is covered.
+ */
+export function objectFootprint(object:SceneObject,position:Vec3,rotationY=object.transform.rotationY) {
+  const pose={...object,transform:{position,rotationY}}
+  const b=worldCollision(pose,position).bounds
+  return {x0:b.min[0],x1:b.max[0],z0:b.min[2],z1:b.max[2]}
+}
 /** Axis-aligned box as a convex part so room solids reuse the same SAT core. */
 export function boxPart(min:Vec3,max:Vec3):ConvexPart {
   const vertices:Vec3[] = [0,1].flatMap(x=>[0,1].flatMap(y=>[0,1].map(z=>[x?max[0]:min[0],y?max[1]:min[1],z?max[2]:min[2]] as Vec3)))

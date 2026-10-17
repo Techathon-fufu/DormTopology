@@ -9,6 +9,7 @@ from ..geometry import (
     aabb_from_zone,
     fits_region,
     items_overlap,
+    pose_extent,
     support_region,
     validate_item_geometry,
 )
@@ -51,39 +52,47 @@ def _candidates(scene: Scene, original: dict, region: dict, placed: list[dict]):
     blockers.extend(
         aabb_from_zone(z) for key in ("obstacles", "reserved_zones") for z in scene[key]
     )
+    height = pose_extent(original)[2]
     for angle in sorted(set(original["allowed_rotations_y_rad"])):
-        base = _pose(original, (0, y, 0), angle)
-        bounds = aabb_from_item(base)
-        hw, hd = bounds.maximum[0], bounds.maximum[2]
-        if 2 * hw > x1 - x0 + 1e-10 or 2 * hd > z1 - z0 + 1e-10:
+        # Measure at XZ origin so all four bounds retain their anchor offsets.
+        bounds = aabb_from_item(_pose(original, (0, y, 0), angle))
+        xmin, xmax = x0 - bounds.minimum[0], x1 - bounds.maximum[0]
+        zmin, zmax = z0 - bounds.minimum[2], z1 - bounds.maximum[2]
+        if xmin > xmax + 1e-10 or zmin > zmax + 1e-10:
             continue
-        if original["size_m"][1] > region["clearance_height_m"] + 1e-10:
+        if height > region["clearance_height_m"] + 1e-10:
             continue
         xs = {
-            x0 + hw,
-            x1 - hw,
-            (x0 + x1) / 2,
-            min(x1 - hw, max(x0 + hw, original["position"][0])),
+            xmin,
+            xmax,
+            (xmin + xmax) / 2,
+            min(xmax, max(xmin, original["position"][0])),
         }
         zs = {
-            z0 + hd,
-            z1 - hd,
-            (z0 + z1) / 2,
-            min(z1 - hd, max(z0 + hd, original["position"][2])),
+            zmin,
+            zmax,
+            (zmin + zmax) / 2,
+            min(zmax, max(zmin, original["position"][2])),
         }
         for box in blockers:
             if (
-                min(y + original["size_m"][1], box.maximum[1])
-                <= max(y, box.minimum[1]) + 1e-10
+                min(bounds.maximum[1], box.maximum[1])
+                <= max(bounds.minimum[1], box.minimum[1]) + 1e-10
             ):
                 continue
-            xs.update((box.minimum[0] - hw - EPSILON, box.maximum[0] + hw + EPSILON))
-            zs.update((box.minimum[2] - hd - EPSILON, box.maximum[2] + hd + EPSILON))
+            xs.update((
+                box.minimum[0] - bounds.maximum[0] - EPSILON,
+                box.maximum[0] - bounds.minimum[0] + EPSILON,
+            ))
+            zs.update((
+                box.minimum[2] - bounds.maximum[2] - EPSILON,
+                box.maximum[2] - bounds.minimum[2] + EPSILON,
+            ))
         candidates = []
         for x, z in product(sorted(xs), sorted(zs)):
-            if x < x0 + hw - 1e-10 or x > x1 - hw + 1e-10:
+            if x < xmin - 1e-10 or x > xmax + 1e-10:
                 continue
-            if z < z0 + hd - 1e-10 or z > z1 - hd + 1e-10:
+            if z < zmin - 1e-10 or z > zmax + 1e-10:
                 continue
             candidate = _pose(original, (x, y, z), angle)
             try:

@@ -1,5 +1,5 @@
 import { describePrimitive } from './primitiveGeometry'
-import { objectToWorld } from './collisionGeometry'
+import { objectExtent, objectFootprint, objectToWorld } from './collisionGeometry'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import {
   DESK_BEAM_DEPTH,
@@ -122,12 +122,12 @@ function isSmallItem(o: SceneObject, role: Role): boolean {
   return Math.max(o.dimensions.width, o.dimensions.height, o.dimensions.depth) <= 0.16
 }
 
-function footprintOverlapsRect(x: number, z: number, w: number, d: number, r: ZoneRect): boolean {
+function footprintOverlapsRect(footprint: ZoneRect, r: ZoneRect): boolean {
   return (
-    x - w / 2 < r.x1 - 0.001 &&
-    x + w / 2 > r.x0 + 0.001 &&
-    z - d / 2 < r.z1 - 0.001 &&
-    z + d / 2 > r.z0 + 0.001
+    footprint.x0 < r.x1 - 0.001 &&
+    footprint.x1 > r.x0 + 0.001 &&
+    footprint.z0 < r.z1 - 0.001 &&
+    footprint.z1 > r.z0 + 0.001
   )
 }
 
@@ -137,7 +137,7 @@ function zoneAt(zones: OrganizationZones, position: Vec3): ZoneKind {
   return 'underDesk'
 }
 
-/** 候选落位是否可行：活动区避让 + 房间边界 + 与已落位物品无相交 / 无悬空 */
+/** 候选落位是否可行：活动区避让 + 房间边界 + 与已落位物品无相交 / 无悬空 / 不穿场地 */
 function canPlace(
   ctx: Ctx,
   object: SceneObject,
@@ -145,13 +145,16 @@ function canPlace(
   rotationY: number,
   allow: PlacementAllow = {},
 ): boolean {
-  const dims = object.dimensions
+  // 活动区避让按真实碰撞足迹（不是声明包围盒）：台灯 / 水杯等实际比声明尺寸窄，
+  // 用声明盒会无谓地占掉打字区与杯位。
   const onDesk = Math.abs(position[1] - ctx.zones.deskSurface.y) < 0.03
   if (onDesk) {
-    if (!allow.typing && footprintOverlapsRect(position[0], position[2], dims.width, dims.depth, ctx.zones.typing.rect)) {
+    // 旋转后足迹取世界 AABB，落在轴对齐的活动区矩形之外时才算不压到
+    const footprint = objectFootprint(object, position, rotationY)
+    if (!allow.typing && footprintOverlapsRect(footprint, ctx.zones.typing.rect)) {
       return false
     }
-    if (!allow.cup && footprintOverlapsRect(position[0], position[2], dims.width, dims.depth, ctx.zones.cup.rect)) {
+    if (!allow.cup && footprintOverlapsRect(footprint, ctx.zones.cup.rect)) {
       return false
     }
   }
@@ -185,16 +188,23 @@ function placeInBand(
 ): PlanAssignment | null {
   const w = obj.dimensions.width
   const d = obj.dimensions.depth
+  // Band fit and shelf clearance are decided by the real volume; the cursor and anchor
+  // math below stay on declared width, because `position` is the declared bottom-centre
+  // anchor (a real-volume centroid would break the contract).
+  const ext = objectExtent(obj)
+  const fitW = ext.width
+  const fitD = ext.depth
   const r = band.rect
-  if (w > r.x1 - r.x0 + 1e-6) return null
-  if (d > r.z1 - r.z0 + 1e-6 && typeof opts.z !== 'number') return null
+  if (fitW > r.x1 - r.x0 + 1e-6) return null
+  if (fitD > r.z1 - r.z0 + 1e-6 && typeof opts.z !== 'number') return null
 
   let z: number
   if (typeof opts.z === 'number') z = opts.z
   else if (opts.z === 'back') z = Math.min(r.z0 + d / 2 + 0.03, r.z1 - d / 2)
   else z = (r.z0 + r.z1) / 2
   if (opts.clearOfShelf && ctx.zones.shelf) {
-    z = Math.max(z, ctx.zones.shelf.rect.z1 + 0.012 + d / 2)
+    // 高件前移到搁板前沿之外：用真实深度（不是声明深度）计算前移量
+    z = Math.max(z, ctx.zones.shelf.rect.z1 + 0.012 + fitD / 2)
   }
   // 不超出桌面范围（高件 exception 也限制在桌面内）
   const deskZ1 = ctx.zones.deskSurface.rect.z1 - 0.01
@@ -236,7 +246,8 @@ function tryStorageZone(
   reasonBase: string,
 ): PlanAssignment | null {
   const z = ctx.zones
-  if (zone === 'shelf' && z.shelf && obj.dimensions.height + 0.02 <= z.shelf.clearance) {
+  const ext = objectExtent(obj)
+  if (zone === 'shelf' && z.shelf && ext.height + 0.02 <= z.shelf.clearance) {
     const a = placeInBand(ctx, obj, z.shelf, 'shelf:right', {
       from: 'right',
       zone: 'shelf',
@@ -245,7 +256,7 @@ function tryStorageZone(
     if (a) return a
   }
   if (zone === 'desk') {
-    const tall = z.shelf ? obj.dimensions.height > z.shelf.y - z.deskSurface.y - 0.01 : false
+    const tall = z.shelf ? ext.height > z.shelf.y - z.deskSurface.y - 0.01 : false
     const a = placeInBand(ctx, obj, z.deskBackBand, 'desk:back', {
       zone: 'desk',
       reason: `${reasonBase}：桌面常用区后带`,
@@ -259,7 +270,7 @@ function tryStorageZone(
     })
     if (b) return b
   }
-  if (zone === 'underDesk' && obj.dimensions.height <= z.underDesk.clearance) {
+  if (zone === 'underDesk' && ext.height <= z.underDesk.clearance) {
     const a = placeInBand(ctx, obj, z.underDesk, 'under:left', {
       z: 'back',
       zone: 'underDesk',
@@ -280,8 +291,12 @@ function placeInsideContainer(
   if (!cavity) return null
   const innerW = cavity.max[0] - cavity.min[0]
   const innerD = cavity.max[2] - cavity.min[2]
-  if (obj.dimensions.height > cavity.max[1] - cavity.min[1]) return null
-  if (obj.dimensions.width > innerW || obj.dimensions.depth > innerD) return null
+  // Fit and scan step use the real volume, so a lamp arm can go in a box its declared
+  // box would not enter, and a wide-but-hollow item is not admitted on its envelope.
+  const ext = objectExtent(obj)
+  const fitW = ext.width
+  if (ext.height > cavity.max[1] - cavity.min[1]) return null
+  if (fitW > innerW || ext.depth > innerD) return null
 
   const key = `container:${container.object.id}`
   const startX = cavity.min[0]
@@ -290,14 +305,13 @@ function placeInsideContainer(
   const z = (cavity.min[2] + cavity.max[2]) / 2
   const containerObject = { ...container.object, transform: { position: container.position, rotationY: container.rotationY } }
 
-  while (cursor + obj.dimensions.width <= startX + innerW + 1e-6) {
-    const position = objectToWorld([cursor + obj.dimensions.width / 2, y, z], containerObject)
+  while (cursor + fitW <= startX + innerW + 1e-6) {
+    // Anchor stays the declared centre; the real extent decides whether it fits.
+    const centre = cursor + fitW / 2 + (obj.dimensions.width - fitW) / 2
+    const position = objectToWorld([centre, y, z], containerObject)
     if (canPlace(ctx, obj, position, container.rotationY)) {
-      ctx.cursors.set(key, cursor + obj.dimensions.width + 0.012)
-      const remainMm = Math.max(
-        0,
-        Math.round((innerW - (cursor - startX) - obj.dimensions.width) * 1000),
-      )
+      ctx.cursors.set(key, cursor + fitW + 0.012)
+      const remainMm = Math.max(0, Math.round((innerW - (cursor - startX) - fitW) * 1000))
       return {
         objectId: obj.id,
         position,
@@ -332,12 +346,12 @@ export function estimateDeskFreeArea(
         isContainedWithin(object, position, p.object, p.position),
     )
     if (contained) continue // 收纳在容器内的小件按容器面积一并估算，避免重复计入
-    const w = object.dimensions.width
-    const d = object.dimensions.depth
-    const x0 = Math.max(dx0, position[0] - w / 2)
-    const x1 = Math.min(dx1, position[0] + w / 2)
-    const z0 = Math.max(dz0, position[2] - d / 2)
-    const z1 = Math.min(dz1, position[2] + d / 2)
+    // 按真实碰撞足迹计入占用：台灯 / 显示器比声明盒窄，声明盒会高估占用面积。
+    const footprint = objectFootprint(object, position)
+    const x0 = Math.max(dx0, footprint.x0)
+    const x1 = Math.min(dx1, footprint.x1)
+    const z0 = Math.max(dz0, footprint.z0)
+    const z1 = Math.min(dz1, footprint.z1)
     if (x1 > x0 && z1 > z0) occupied += (x1 - x0) * (z1 - z0)
   }
   return Math.max(0, desk.width * desk.depth - occupied)
@@ -470,7 +484,7 @@ export function computeRuleBasedPlan(input: {
 
   for (const b of byRole('book')) {
     let a: PlanAssignment | null = null
-    if (zones.shelf && b.dimensions.height + 0.02 <= zones.shelf.clearance) {
+    if (zones.shelf && objectExtent(b).height + 0.02 <= zones.shelf.clearance) {
       a = placeInBand(ctx, b, zones.shelf, 'shelf:left', {
         zone: 'shelf',
         reason: '书本优先归入书架收纳区（左侧书本位）',
@@ -525,7 +539,9 @@ export function computeRuleBasedPlan(input: {
 
   // ── 阶段 4：桌面常用物品（规则 2 + 分类归位） ───────────────────
   const tryDeskGeneral = (obj: SceneObject, role: Role): PlanAssignment | null => {
-    const tall = zones.shelf ? obj.dimensions.height > zones.shelf.y - zones.deskSurface.y - 0.01 : false
+    // 是否为「高件」按真实碰撞高度判断：声明高度会误判，正是它导致显示器 / 台灯
+    // 曾被排进书架搁板投影内。
+    const tall = zones.shelf ? objectExtent(obj).height > zones.shelf.y - zones.deskSurface.y - 0.01 : false
     const tallAllow: PlacementAllow | undefined = tall ? { typing: true, cup: false } : undefined
 
     if (role === 'monitor' || role === 'lamp') {
@@ -657,9 +673,9 @@ export function computeRuleBasedPlan(input: {
       place('desk', obj, a)
       continue
     }
-    // 兜底：桌下隐藏区（高度允许时）
+    // 兜底：桌下隐藏区（真实高度允许时）
     let fallback: PlanAssignment | null = null
-    if (obj.dimensions.height <= zones.underDesk.clearance) {
+    if (objectExtent(obj).height <= zones.underDesk.clearance) {
       fallback = placeInBand(ctx, obj, zones.underDesk, 'under:left', {
         z: 'back',
         zone: 'underDesk',
@@ -676,10 +692,11 @@ export function computeRuleBasedPlan(input: {
     let a: PlanAssignment | null = null
     // 桌下横梁：排插「优先放在桌面下方横梁」（高度 / 深度合适时，沿横梁从中心向左避让）
     const beamClearance = room.desk.height - room.desk.thickness - deskBeamTopY(room)
+    const stripExt = objectExtent(st)
     if (
-      st.dimensions.depth <= DESK_BEAM_DEPTH + 0.005 &&
-      st.dimensions.height + 0.005 <= beamClearance &&
-      st.dimensions.width <= room.desk.width - DESK_BEAM_INSET * 2
+      stripExt.depth <= DESK_BEAM_DEPTH + 0.005 &&
+      stripExt.height + 0.005 <= beamClearance &&
+      stripExt.width <= room.desk.width - DESK_BEAM_INSET * 2
     ) {
       const beamBand: RectOnPlane = {
         rect: {
@@ -696,7 +713,7 @@ export function computeRuleBasedPlan(input: {
         reason: '排插优先放在桌面下方横梁（走线 / 插拔方便）',
       })
     }
-    if (!a && st.dimensions.height <= zones.underDesk.clearance) {
+    if (!a && stripExt.height <= zones.underDesk.clearance) {
       a = placeInBand(ctx, st, zones.underDesk, 'under:left', {
         z: 'back',
         zone: 'underDesk',
