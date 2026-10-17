@@ -110,7 +110,8 @@ export function isValidRoute(cable: CableConnection): boolean {
   if (cable.planSource !== 'algorithm') return false
   if (!cable.route || !Array.isArray(cable.route.points) || cable.route.points.length < 2) return false
   const verification = cable.route.verification
-  if (!verification || verification.status !== 'valid') return false
+  if (!verification || verification.status !== 'valid' || verification.pathStyle !== 'orthogonal') return false
+  if (['power', 'video', 'network'].includes(cable.kind) && cable.route.strategy !== 'backboard') return false
   if (typeof cable.route.pathLengthM !== 'number' || !Number.isFinite(cable.route.pathLengthM) || cable.route.pathLengthM <= 0) return false
   return true
 }

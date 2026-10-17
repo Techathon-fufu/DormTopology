@@ -48,9 +48,11 @@ const cable: CableConnection = {
   from: { objectId: 'a', portId: 'a-port', position: samples[0] },
   to: { objectId: 'b', portId: 'b-port', position: samples[samples.length - 1] },
   actualLengthM: 1, reserveLengthM: 0.1, accessories: [],
-  route: { channels: ['deskUnderside'], points: samples, smooth: false, pathLengthM: 0.738451,
-    verification: { sceneId: 'scene-test', sceneRevision: 3, status: 'valid', supportStatus: 'not_evaluated' } },
+  route: { channels: ['deskUnderside'], strategy: 'backboard', points: samples, smooth: false, pathLengthM: 0.738451,
+    verification: { pathStyle: 'orthogonal', sceneId: 'scene-test', sceneRevision: 3, status: 'valid', supportStatus: 'not_evaluated' } },
 }
+assert.equal(hasUsableCableRoute({ ...cable, route: { ...cable.route, verification: { ...cable.route.verification!, pathStyle: undefined } } }), false, 'old smooth algorithm routes must be replanned')
+assert.equal(hasUsableCableRoute({ ...cable, route: { ...cable.route, strategy: 'cableHole' } }), false, 'power/video/network routes cannot use a desktop hole')
 const project = { ...demo, objects, cables: [cable] }
 assert.deepEqual(cablePathSamples(cable, objects), samples, 'backend samples cannot be passed through Catmull-Rom again')
 assert.equal(cablePathLength(cable, objects), 0.738451, 'continuous curve integral takes priority over a new sampled estimate')

@@ -30,7 +30,7 @@ const result:CablePlanningResult={
   algorithmVerified:true,plannedCount:1,conflictCount:1,notes:[],sceneRef:ref,
   trayAnalysis:{sceneId:ref.sceneId,sceneRevision:ref.sceneRevision,optimizations:[]},
   cables:[
-    {...baseCable,status:'planned',planSource:'algorithm',route:{channels:[],points:[[0,1,.2],[.3,1,.2]],smooth:false,pathLengthM:.3,verification:{sceneId:ref.sceneId,sceneRevision:1,status:'valid'}}},
+    {...baseCable,status:'planned',planSource:'algorithm',route:{channels:[],strategy:'backboard',points:[[0,1,.2],[.3,1,.2]],smooth:false,pathLengthM:.3,verification:{pathStyle:'orthogonal',sceneId:ref.sceneId,sceneRevision:1,status:'valid',supportStatus:'not_evaluated'}}},
     failingCable,
   ],
 }
