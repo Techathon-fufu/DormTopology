@@ -24,6 +24,7 @@ import { DataBadge } from '@/ui/kit/data-badge'
 import { Segmented } from '@/ui/kit/segmented'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
+import { usePlansStore } from '@/state/plansStore'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 
@@ -58,6 +59,8 @@ interface ToolbarProps {
   onOpenOrganize: () => void
   onPlanCables: () => void
   onSavePlan: () => void
+  onOpenPlans: () => void
+  plansOpen: boolean
   busy: 'cable' | null
   onToggleLeftPanel: () => void
   onToggleRightPanel: () => void
@@ -68,6 +71,8 @@ export function Toolbar({
   onOpenOrganize,
   onPlanCables,
   onSavePlan,
+  onOpenPlans,
+  plansOpen,
   busy,
   onToggleLeftPanel,
   onToggleRightPanel,
@@ -86,6 +91,7 @@ export function Toolbar({
   const staleCount = project.cables.filter((c) => c.status === 'stale').length
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
+  const candidateCount = usePlansStore((s) => (s.candidates[project.id] ?? []).length)
 
   return (
     <header className="z-30 border-b border-border bg-surface">
@@ -227,13 +233,17 @@ export function Toolbar({
             </Button>
           ) : null}
           <Button
-            variant="outline"
+            variant={plansOpen ? 'primary' : 'outline'}
             size="sm"
-            disabled
-            title="方案对比将在后续阶段提供（已保存的方案会保留）"
+            title={
+              candidateCount > 0
+                ? `候选方案：查看列表与指标，最多选 3 个并排对比（已保存 ${candidateCount} 个）`
+                : '候选方案：先点「保存方案」保存当前布局，再进入对比'
+            }
+            onClick={onOpenPlans}
           >
             <GitCompareArrows className="h-3.5 w-3.5" />
-            方案对比
+            方案对比{candidateCount > 0 ? `（${candidateCount}）` : ''}
           </Button>
         </div>
       </div>
