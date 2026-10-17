@@ -25,8 +25,16 @@ import {
   presetPosts,
   roomToForm,
   validateSpace,
+  OUTLET_ADVICE_Y_MM,
+  OUTLET_DEFAULT_Y_MM,
+  OUTLET_WALL_MARGIN_MM,
+  clampOutletY,
   type SpaceForm,
 } from '@/ui/setup/spaceForm'
+import {
+  cablesAffectedByOutletMove,
+  markCablesStaleByIds,
+} from '@/scene/outletImpact'
 import { mmToM, mToMm } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
@@ -116,6 +124,33 @@ export function SpaceSetupPage() {
     return JSON.stringify(form) !== JSON.stringify(roomToForm(project.room))
   }, [form, project])
 
+  const savedOutlets = useMemo(
+    () => (project ? roomToForm(project.room).outlets : []),
+    [project],
+  )
+
+  /** 插座位置（X / 高度）调整的影响：保存后这些线缆会标记「需要重新规划」（不删除路径） */
+  const outletImpact = useMemo(() => {
+    if (!project) return { movedCount: 0, cableIds: [] as string[] }
+    const saved = new Map(savedOutlets.map((o) => [o.id, o]))
+    const affected = new Set<string>()
+    let movedCount = 0
+    for (const o of form.outlets) {
+      const before = saved.get(o.id)
+      if (!before || (before.x === o.x && before.y === o.y)) continue
+      movedCount += 1
+      // 插座世界坐标：z 固定为 0.01（后墙贴面，与 formToRoom 一致）
+      for (const id of cablesAffectedByOutletMove(project.cables, project.objects, o.id, [
+        mmToM(before.x),
+        mmToM(before.y),
+        0.01,
+      ])) {
+        affected.add(id)
+      }
+    }
+    return { movedCount, cableIds: [...affected] }
+  }, [form.outlets, project, savedOutlets])
+
   if (!project) {
     return (
       <EmptyState
@@ -155,6 +190,11 @@ export function SpaceSetupPage() {
     update(project.id, (p) => ({
       ...p,
       room,
+      // 插座位置调整后：相关走线标记「需要重新规划」（保留路径，可在工作台一键重算）
+      cables:
+        outletImpact.cableIds.length > 0
+          ? markCablesStaleByIds(p.cables, outletImpact.cableIds)
+          : p.cables,
       // 已有物品的项目保持原进度，避免覆盖工作台阶段
       stage: p.objects.length > 0 ? p.stage : 'photos',
     }))
@@ -307,28 +347,83 @@ export function SpaceSetupPage() {
             </div>
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
-                后墙插座（x 以房间中心为 0，高度为距地高度）：
+                后墙插座（x 以房间中心为 0，高度为距地高度）：可直接拖滑块调整高度，调整后保存会提示受影响的走线。
               </p>
-              {form.outlets.map((o, i) => (
-                <div key={o.id} className="flex flex-wrap items-end gap-2 rounded-md border border-border/70 bg-muted/30 px-2 py-2">
-                  <span className="w-14 shrink-0 pb-2 text-[13px] text-muted-foreground">插座 {i + 1}</span>
-                  <MmField className="w-28" label="X（左右）" valueMm={o.x} onChangeMm={(v) => updateOutlet(o.id, { x: v })} />
-                  <MmField className="w-28" label="距地高度" minMm={0} valueMm={o.y} onChangeMm={(v) => updateOutlet(o.id, { y: v })} />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="删除该插座"
-                    disabled={form.outlets.length <= 1}
-                    onClick={() => removeOutlet(o.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-danger" />
-                  </Button>
-                </div>
-              ))}
+              {form.outlets.map((o, i) => {
+                const yMin = OUTLET_WALL_MARGIN_MM
+                const yMax = Math.max(yMin, form.roomH - OUTLET_WALL_MARGIN_MM)
+                const sliderY = Math.min(Math.max(o.y, yMin), yMax)
+                return (
+                  <div key={o.id} className="space-y-2 rounded-md border border-border/70 bg-muted/30 px-2 py-2">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <span className="w-14 shrink-0 pb-2 text-[13px] text-muted-foreground">插座 {i + 1}</span>
+                      <MmField className="w-28" label="X（左右）" valueMm={o.x} onChangeMm={(v) => updateOutlet(o.id, { x: v })} />
+                      <MmField
+                        className="w-28"
+                        label="距地高度"
+                        minMm={yMin}
+                        valueMm={o.y}
+                        onChangeMm={(v) => updateOutlet(o.id, { y: clampOutletY(v, form.roomH) })}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="删除该插座"
+                        disabled={form.outlets.length <= 1}
+                        onClick={() => removeOutlet(o.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-danger" />
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="shrink-0 text-[11px] text-faint">高度滑块</span>
+                      <input
+                        type="range"
+                        min={yMin}
+                        max={yMax}
+                        step={10}
+                        value={sliderY}
+                        aria-label={`插座 ${i + 1} 距地高度（${yMin}–${yMax} mm）`}
+                        className="h-1.5 min-w-36 flex-1 cursor-pointer accent-[#0F9D8A]"
+                        onChange={(e) => updateOutlet(o.id, { y: clampOutletY(Number(e.target.value), form.roomH) })}
+                      />
+                      <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                        当前位置：{o.y} mm
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        disabled={o.y === OUTLET_DEFAULT_Y_MM}
+                        title={`恢复默认高度 ${OUTLET_DEFAULT_Y_MM} mm`}
+                        onClick={() => updateOutlet(o.id, { y: OUTLET_DEFAULT_Y_MM })}
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        恢复默认
+                      </Button>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-faint">
+                      可调范围 {yMin}–{yMax} mm（距地 / 距顶至少 {OUTLET_WALL_MARGIN_MM} mm，不会移出墙体）；
+                      建议 {OUTLET_ADVICE_Y_MM.min}–{OUTLET_ADVICE_Y_MM.max} mm（常见床头 / 桌面附近插座高度）。
+                    </p>
+                  </div>
+                )
+              })}
               <Button variant="outline" size="sm" onClick={addOutlet} disabled={form.outlets.length >= MAX_OUTLETS}>
                 <Plus className="h-3.5 w-3.5" />
                 添加插座（{form.outlets.length}/{MAX_OUTLETS}）
               </Button>
+              {outletImpact.movedCount > 0 ? (
+                <p className="flex items-start gap-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[12px] leading-relaxed text-warning">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    插座位置已调整 {outletImpact.movedCount} 处：
+                    {outletImpact.cableIds.length > 0
+                      ? ` 保存后 ${outletImpact.cableIds.length} 条相关走线会标记「需要重新规划」（保留原路径，可在工作台一键重算）。`
+                      : ' 当前没有线缆经过这些插座，保存后无需重算走线。'}
+                  </span>
+                </p>
+              ) : null}
             </div>
           </SectionCard>
         </div>

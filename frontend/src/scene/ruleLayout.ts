@@ -1,5 +1,13 @@
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
-import { isContainedWithin, objectsOverlapAt, placementIssues } from '@/scene/sceneValidation'
+import {
+  DESK_BEAM_DEPTH,
+  DESK_BEAM_INSET,
+  DESK_BEAM_Z,
+  deskBeamTopY,
+  isContainedWithin,
+  objectsOverlapAt,
+  placementIssues,
+} from '@/scene/sceneValidation'
 import { uid } from '@/lib/utils'
 import {
   computeOrganizationZones,
@@ -25,7 +33,7 @@ import {
  *   2. 常用物品放在容易取用的位置（桌面常用区前排与两侧）
  *   3. 书本优先归入书架收纳区
  *   4. 小件物品优先放入尺寸适配的收纳容器内部（按盒内剩余宽度顺序尝试）
- *   5. 排插优先放入已配置且高度可容纳的桌下隐藏区
+ *   5. 排插优先放在桌面下方横梁，其次已配置且高度可容纳的桌下隐藏区
  *   6. 全部落位按物品包围盒检查分区分界、房间边界与明显相交（尺寸不合 / 空间不足 → 列入未放置并给出原因）
  *
  * 这是「规则式演示方案」而非真实搬运 / 碰撞规划：结果用于展示整理思路，动画不代表真实搬运路径。
@@ -661,24 +669,46 @@ export function computeRuleBasedPlan(input: {
     }
   }
 
-  // ── 阶段 5：排插进桌下（规则 5） ────────────────────────────────
+  // ── 阶段 5：排插进桌下（规则 5：优先桌面下方横梁，其次桌下隐藏区） ──────
   for (const st of byRole('powerStrip')) {
     let a: PlanAssignment | null = null
-    if (st.dimensions.height <= zones.underDesk.clearance) {
+    // 桌下横梁：排插「优先放在桌面下方横梁」（高度 / 深度合适时，沿横梁从中心向左避让）
+    const beamClearance = room.desk.height - room.desk.thickness - deskBeamTopY(room)
+    if (
+      st.dimensions.depth <= DESK_BEAM_DEPTH + 0.005 &&
+      st.dimensions.height + 0.005 <= beamClearance &&
+      st.dimensions.width <= room.desk.width - DESK_BEAM_INSET * 2
+    ) {
+      const beamBand: RectOnPlane = {
+        rect: {
+          x0: -room.desk.width / 2 + DESK_BEAM_INSET + 0.02,
+          x1: room.desk.width / 2 - DESK_BEAM_INSET - 0.02,
+          z0: DESK_BEAM_Z - DESK_BEAM_DEPTH / 2,
+          z1: DESK_BEAM_Z + DESK_BEAM_DEPTH / 2,
+        },
+        y: deskBeamTopY(room),
+      }
+      a = placeInBand(ctx, st, beamBand, 'under:beam', {
+        z: DESK_BEAM_Z,
+        zone: 'underDesk',
+        reason: '排插优先放在桌面下方横梁（走线 / 插拔方便）',
+      })
+    }
+    if (!a && st.dimensions.height <= zones.underDesk.clearance) {
       a = placeInBand(ctx, st, zones.underDesk, 'under:left', {
         z: 'back',
         zone: 'underDesk',
-        reason: '排插优先放入桌下隐藏区（离地靠后墙，便于插拔）',
+        reason: '桌下隐藏区（离地靠后墙，便于插拔）',
       })
     }
     if (!a) {
       a = placeInBand(ctx, st, zones.deskBackBand, 'desk:back', {
         zone: 'desk',
-        reason: '桌下隐藏区不可用：排插暂放桌面后带',
+        reason: '桌下横梁与隐藏区不可用：排插暂放桌面后带',
       })
     }
     if (!place('under', st, a)) {
-      reject(st, '桌下隐藏区高度或空间不足，且桌面后带没有空位')
+      reject(st, '桌下横梁 / 隐藏区高度或空间不足，且桌面后带没有空位')
     }
   }
 

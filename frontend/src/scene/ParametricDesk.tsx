@@ -1,6 +1,13 @@
 import type { RoomConfig } from '@/types/project'
 import { boxGeometry, standardMaterial, torusGeometry } from './resources'
-import { DESK_GAP } from './sceneValidation'
+import {
+  DESK_BEAM_DEPTH,
+  DESK_BEAM_INSET,
+  DESK_BEAM_SECTION,
+  DESK_BEAM_Z,
+  DESK_GAP,
+  deskBeamTopY,
+} from './sceneValidation'
 
 const METAL = '#3A3F45'
 const WOOD = '#D6B98C'
@@ -46,6 +53,14 @@ export function ParametricDesk({ room }: { room: RoomConfig }) {
           material={standardMaterial(METAL, { metalness: 0.5, roughness: 0.45 })}
         />
       ))}
+
+      {/* 桌下横梁（排插推荐放置位）：位于桌面下方后侧，规格与 sceneValidation 的支撑面一致 */}
+      <mesh
+        castShadow
+        position={[0, deskBeamTopY(room) - DESK_BEAM_SECTION / 2, DESK_BEAM_Z]}
+        geometry={boxGeometry(desk.width - DESK_BEAM_INSET * 2, DESK_BEAM_SECTION, DESK_BEAM_DEPTH)}
+        material={standardMaterial(METAL, { metalness: 0.5, roughness: 0.45 })}
+      />
 
       {/* 书架（床板下沿的搁板） */}
       {room.shelf.enabled ? (

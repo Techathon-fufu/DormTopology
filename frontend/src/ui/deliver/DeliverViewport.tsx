@@ -139,7 +139,12 @@ function DeliverObjectMesh({
       }}
     >
       <group position={[0, h / 2, 0]}>
-        <PrimitiveModel shape={object.model.shape} dims={object.dimensions} color={color} />
+        <PrimitiveModel
+          shape={object.model.shape}
+          dims={object.dimensions}
+          color={color}
+          sockets={object.powerStrip?.socketCount}
+        />
       </group>
       {focused || hover ? (
         <mesh position={[0, h / 2, 0]}>

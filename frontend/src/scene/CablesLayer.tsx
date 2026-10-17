@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Html } from '@react-three/drei'
 import type { CableConnection, Project, Vec3 } from '@/types/project'
-import { CABLE_KIND_META } from '@/types/project'
+import { CABLE_KIND_META, CABLE_THICKNESS_META } from '@/types/project'
 import { resolveOrganizationPreferences } from '@/types/organization'
-import { cableDisplayPoints, endpointLabel } from '@/scene/cables'
+import { cableDisplayPoints, endpointLabel, resolveCableThickness } from '@/scene/cables'
 import { checkCableRoute, sampleCurve } from '@/scene/cableRoute'
 import { computeCableAvoidZones, computeRouteNodes } from '@/scene/routeNodes'
 import { useCableStore, cableAnimEase } from '@/state/cableStore'
@@ -97,7 +97,9 @@ function CableMesh({ cable, project }: { cable: CableConnection; project: Projec
   const conflicted = cable.status === 'conflict'
   const color = CABLE_KIND_META[cable.kind].color
   const opacity = showOriginal ? 0.5 : stale ? 0.45 : selected ? 1 : hovered ? 1 : 0.92
-  const radius = selected ? 0.008 : 0.0055
+  // 按线径真实渲染：渲染半径来自线径档位（约按真实半径 1.7 倍放大以便观察）；选中时略微加粗
+  const thicknessMeta = CABLE_THICKNESS_META[resolveCableThickness(cable)]
+  const radius = selected || hovered ? thicknessMeta.renderRadiusM * 1.45 : thicknessMeta.renderRadiusM
 
   const geometry = useTubeGeometry(samples, radius)
 

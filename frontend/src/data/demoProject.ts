@@ -7,6 +7,7 @@ import type {
   Vec3,
 } from '@/types/project'
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
+import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
 
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
@@ -41,6 +42,7 @@ export function createStandardRoom(): RoomConfig {
 /** 演示物品库：笔记本、显示器、键鼠、台灯、书本、水杯、收纳盒、耳机、排插（单位：米） */
 export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject[] {
   const deskY = 0.75
+  const beamY = deskBeamTopY(createStandardRoom())
   const base = {
     projectId,
     visible: true,
@@ -245,12 +247,39 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       note: '演示物品：小件（用于演示「小件优先入盒」规则）',
     },
     {
+      id: 'demo-phone',
+      ...base,
+      name: '手机',
+      category: 'electrical',
+      dimensions: { width: 0.075, height: 0.012, depth: 0.155 },
+      transform: { position: [0.2, deskY, 0.53], rotationY: 0.1 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'genericBox' },
+      ports: [
+        {
+          id: 'port-phone-usbc',
+          type: 'usb-c',
+          label: 'USB-C 充电口',
+          powered: true,
+          maxWatt: 20,
+          offset: [0, 0.006, -0.0775],
+          direction: 'back',
+        },
+      ],
+      quantity: 1,
+      needsPower: true,
+      frequent: true,
+      source: 'demo',
+      note: '演示物品：手机（充电线默认「可见线」，规划后从桌面出线槽走线；线径默认细线）',
+    },
+    {
       id: 'demo-power-strip',
       ...base,
       name: '排插',
       category: 'electrical',
       dimensions: { width: 0.21, height: 0.03, depth: 0.05 },
-      transform: { position: [-0.5, 0.015, 0.2], rotationY: 0.3 },
+      // 优先放在桌面下方横梁（走线 / 插拔方便）；可在属性面板中切换 4 / 6 / 8 位并移动位置
+      transform: { position: [-0.35, beamY, DESK_BEAM_Z], rotationY: 0 },
+      powerStrip: { socketCount: 4, socketSpacing: 0.05, maxLoadW: 2500 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'powerStrip' },
       ports: [1, 2, 3, 4].map((n) => ({
         id: `port-strip-${n}`,
@@ -258,7 +287,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
         label: `排插·${n} 号口`,
         powered: true,
         maxWatt: 2500,
-        // 插孔位于排插顶面，沿长度方向均匀分布（局部坐标：+x 沿排插长边）
+        // 插孔位于排插顶面，沿长度方向均匀分布（局部坐标：+x 沿排插长边；与 scene/powerStrip.ts 同口径）
         offset: [-0.075 + (n - 1) * 0.05, 0.031, 0] as Vec3,
         direction: 'up' as const,
       })),
@@ -266,7 +295,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       needsPower: true,
       fixed: true,
       source: 'demo',
-      note: '演示物品：4 位排插（置于桌下地面）',
+      note: '演示物品：4 位排插（放在桌面下方横梁上；规格 4/6/8 位可切换，位置可移动）',
     },
   ]
 }
@@ -299,8 +328,9 @@ function makeCable(
 }
 
 /**
- * 演示用「现状线缆」：略微散乱，尚未走线（电源 ×3、视频 ×1、数据 ×1）。
+ * 演示用「现状线缆」：略微散乱，尚未走线（电源 ×3、视频 ×1、数据 ×1、充电 ×1）。
  * 端点坐标在渲染时由接口实时推导；散乱的折线仅作「原始走线」示意。
+ * 线材类型（可见线 / 隐藏线）默认按设备名称推断：显示器 / 台灯 → 隐藏线，手机 / 笔记本 → 可见线。
  */
 export function createDemoCables(
   objects: SceneObject[],
@@ -312,6 +342,7 @@ export function createDemoCables(
   const lamp = find('demo-lamp')
   const strip = find('demo-power-strip')
   const keyboard = find('demo-keyboard')
+  const phone = find('demo-phone')
   if (!laptop || !monitor || !lamp || !strip) return []
 
   const s = strip.transform.position
@@ -404,6 +435,28 @@ export function createDemoCables(
           [lp[0] - 0.12, 0.8, lp[2] + 0.08],
         ],
         '现状：键盘数据线在桌面上绕行后回到笔记本（待规划）',
+      ),
+    )
+  }
+
+  if (phone) {
+    const pp = phone.transform.position
+    cables.push(
+      makeCable(
+        projectId,
+        'demo-cable-phone',
+        'charging',
+        endpoint(phone.id, 'port-phone-usbc', [pp[0], pp[1] + 0.006, pp[2] - 0.08]),
+        endpoint(strip.id, 'port-strip-4', stripPoint),
+        [
+          [pp[0], pp[1] + 0.006, pp[2] - 0.08],
+          [pp[0] - 0.05, 0.757, pp[2] + 0.06],
+          [pp[0] + 0.06, 0.75, 0.44],
+          [lp[0] + 0.28, 0.44, 0.2],
+          [lp[0] + 0.16, 0.02, 0.12],
+          stripPoint,
+        ],
+        '现状：手机充电线散在桌面（默认「可见线」：规划后从桌面出线槽走线；线径默认细线）',
       ),
     )
   }

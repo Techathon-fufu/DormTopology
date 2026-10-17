@@ -14,8 +14,14 @@ import {
   X,
 } from 'lucide-react'
 import type { Project, SceneObject } from '@/types/project'
-import { CABLE_KIND_META, CABLE_STATUS_META, PORT_TYPE_LABELS } from '@/types/project'
-import { cableDisplayPoints } from '@/scene/cables'
+import {
+  CABLE_KIND_META,
+  CABLE_STATUS_META,
+  CABLE_THICKNESS_META,
+  CABLE_VISIBILITY_META,
+  PORT_TYPE_LABELS,
+} from '@/types/project'
+import { cableDisplayPoints, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
 import { estimateCableLength } from '@/scene/cableRoute'
 import { PORT_TYPE_COLORS } from '@/scene/ports'
 import { useCableLink } from '@/lib/useCableLink'
@@ -295,8 +301,12 @@ export function CableListPanel({
                   </span>
                   <Badge variant={status.tone}>{status.label}</Badge>
                 </div>
-                <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span>{CABLE_KIND_META[cable.kind].label}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span>
+                    {CABLE_KIND_META[cable.kind].label} ·{' '}
+                    {CABLE_VISIBILITY_META[resolveCableVisibility(cable, project.objects).visibility].label} ·{' '}
+                    {CABLE_THICKNESS_META[resolveCableThickness(cable)].label}
+                  </span>
                   <span>·</span>
                   <span>估算 {formatMm(est)}</span>
                   {actual > 0 ? (
@@ -364,6 +374,9 @@ export function CableListPanel({
             <DataBadge kind="computed" label="规则式演示" />
           </p>
           <p>平滑曲线仅用于显示；障碍结论来自对平滑采样点的本地几何检查，不是真实寻路算法。</p>
+          <p>
+            线材类型默认按设备名称推断（显示器 / 台灯 → 隐藏线·背板后走线；手机 / 笔记本 → 可见线·出线槽走线），可在右侧逐条修改；线径分粗 / 细两档。
+          </p>
           {outdated > 0 ? <p>已规划走线 {outdated} 条（设备移动后会自动标记「需重算」）。</p> : null}
         </div>
       </div>

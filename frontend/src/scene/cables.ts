@@ -1,6 +1,8 @@
 import type {
   CableConnection,
   CableEndpoint,
+  CableThickness,
+  CableVisibility,
   Port,
   Project,
   SceneObject,
@@ -99,9 +101,79 @@ export function cableDisplayRoute(
 
 export type CreateCableResult = { ok: true; cable: CableConnection } | { ok: false; reason: string }
 
+// ───────────────────────────── 线材类型（可见线 / 隐藏线） ─────────────────────────────
+
+/**
+ * 设备名称关键词 → 默认隐藏线（沿背板后面走线）：
+ * 「显示器-插排」「台灯-插排」等固定设备默认把线藏到背板后。
+ */
+const HIDDEN_NAME_KEYWORDS = [
+  '显示器', '屏幕', '投影', '台灯', '落地灯', '主机', '路由器', '交换机',
+  '音箱', '打印机', '扫描仪', '摄像头',
+  'monitor', 'screen', 'lamp', 'router', 'switch', 'speaker', 'printer', 'camera',
+]
+
+/**
+ * 设备名称关键词 → 默认可见线（从桌面出线槽走线）：
+ * 「手机-插排」「笔记本-插排」等频繁插拔的随身设备默认可见。
+ */
+const VISIBLE_NAME_KEYWORDS = [
+  '手机', '平板', '笔记本', '耳机', '手表', '充电宝', '充电器', '键盘', '鼠标',
+  'phone', 'tablet', 'laptop', 'earbuds', 'watch', 'keyboard', 'mouse', 'charger',
+]
+
+export type CableVisibilitySource = 'explicit' | 'keyword' | 'default'
+
+export interface CableVisibilityInfo {
+  visibility: CableVisibility
+  source: CableVisibilitySource
+  /** 命中的关键词（source = keyword 时，界面展示推断依据） */
+  keyword?: string
+}
+
+/** 按两端设备名称推断线材类型：命中隐藏关键词优先（显示器 / 台灯…），否则可见（手机 / 笔记本…），无匹配默认可见 */
+export function inferCableVisibility(
+  objects: SceneObject[],
+  from: CableEndpoint,
+  to: CableEndpoint,
+): CableVisibilityInfo {
+  const names = [from.objectId, to.objectId].map(
+    (id) => objects.find((o) => o.id === id)?.name ?? '',
+  )
+  for (const name of names) {
+    const lower = name.toLowerCase()
+    const hit = HIDDEN_NAME_KEYWORDS.find((k) => name.includes(k) || lower.includes(k))
+    if (hit) return { visibility: 'hidden', source: 'keyword', keyword: hit }
+  }
+  for (const name of names) {
+    const lower = name.toLowerCase()
+    const hit = VISIBLE_NAME_KEYWORDS.find((k) => name.includes(k) || lower.includes(k))
+    if (hit) return { visibility: 'visible', source: 'keyword', keyword: hit }
+  }
+  return { visibility: 'visible', source: 'default' }
+}
+
+/** 解析线材类型：用户显式设置优先，否则按两端设备名称推断（不写入数据，重命名后自动跟随） */
+export function resolveCableVisibility(
+  cable: CableConnection,
+  objects: SceneObject[],
+): CableVisibilityInfo {
+  if (cable.visibility) return { visibility: cable.visibility, source: 'explicit' }
+  return inferCableVisibility(objects, cable.from, cable.to)
+}
+
+/** 解析线径：用户显式设置优先，否则按线缆类型推断（电源 / 网线 / 视频 = 粗线，数据 / 充电 = 细线） */
+export function resolveCableThickness(cable: CableConnection): CableThickness {
+  if (cable.thickness) return cable.thickness
+  return cable.kind === 'power' || cable.kind === 'network' || cable.kind === 'video'
+    ? 'thick'
+    : 'thin'
+}
+
 /**
  * 在两个接口之间建立连接（新建线缆）：
  * - 拒绝同一接口自连 / 重复连接；
+ * - 线材类型 / 线径留空 = 按设备名称与线缆类型自动推断（用户可在面板中手动指定）；
  * - 初始路径为直连两点（未规划），用户可点击「规划走线」生成建议路径。
  */
 export function createCableBetween(
@@ -152,7 +224,7 @@ export function createCableBetween(
     status: 'existing',
     planSource: 'manual',
     accessories: [],
-    note: '手动建立连接：尚未规划路径（可点击「规划走线」生成建议路径）',
+    note: '手动建立连接：线材类型与线径按设备名称自动推断；尚未规划路径（可点击「规划走线」生成建议路径）',
     updatedAt: Date.now(),
   }
   return { ok: true, cable }

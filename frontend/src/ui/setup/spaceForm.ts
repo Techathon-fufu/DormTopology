@@ -13,6 +13,22 @@ export const BED_UNDERSIDE_MM = 1580
 /** 桌面后沿与后墙的留缝（mm） */
 export const DESK_WALL_GAP_MM = 50
 
+/**
+ * 墙面插座：距地默认高度（mm）与距地 / 距顶最小边距（mm）。
+ * 高度可调范围由「墙体高度」决定：OUTLET_WALL_MARGIN_MM ～ 房间高度 − OUTLET_WALL_MARGIN_MM。
+ */
+export const OUTLET_DEFAULT_Y_MM = 350
+/** 距地 / 距顶最小边距（mm）：插座不得移出墙体 */
+export const OUTLET_WALL_MARGIN_MM = 50
+/** 高度建议范围（mm，超出仅提示，不阻止保存） */
+export const OUTLET_ADVICE_Y_MM = { min: 150, max: 1400 }
+
+/** 把插座高度夹紧到墙体范围内（mm；roomH 为房间高度 mm） */
+export function clampOutletY(y: number, roomH: number): number {
+  const max = Math.max(OUTLET_WALL_MARGIN_MM, roomH - OUTLET_WALL_MARGIN_MM)
+  return Math.round(Math.min(Math.max(y, OUTLET_WALL_MARGIN_MM), max))
+}
+
 export interface SpacePostForm {
   id: string
   x: number
@@ -191,8 +207,19 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
     if (Math.abs(o.x) > f.roomL / 2 - 60) {
       push(`outlet-${i}-x`, 'error', `插座 ${i + 1} 超出墙面范围（X 方向）`)
     }
-    if (o.y < 150 || o.y > 1400) {
-      push(`outlet-${i}-y`, 'warning', `插座 ${i + 1} 高度建议在 150–1400 mm（当前 ${o.y} mm）`)
+    const yMax = f.roomH - OUTLET_WALL_MARGIN_MM
+    if (o.y < OUTLET_WALL_MARGIN_MM || o.y > yMax) {
+      push(
+        `outlet-${i}-y`,
+        'error',
+        `插座 ${i + 1} 超出墙体高度范围（${OUTLET_WALL_MARGIN_MM}–${yMax} mm，不得移出墙体）`,
+      )
+    } else if (o.y < OUTLET_ADVICE_Y_MM.min || o.y > OUTLET_ADVICE_Y_MM.max) {
+      push(
+        `outlet-${i}-y`,
+        'warning',
+        `插座 ${i + 1} 高度建议在 ${OUTLET_ADVICE_Y_MM.min}–${OUTLET_ADVICE_Y_MM.max} mm（当前 ${o.y} mm）`,
+      )
     }
   })
 
@@ -279,7 +306,7 @@ export function newPostForm(x = 0, z = 70, section = 40): SpacePostForm {
   return { id: uid('post'), x, z, section }
 }
 
-export function newOutletForm(x = 0, y = 350): SpaceOutletForm {
+export function newOutletForm(x = 0, y = OUTLET_DEFAULT_Y_MM): SpaceOutletForm {
   return { id: uid('outlet'), x, y }
 }
 

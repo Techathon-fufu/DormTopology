@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   ArrowUp,
   CheckCircle2,
+  Info,
   Loader2,
   Pause,
   Play,
@@ -18,11 +19,22 @@ import type { CableConnection, Project, Vec3 } from '@/types/project'
 import {
   CABLE_KIND_META,
   CABLE_STATUS_META,
+  CABLE_STRATEGY_META,
+  CABLE_THICKNESS_META,
+  CABLE_VISIBILITY_META,
   PORT_TYPE_LABELS,
   type CableKind,
+  type CableThickness,
+  type CableVisibility,
 } from '@/types/project'
 import { resolveOrganizationPreferences } from '@/types/organization'
-import { cableDisplayPoints, endpointOf, endpointLabel } from '@/scene/cables'
+import {
+  cableDisplayPoints,
+  endpointOf,
+  endpointLabel,
+  resolveCableThickness,
+  resolveCableVisibility,
+} from '@/scene/cables'
 import { checkCableRoute } from '@/scene/cableRoute'
 import { computeCableAvoidZones, computeRouteNodes, routeNodeMap } from '@/scene/routeNodes'
 import { PORT_TYPE_COLORS } from '@/scene/ports'
@@ -93,8 +105,11 @@ export function CablePanel({
       objects: project.objects,
       room: project.room,
       avoidZones,
+      // 线缆间距（咨询级）：与同项目其它线缆比较，按各自线径计算最小净间隙
+      cables: project.cables,
+      selfCableId: cable.id,
     })
-  }, [cable, displayPoints, project.objects, project.room, avoidZones])
+  }, [cable, displayPoints, project.objects, project.room, avoidZones, project.cables])
 
   if (!cable || !check) {
     return (
@@ -109,6 +124,12 @@ export function CablePanel({
 
   const status = CABLE_STATUS_META[cable.status]
   const kindMeta = CABLE_KIND_META[cable.kind]
+  const visInfo = resolveCableVisibility(cable, project.objects)
+  const visMeta = CABLE_VISIBILITY_META[visInfo.visibility]
+  const thickness = resolveCableThickness(cable)
+  const thicknessMeta = CABLE_THICKNESS_META[thickness]
+  const strategyMismatch =
+    cable.route.strategy !== undefined && cable.route.strategy !== visMeta.strategy
   const innerCount = Math.max(0, cable.route.points.length - 2)
   const ids: (string | null)[] =
     cable.route.nodeIds && cable.route.nodeIds.length === cable.route.points.length
@@ -158,6 +179,25 @@ export function CablePanel({
       note: '已交换起止端点：建议重新计算走线',
       updatedAt: Date.now(),
     }))
+  }
+
+  /** 修改线材类型：策略不符时标记「需重新计算」（保留原路径供对比 / 撤销） */
+  const changeVisibility = (v: CableVisibility) => {
+    if (v === visInfo.visibility && cable.visibility === v) return
+    const nextMeta = CABLE_VISIBILITY_META[v]
+    const sameStrategy = cable.route.strategy === nextMeta.strategy
+    updateCable(project.id, cable.id, (c) => ({
+      ...c,
+      visibility: v,
+      status: sameStrategy ? c.status : 'stale',
+      note: sameStrategy
+        ? c.note
+        : `线材类型已改为「${nextMeta.label}」：需按${nextMeta.strategy === 'backboard' ? '背板后走线' : '出线槽走线'}重新计算`,
+      updatedAt: Date.now(),
+    }))
+    onFlash(
+      `线材类型已改为「${nextMeta.label}」${sameStrategy ? '' : '：走线标记为「需重新计算」，点击「更新此走线」生成新候选路径（原路径保留）'}`,
+    )
   }
 
   const mutateRoute = (
@@ -256,6 +296,11 @@ export function CablePanel({
             {kindMeta.label}
           </span>
           <Badge variant={status.tone}>{status.label}</Badge>
+          <Badge variant="default">{visMeta.label}</Badge>
+          <Badge variant="default">{thicknessMeta.label}</Badge>
+          {cable.route.strategy ? (
+            <span className="text-[11px] text-faint">当前路径：{CABLE_STRATEGY_META[cable.route.strategy].label}</span>
+          ) : null}
           {cable.planSource === 'demo-rule' ? (
             <DataBadge kind="computed" label="规则式演示" />
           ) : cable.planSource === 'algorithm' ? (
@@ -267,7 +312,7 @@ export function CablePanel({
           <div className="space-y-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[11px] leading-relaxed text-warning">
             <p className="flex items-start gap-1">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-              关联设备已移动 / 接口已修改：当前路径基于旧位置，建议重新计算。
+              关联设备 / 接口 / 线材类型已修改：当前路径需要重新计算（原路径保留，可对比 / 撤销）。
             </p>
             <Button
               size="sm"
@@ -334,6 +379,85 @@ export function CablePanel({
               </Select>
             </div>
           </div>
+        </section>
+
+        <Separator />
+
+        {/* 线材类型与线径 */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label>线材类型（可见线 / 隐藏线）</Label>
+            <span className="min-w-0 truncate text-[11px] text-faint">
+              {visInfo.source === 'explicit'
+                ? '已手动设置'
+                : visInfo.source === 'keyword'
+                  ? `默认推断：命中「${visInfo.keyword}」`
+                  : '默认推断：无匹配关键词 → 可见线'}
+            </span>
+          </div>
+          <Segmented
+            size="sm"
+            className="w-full"
+            value={visInfo.visibility}
+            onChange={changeVisibility}
+            options={[
+              { value: 'visible', label: '可见线', title: CABLE_VISIBILITY_META.visible.description },
+              { value: 'hidden', label: '隐藏线', title: CABLE_VISIBILITY_META.hidden.description },
+            ]}
+          />
+          <p className="text-[11px] leading-relaxed text-faint">
+            {CABLE_VISIBILITY_META.visible.description}；{CABLE_VISIBILITY_META.hidden.description}。默认按两端设备名称推断（显示器 / 台灯 → 隐藏线；手机 / 笔记本 → 可见线），可手动修改。
+          </p>
+          {strategyMismatch && cable.route.strategy ? (
+            <div className="space-y-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[11px] leading-relaxed text-warning">
+              <p className="flex items-start gap-1">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                当前路径为「{CABLE_STRATEGY_META[cable.route.strategy].label}」，与线材类型不符：点击按钮按新类型生成候选路径（原路径保留，可对比 / 撤销）。
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 w-full border-warning/50 text-warning"
+                disabled={busy}
+                onClick={() => onPlanCables([cable.id])}
+              >
+                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                按「{visMeta.label}」重新规划
+              </Button>
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between gap-2">
+            <Label>线径</Label>
+            <span className="text-[11px] text-faint">
+              参考直径 ≈ {Math.round(thicknessMeta.diameterM * 10000) / 10} mm · 最小弯曲半径 ≈ {Math.round(thicknessMeta.minBendRadiusM * 1000)} mm
+            </span>
+          </div>
+          <Segmented
+            size="sm"
+            className="w-full"
+            value={thickness}
+            onChange={(v: CableThickness) => {
+              updateCable(project.id, cable.id, (c) => ({ ...c, thickness: v, updatedAt: Date.now() }))
+              onFlash(
+                `线径已改为「${CABLE_THICKNESS_META[v].label}」：三维管径 / 碰撞与长度检查 / 线缆间距要求已按新线径重跑`,
+              )
+            }}
+            options={[
+              {
+                value: 'thick',
+                label: '粗线',
+                title: `参考直径 ${CABLE_THICKNESS_META.thick.diameterM * 1000} mm（电源 / 网线 / 视频线默认）`,
+              },
+              {
+                value: 'thin',
+                label: '细线',
+                title: `参考直径 ${CABLE_THICKNESS_META.thin.diameterM * 1000} mm（数据 / 充电线默认）`,
+              },
+            ]}
+          />
+          <p className="text-[11px] leading-relaxed text-faint">
+            未手动设置时按线缆类型推断（电源 / 网线 / 视频 → 粗线，数据 / 充电 → 细线）；三维渲染管径约按真实半径 1.7 倍放大以便观察。
+          </p>
         </section>
 
         <Separator />
@@ -502,8 +626,27 @@ export function CablePanel({
               </li>
             </ul>
           )}
+          {check.advisories.length > 0 ? (
+            <ul className="space-y-1">
+              {check.advisories.slice(0, 4).map((a, i) => (
+                <li
+                  key={`adv-${i}`}
+                  className="flex items-start gap-1.5 rounded-md bg-info/10 px-2 py-1.5 text-[11px] leading-relaxed text-info"
+                >
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  {a.message}
+                </li>
+              ))}
+              {check.advisories.length > 4 ? (
+                <li className="text-[11px] text-faint">… 另有 {check.advisories.length - 4} 条间距提示</li>
+              ) : null}
+            </ul>
+          ) : null}
           <p className="text-[11px] leading-relaxed text-faint">
             平滑曲线（Catmull-Rom）仅用于显示与长度估算；检查对象为平滑后的采样点，不是真实寻路算法。
+          </p>
+          <p className="text-[11px] leading-relaxed text-faint">
+            线缆间距为咨询级提示（不阻断通过）：按「粗线 6.5mm / 细线 3.5mm 参考直径 + 8mm 净间隙」计算；与其它线缆共用路由节点的并排走线视为有意共槽，不作提示。
           </p>
         </section>
 

@@ -73,6 +73,7 @@ export function SceneObjectMesh({
           shape={modelDone ? object.model.shape : 'genericBox'}
           dims={dims}
           color={CATEGORY_COLORS[object.category]}
+          sockets={object.powerStrip?.socketCount}
         />
       </group>
       {selected || hovered || dragging ? (

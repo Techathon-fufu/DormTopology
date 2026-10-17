@@ -33,6 +33,7 @@ import { isMockMode } from '@/api'
 import { nearestSupport, type SceneIssue } from '@/scene/sceneValidation'
 import { cableDisplayPoints } from '@/scene/cables'
 import { estimateCableLength } from '@/scene/cableRoute'
+import { isPowerStripObject } from '@/scene/powerStrip'
 import { PORT_TYPE_COLORS, portWorldPosition, resolvePortOffset } from '@/scene/ports'
 import { useCableLink } from '@/lib/useCableLink'
 import { degToRad, formatMeters, formatMm, mToMm, radToDeg } from '@/lib/units'
@@ -45,6 +46,7 @@ import { DataBadge } from '@/ui/kit/data-badge'
 import { Input, Label, Select, Separator } from '@/ui/kit/primitives'
 import { MmInput } from '@/ui/kit/mm-input'
 import { ObjectIcon } from './objectIcons'
+import { PowerStripSection } from './PowerStripSection'
 
 const MODEL_BADGE: Record<ModelStatus, 'default' | 'warning' | 'success' | 'danger' | 'primary'> = {
   none: 'default',
@@ -371,6 +373,8 @@ function ObjectInspector({
           </div>
         </div>
       </section>
+
+      {isPowerStripObject(object) ? <PowerStripSection project={project} object={object} /> : null}
 
       <section className="space-y-1.5">
         <div className="flex items-center justify-between">
