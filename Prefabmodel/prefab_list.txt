@@ -1,0 +1,11 @@
+mouse
+keyboard
+tissue_box
+cup
+stainless bottle
+phone
+mouse_pad
+charger
+monitor
+laptop_fold
+laptop_expand

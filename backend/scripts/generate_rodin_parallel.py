@@ -25,57 +25,43 @@ if str(PROJECT_ROOT) not in sys.path:
 from backend.app.adapters.rodin_adapter import RodinClient, RodinAPIError
 
 
-ITEMS_TO_GENERATE = [
-    {
-        "id": "item_07",
-        "name": "充电器",
-        "output_name": "charger.glb",
-        "prompt": "A modern white compact multi-port USB-C fast charging wall adapter plug",
-        "tier": "basic",
-    },
-    {
-        "id": "item_06",
-        "name": "排插",
-        "output_name": "power_strip.glb",
-        "prompt": "A desktop multi-socket power strip surge protector with white housing and switches",
-        "tier": "basic",
-    },
-    {
-        "id": "item_08",
-        "name": "纸巾包",
-        "output_name": "tissue_pack.glb",
-        "prompt": "A small soft plastic packet of pocket facial tissues, white and blue branding",
-        "tier": "basic",
-    },
-    {
-        "id": "item_04",
-        "name": "鼠标垫",
-        "output_name": "mousepad.glb",
-        "prompt": "A large rectangular black desk mouse pad mat with stitched edges",
-        "tier": "basic",
-    },
-    {
-        "id": "item_01",
-        "name": "机械键盘",
-        "output_name": "keyboard.glb",
-        "prompt": "A compact mechanical computer keyboard with black keycaps and aluminum frame",
-        "tier": "basic",
-    },
-    {
-        "id": "item_09",
-        "name": "平板",
-        "output_name": "tablet.glb",
-        "prompt": "A sleek modern touchscreen tablet computer lying flat, dark bezel",
-        "tier": "basic",
-    },
-    {
-        "id": "item_02",
-        "name": "笔记本",
-        "output_name": "laptop.glb",
-        "prompt": "A thin metallic laptop computer open on a desk, modern workstation",
-        "tier": "basic",
-    },
-]
+def load_tasks_from_contract(contract_path: Path) -> List[Dict[str, Any]]:
+    """
+    Dynamically loads tasks from contract, strictly filtering out:
+    1. Items matching the PREFAB catalog (handled via preset models)
+    2. Items matching standard parts (e.g. power strip)
+    Only items with model_source == 'rodin' are returned for 3D generation.
+    """
+    if not contract_path.exists():
+        print(f"[!] Contract not found: {contract_path}")
+        return []
+
+    data = json.loads(contract_path.read_text(encoding="utf-8"))
+    items = data.get("items", [])
+
+    tasks = []
+    for it in items:
+        name = it.get("name", "")
+        source = it.get("model_source", "rodin")
+        
+        # Exclude standard parts
+        if any(k in name for k in ["排插", "插排", "接线板"]):
+            continue
+
+        # Exclude prefab models
+        if source == "prefab" or it.get("prefab_key"):
+            continue
+
+        iid = it["id"]
+        tasks.append({
+            "id": iid,
+            "name": name,
+            "output_name": f"{iid}.glb",
+            "prompt": f"A realistic 3D model of {name}, high fidelity, accurate desktop object proportions",
+            "tier": "basic",
+        })
+    return tasks
+
 
 LOCK = threading.Lock()
 
@@ -178,13 +164,26 @@ def main():
         print("[ERROR] No API keys found! Exiting.", flush=True)
         sys.exit(1)
 
+    contract_path = PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_pose_test.json"
+    if not contract_path.exists():
+        contract_path = PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_round2.json"
+
+    tasks = load_tasks_from_contract(contract_path)
+    print(f"[*] Dynamically loaded {len(tasks)} Rodin 3D generation tasks from {contract_path.name}:", flush=True)
+    for t in tasks:
+        print(f"    - {t['id']} ({t['name']}) -> {t['output_name']}", flush=True)
+
+    if not tasks:
+        print("[+] All items are covered by PREFAB catalog or standard parts. Zero Rodin tasks needed!", flush=True)
+        return
+
     # Initialize key queue
     key_queue = Queue()
     for k in keys:
         key_queue.put(k)
 
-    max_workers = min(len(keys), len(ITEMS_TO_GENERATE))
-    print(f"[*] Launching {len(ITEMS_TO_GENERATE)} tasks with {max_workers} parallel workers...", flush=True)
+    max_workers = min(len(keys), len(tasks))
+    print(f"[*] Launching {len(tasks)} tasks with {max_workers} parallel workers...", flush=True)
 
     start_time = time.monotonic()
     results = []
@@ -192,7 +191,7 @@ def main():
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(worker_task, item, key_queue): item["id"]
-            for item in ITEMS_TO_GENERATE
+            for item in tasks
         }
 
         for f in as_completed(futures):

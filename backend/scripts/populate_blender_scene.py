@@ -223,13 +223,15 @@ for item in items:
                 dropped_count += 1
             continue
         else:
-            print(f"[!] Model file not found: {model_full}")
+            print(f"[*] Model file pending: {model_full}")
             
-    # 3. Fallback to placeholder box only for items without model_url (e.g. laptop)
-    if not model_rel:
-        create_placeholder_box(f"Placeholder_{iid}_{iname}", size, pos, items_col)
-        print(f"[+] Created placeholder for {iid} ({iname}) at {pos}")
-        placed_count += 1
+    # 3. Fallback to placeholder box if model file is not provided yet (e.g. pending prefab asset)
+    source = item.get("model_source", "generic")
+    prefab_key = item.get("prefab_key")
+    label = f"PREFAB_{prefab_key}" if prefab_key else iname
+    create_placeholder_box(f"Box_{iid}_{label}", size, pos, items_col)
+    print(f"[+] Created placeholder reference for {iid} ({label}) at {pos}")
+    placed_count += 1
 
 
 # -------------------------------------------------------------
