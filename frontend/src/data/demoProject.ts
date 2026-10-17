@@ -22,8 +22,9 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
  * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
  * v4：来源分支分别接入家具几何和预制物品。
  * v5：合并真实 L 形桌面、书架及抽屉支撑与预制物品尺寸/碰撞；归档两个不同的旧 v4 示例。
+ * v6：键鼠区左移 6cm，给真实笔记本留出主桌面侧位，避免与打印机争用回台。
  */
-export const DEMO_SEED_VERSION = 5
+export const DEMO_SEED_VERSION = 6
 
 export const DEMO_ROOM_NOTE =
   '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
@@ -561,7 +562,8 @@ export function createDemoProject(): Project {
     room: createStandardRoom(),
     objects,
     cables: createDemoCables(objects),
-    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backRight' },
+    // 保留 55cm 键鼠区；左移 6cm 后，右侧净宽 36.5cm 可容纳真实笔记本。
+    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, typingOffsetX: -0.06, cupCorner: 'backRight' },
     demoSeedVersion: DEMO_SEED_VERSION,
     stage: 'organize',
   }
