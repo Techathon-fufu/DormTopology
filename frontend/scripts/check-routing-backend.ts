@@ -8,6 +8,8 @@ import { canonicalScene, toPackingPosition } from '../src/api/core/packingWire'
 import { apiBaseUrl } from '../src/api/core/config'
 import { cablePlanningInputSignature, mapRoutingResult, toRoutingScene } from '../src/api/core/routingWire'
 import { resolveOrganizationPreferences } from '../src/types/organization'
+import { createCableManagementPreset } from '../src/scene/cableManagement'
+import { buildAccessories } from '../src/lib/guide'
 import type { Project, SceneObject } from '../src/types/project'
 
 const demo = createDemoProject()
@@ -32,10 +34,48 @@ assert.ok(scene.routing_graph.edges.some((edge) => edge.modes.includes('backboar
 assert.ok(scene.routing_graph.nodes.some((node) => node.kind === 'slot'))
 assert.ok(scene.routing_graph.nodes.some((node) => node.kind === 'fixing_point'))
 assert.ok(!('supports' in scene.routing_graph), 'do not invent installed ties or trays')
+assert.deepEqual(scene.reserved_zones, [], 'typing, cup and legroom zones only constrain item placement')
+assert.equal(scene.cables[0].min_bend_radius_m, 0)
+assert.ok(scene.routing_graph.edges.some((edge) => !edge.exposed && [edge.from_node_id, edge.to_node_id].every((id) => id.includes(':edge-rear:'))), 'the rear tabletop has preferred routing lanes')
+const mounts = createCableManagementPreset(project.room, 'rear-clips')
+const managed = { ...project, room: { ...project.room, cableManagement: { mounts, verifySupport: false, maxUnsupportedSpanM: .3 } } }
+assert.ok(!toRoutingScene({ project: managed, confirmed: true }).routing_graph.supports)
+const installed = { ...managed, room: { ...managed.room, cableManagement: { ...managed.room.cableManagement, verifySupport: true,
+  mounts: mounts.map((mount) => ({ ...mount, installed: true })) } } }
+const installedScene = toRoutingScene({ project: installed, confirmed: true })
+assert.equal(installedScene.routing_graph.support_policy?.max_unsupported_span_m, .3)
+assert.ok(mounts.every((mount) => installedScene.routing_graph.supports?.some((support) => support.id === mount.id)))
+assert.equal(buildAccessories(installed).find((row) => row.id === 'clip')?.count, mounts.length, 'shared physical mounts are counted once even before routes exist')
 assert.ok(scene.obstacles.some((obstacle) => obstacle.id.startsWith('furniture:desk-top:')))
 assert.ok(!scene.obstacles.some((obstacle) => obstacle.id === 'furniture:desk-top'), 'the hole must also open the collision geometry')
 const hole = toPackingPosition(project.room.cableHoles[0].position, project.room)
 assert.ok(scene.obstacles.filter((obstacle) => obstacle.id.startsWith('furniture:desk-top:')).every((obstacle) => !(hole[0] > obstacle.min[0] && hole[0] < obstacle.max[0] && hole[2] > obstacle.min[2] && hole[2] < obstacle.max[2])))
+const slotNodes = scene.routing_graph.nodes.filter((node) => node.kind === 'slot')
+const holeNodes = scene.routing_graph.nodes.filter((node) => node.id.includes(':hole:'))
+assert.equal(slotNodes.length, 10, 'only actual top/under opening nodes satisfy the slot strategy')
+assert.equal(holeNodes.length, 20, 'a normal hole has five conservative lanes, each with an underside and three bounded tabletop crossing levels')
+assert.ok(holeNodes.filter((node) => node.id.includes(':upper-')).every((node) => node.kind === 'corner'),
+  'crossing above an opening never satisfies the slot strategy')
+const holeHalf = project.room.cableHoles[0].diameter / (2 * Math.sqrt(2))
+for (const node of holeNodes) {
+  const inset = Math.max(Math.abs(node.position[0] - hole[0]), Math.abs(node.position[2] - hole[2]))
+  for (const edge of scene.routing_graph.edges.filter((edge) => edge.from_node_id === node.id || edge.to_node_id === node.id)) {
+    assert.ok(edge.clearance_radius_m <= holeHalf - inset - .002 + 1e-9, 'every lane edge respects its remaining conservative opening clearance')
+  }
+}
+const narrowHoleScene = toRoutingScene({ project: { ...project, room: { ...project.room,
+  cableHoles: project.room.cableHoles.map((hole) => ({ ...hole, diameter: .02 })) } }, confirmed: true })
+const narrowSlotNodes = narrowHoleScene.routing_graph.nodes.filter((node) => node.kind === 'slot')
+assert.equal(narrowSlotNodes.length, 2)
+assert.equal(narrowHoleScene.routing_graph.nodes.filter((node) => node.id.includes(':hole:')).length, 4)
+assert.equal(new Set(narrowSlotNodes.map((node) => `${node.position[0]}:${node.position[2]}`)).size, 1,
+  'a narrow hole gains no lateral positions outside its conservative opening')
+assert.ok(holeNodes.every((node) => node.position[1] <= project.room.desk.height + .03 + 1e-9))
+const approaches = scene.routing_graph.nodes.filter((node) => node.id.includes(':approach:'))
+assert.equal(approaches.length, 4)
+assert.ok(approaches.every((node) => node.kind === 'corner'), 'a local cable crossing never satisfies the selected routing strategy')
+assert.ok(approaches.every((node) => scene.routing_graph.edges.filter((edge) => edge.from_node_id === node.id || edge.to_node_id === node.id).length <= 8),
+  'local connector escapes have bounded graph degree')
 assert.equal(scene.cables[0].length_m, 2)
 assert.equal(scene.cables[0].slack_m, .05)
 assert.equal(scene.cables[0].mode, 'backboard')
@@ -66,6 +106,29 @@ function runDomain(value: unknown): Record<string, any> {
 const result = runDomain(scene)
 assert.equal(result.status, 'success', JSON.stringify(result))
 const valid = mapRoutingResult(result, { scene, project })
+assert.equal(buildAccessories({ ...installed, cables: valid.cables }).find((row) => row.id === 'clip')?.count, mounts.length, 'configured shared hardware replaces per-route estimates')
+const supportedScene = { ...installedScene, baseline_id: scene.baseline_id, routing_graph: { ...installedScene.routing_graph,
+  support_policy: { max_unsupported_span_m: 2 } } }
+const supported = runDomain(supportedScene)
+assert.equal(supported.status, 'success', JSON.stringify(supported))
+const supportedMapped = mapRoutingResult(supported, { scene: supportedScene, project: installed })
+assert.equal(supportedMapped.cables[0].route.verification?.supportStatus, 'verified')
+assert.equal(supportedMapped.cables[0].route.verification?.maxUnsupportedSpanM, supported.cables[0].support_check.max_unsupported_span_m)
+assert.throws(() => mapRoutingResult({ ...supported, cables: [{ ...supported.cables[0], support_check: { ...supported.cables[0].support_check, support_ids: ['invented'] } }] }, { scene: supportedScene, project: installed }), /支撑/)
+assert.throws(() => mapRoutingResult({ ...supported, cables: [{ ...supported.cables[0], support_check: undefined }] }, { scene: supportedScene, project: installed }), /支撑/)
+const paired: Project = { ...project,
+  objects: project.objects.map((object) => ({ ...object, ports: [...object.ports, { ...object.ports[0], id: `${object.id}:second`, offset: [.02, .02, -.04] }] })),
+  room: { ...project.room, cableManagement: { mounts: createCableManagementPreset(project.room, 'underside-tray'), verifySupport: false, maxUnsupportedSpanM: .3 } },
+  cables: [...project.cables, { ...project.cables[0], id: 'second-wire',
+    from: { ...project.cables[0].from, portId: `${a.id}:second` }, to: { ...project.cables[0].to, portId: `${b.id}:second` } }],
+}
+const trayScene = { ...toRoutingScene({ project: paired, confirmed: true }), baseline_id: scene.baseline_id }
+assert.equal(trayScene.routing_graph.tray_candidates?.length, 1)
+assert.equal(trayScene.routing_graph.supports, undefined, 'a proposed tray is never an installed support')
+const trayResult = runDomain(trayScene)
+assert.ok(trayResult.underside_tray_optimizations.length > 0)
+assert.equal(mapRoutingResult(trayResult, { scene: trayScene, project: paired }).trayAnalysis?.optimizations.length, trayResult.underside_tray_optimizations.length)
+assert.throws(() => mapRoutingResult({ ...trayResult, underside_tray_optimizations: [{ ...trayResult.underside_tray_optimizations[0], mount: { ...trayResult.underside_tray_optimizations[0].mount, obstacle_id: 'invented' } }] }, { scene: trayScene, project: paired }), /集线槽/)
 const unknownResult = runDomain(unknownScene)
 assert.equal(unknownResult.status, 'success', JSON.stringify(unknownResult))
 assert.deepEqual(unknownResult.cables, result.cables, 'unknown availability changes no geometry or computed length')

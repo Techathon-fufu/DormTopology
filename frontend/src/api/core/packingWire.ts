@@ -1,6 +1,7 @@
 import type { LayoutPlan, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, OrganizationSceneRef, PlanAssignment, ZoneKind } from '@/types/organization'
 import { exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
+import { DEFAULT_MIN_ITEM_GAP_M, organizationClearanceIssues, organizationReservedZones } from '@/scene/organizationClearance'
 import { roomSolids } from '@/scene/roomCollision'
 import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { BED_UNDERSIDE_Y, computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
@@ -10,6 +11,7 @@ import { localDirVec, resolvePortOffset } from '@/scene/ports'
 import { estimateDeskFreeArea } from '@/scene/ruleLayout'
 import { uid } from '@/lib/utils'
 import { ApiError } from './errors'
+import type { RoutingSupport, TrayCandidate } from '@/algorithm-lab/contract'
 
 interface PackingRegion {
   id: string
@@ -50,6 +52,9 @@ export interface SceneBox {
 export interface RoutingGraph {
   nodes: Array<{ id: string; position: Vec3; kind: 'corner' | 'slot' | 'fixing_point' | 'endpoint' }>
   edges: Array<{ id: string; from_node_id: string; to_node_id: string; modes: Array<'slot' | 'backboard'>; clearance_radius_m: number; exposed: boolean }>
+  support_policy?: { max_unsupported_span_m: number }
+  supports?: RoutingSupport[]
+  tray_candidates?: TrayCandidate[]
 }
 
 export interface RoutingCable {
@@ -81,6 +86,7 @@ export interface PackingScene {
   exposure_zones: SceneBox[]
   routing_graph: RoutingGraph
   cables: RoutingCable[]
+  constraints?: { min_item_gap_m: number }
 }
 
 export function toPackingPosition(position: Vec3, room: RoomConfig): Vec3 {
@@ -96,12 +102,19 @@ function category(object: SceneObject): string {
   return object.model.shape ?? object.category
 }
 
+function packingHoleZones(room: RoomConfig): SceneBox[] {
+  try {
+    return organizationReservedZones(room).map((zone) => ({ id: zone.id, min: toPackingPosition(zone.min, room), max: toPackingPosition(zone.max, room) }))
+  } catch (error) { throw new ApiError(error instanceof Error ? error.message : '出线孔配置无效', { kind: 'input' }) }
+}
+
 /** Product coordinates and local collision/port geometry share one translation. */
 export function toPackingScene(input: {
   projectId: string; objects: SceneObject[]; room: RoomConfig; preferences: OrganizationPreferences
   confirmed: boolean; ref?: OrganizationSceneRef | null
 }): PackingScene {
   const { room, preferences } = input
+  const reservedZones = packingHoleZones(room)
   const zones = computeOrganizationZones(room, preferences)
   const solids = roomSolids(room)
   const regions: PackingRegion[] = []
@@ -152,7 +165,7 @@ export function toPackingScene(input: {
       if (!printerIds.length && !object.fixed && !object.locked) throw new ApiError(`${object.name}：桌面没有可用的侧部设备区，请调整键鼠区或显示器位置`, { kind: 'input' })
       allowed = printerIds
     }
-    else if (shape === 'laptop' || shape === 'lamp') allowed = clearIds
+    else if (shape === 'laptop' || shape === 'lamp' || shape === 'powerAdapter') allowed = clearIds
     else if (object.powerStrip || shape === 'powerStrip') {
       allowed = [...(hasFixedFurniture(room) ? [] : ['support-beam']), ...clearIds]
       preferred = hasFixedFurniture(room) ? clearIds : ['support-beam']
@@ -202,7 +215,8 @@ export function toPackingScene(input: {
     desk: { width_m: room.desk.width, depth_m: room.desk.depth, top_height_m: room.desk.height },
     wall: { z_m: toPackingPosition([0, 0, 0], room)[2], bounds_xy_m: [toPackingPosition([-room.length / 2, 0, 0], room)[0], toPackingPosition([room.length / 2, 0, 0], room)[0], 0, room.height] },
     items, regions, obstacles: solids.map((s) => ({ id: `furniture:${s.id}`, min: toPackingPosition(s.min, room), max: toPackingPosition(s.max, room) })),
-    reserved_zones: [], exposure_zones: [], routing_graph: { nodes: [], edges: [] }, cables: [],
+    reserved_zones: reservedZones, exposure_zones: [], routing_graph: { nodes: [], edges: [] }, cables: [],
+    constraints: { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M },
   }
 }
 
@@ -233,9 +247,13 @@ export function canonicalScene(raw: unknown, expected?: PackingScene, expectedRe
   const scene = record(raw)
   if (scene.schema_version !== '1.0' || typeof scene.scene_id !== 'string' || !scene.scene_id || !Number.isInteger(scene.scene_revision) || Number(scene.scene_revision) < 1 || typeof scene.baseline_id !== 'string' || !scene.baseline_id) fail('后端未返回有效的正式场景标识、版本或原始快照')
   if (!Array.isArray(scene.items) || !Array.isArray(scene.regions) || !Array.isArray(scene.obstacles)) fail('后端正式场景结构不完整')
+  if (scene.constraints !== undefined) {
+    const constraints = record(scene.constraints)
+    if (typeof constraints.min_item_gap_m !== 'number' || !Number.isFinite(constraints.min_item_gap_m) || constraints.min_item_gap_m < 0) fail('后端正式场景的物品最小间距无效')
+  }
   if (expectedRef && (scene.scene_id !== expectedRef.sceneId || scene.scene_revision !== expectedRef.sceneRevision || scene.baseline_id !== expectedRef.baselineId)) fail('后端正式场景标识或版本与本次提交不匹配')
   if (expected) {
-    for (const key of ['template_id', 'desk', 'wall', 'regions', 'obstacles', 'reserved_zones', 'exposure_zones', 'routing_graph', 'cables'] as const) {
+    for (const key of ['template_id', 'desk', 'wall', 'regions', 'obstacles', 'reserved_zones', 'exposure_zones', 'routing_graph', 'cables', 'constraints'] as const) {
       if (!sameStructure(scene[key], expected[key])) fail('后端正式场景意外修改了提交的支撑区域或碰撞几何')
     }
     const expectedIds = new Set(expected.items.map((i) => i.id))
@@ -263,7 +281,7 @@ export interface PackingMapContext {
 }
 
 export function organizationInputSignature(input: { objects: SceneObject[]; room: RoomConfig; preferences: OrganizationPreferences }): string {
-  return JSON.stringify([input.objects, input.room, input.preferences])
+  return JSON.stringify([input.objects, input.room, input.preferences, { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M }])
 }
 
 export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContext): OrganizationPlan {
@@ -330,6 +348,10 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
   }
   if (pending.size) fail('整理结果未覆盖所有输入物品')
   const localIssues: OrganizationIssue[] = targets.flatMap((object) => placementIssues(object, object.transform.position, targets, ctx.room).map((issue) => ({ entity_id: object.id, code: issue.type, message: issue.message })))
+  const reservedZones = ctx.scene.reserved_zones.map((zone) => ({ id: zone.id, label: '出线孔上方保留空间',
+    min: fromPackingPosition(zone.min, ctx.room), max: fromPackingPosition(zone.max, ctx.room) }))
+  const minimumGap = ctx.scene.constraints?.min_item_gap_m ?? 0
+  localIssues.push(...organizationClearanceIssues(targets, ctx.room, minimumGap, reservedZones))
   for (const printer of targets.filter((object) => object.model.shape === 'printer' && !object.fixed && !object.locked && assignments.find((a) => a.objectId === object.id)?.placementStatus !== 'unplaced')) {
     const bounds = worldCollision(printer).bounds
     const sharesViewColumn = targets.filter((object) => object.model.shape === 'monitor').some((monitor) => {
@@ -338,7 +360,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     })
     if (sharesViewColumn) localIssues.push({ entity_id: printer.id, code: 'device_access', message: '打印机未位于最终显示器的侧部，需调整设备位置后重新整理' })
   }
-  const applicable = status !== 'infeasible' && localIssues.length === 0 && !issues.some((i) => i.code === 'target_region')
+  const applicable = status !== 'infeasible' && localIssues.length === 0 && !issues.some((i) => i.code === 'target_region' || i.code === 'item_spacing')
   issues.push(...localIssues)
   if (status === 'success' && unplaced.length > 0) fail('成功布局包含未放置物品')
   const poses = (objects: SceneObject[]) => objects.map((object) => ({ object, position: object.transform.position }))

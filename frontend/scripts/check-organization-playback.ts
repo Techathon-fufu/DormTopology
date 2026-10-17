@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createDemoProject } from '../src/data/demoProject'
+import { createLegacyDemoProject as createDemoProject } from './fixtures/legacyDemo'
 import { computeRuleBasedPlan } from '../src/scene/ruleLayout'
 import { resolveOrganizationPreferences } from '../src/types/organization'
 import { compileOrganizationCommands } from '../src/lib/organizationCommands'

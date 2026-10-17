@@ -324,6 +324,7 @@ export function WorkspacePage() {
       const updatedById = new Map(result.cables.map((c) => [c.id, c]))
       const nextCables = current.cables.map((c) => updatedById.get(c.id) ?? c)
       useWorkspaceStore.getState().replaceCables(p.id, nextCables, true)
+      useProjectsStore.getState().update(p.id, (project) => ({ ...project, cableTrayAnalysis: result.trayAnalysis }))
 
       const summary = `规划 ${result.plannedCount} 条${
         result.conflictCount > 0 ? `，${result.conflictCount} 条存在障碍（见右侧路径检查）` : ''

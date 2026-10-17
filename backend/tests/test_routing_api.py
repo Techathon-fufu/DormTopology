@@ -82,6 +82,20 @@ class RoutingAPITests(unittest.TestCase):
                 restarted.get(f"/api/v1/jobs/{accepted['job_id']}").json(), job
             )
 
+    def test_zero_bend_limit_is_persisted_and_planned_through_http(self):
+        scene = scene_for("backboard")
+        scene["cables"][0].update(min_bend_radius_m=0, length_m=None)
+        saved = self.save(scene)
+        self.assertEqual(saved["cables"][0]["min_bend_radius_m"], 0)
+        accepted = self.submit(saved)
+        self.assertEqual(accepted.status_code, 202, accepted.text)
+        job = self.wait(accepted.json()["job_id"])
+        self.assertEqual(job["status"], "succeeded", job)
+        self.assertEqual(job["result"]["status"], "success")
+        self.assertEqual(job["result"]["cables"][0]["status"], "valid")
+        self.assertTrue(job["result"]["cables"][0]["curve_segments"])
+        self.assertEqual(self.client.get("/api/v1/projects/project/scene").json(), saved)
+
     def test_unknown_length_is_saved_and_planned_without_fabricating_availability(self):
         scene = scene_for()
         scene["cables"][0]["length_m"] = None

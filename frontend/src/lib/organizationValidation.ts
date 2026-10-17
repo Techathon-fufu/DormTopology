@@ -1,6 +1,7 @@
 import type { LayoutAssignment, Project, RoomConfig, SceneObject } from '@/types/project'
 import type { OrganizationPlan } from '@/types/organization'
 import { placementIssues } from '@/scene/sceneValidation'
+import { organizationClearanceIssues } from '@/scene/organizationClearance'
 
 export function organizationPlanFailure(plan: OrganizationPlan): string | null {
   if (plan.serviceMeta?.status === 'infeasible' || plan.serviceMeta?.applicable === false) {
@@ -42,6 +43,13 @@ export function assertScenePlacement(objects: SceneObject[], room: RoomConfig, c
   if (messages.length > 0) throw new Error(`布局校验未通过：${messages.slice(0, 3).join('；')}${messages.length > 3 ? `；另有 ${messages.length - 3} 项` : ''}`)
 }
 
+/** Recommended layouts also retain handling clearance; baseline and undo keep their original policy. */
+export function assertRecommendedScenePlacement(objects: SceneObject[], room: RoomConfig, current: SceneObject[]): void {
+  assertScenePlacement(objects, room, current)
+  const issues = organizationClearanceIssues(objects, room)
+  if (issues.length) throw new Error(`布局校验未通过：${issues.slice(0, 3).map((issue) => issue.message).join('；')}${issues.length > 3 ? `；另有 ${issues.length - 3} 项` : ''}`)
+}
+
 export function objectsWithAssignments(
   objects: SceneObject[],
   assignments: Pick<LayoutAssignment, 'objectId' | 'position' | 'rotationY'>[],
@@ -74,5 +82,5 @@ export function assertOrganizationApplicable(plan: OrganizationPlan, project: Pr
       throw new Error('后端方案缺少有效的场景版本或应用确认，请重新生成')
     }
   }
-  assertScenePlacement(objectsWithAssignments(project.objects, plan.assignments), project.room, project.objects)
+  assertRecommendedScenePlacement(objectsWithAssignments(project.objects, plan.assignments), project.room, project.objects)
 }

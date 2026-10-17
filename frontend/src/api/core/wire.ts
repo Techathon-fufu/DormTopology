@@ -229,11 +229,11 @@ export interface WireScenePayload {
 export const CABLE_DIAMETER_PRESETS: Record<'thick' | 'thin', { diameter_m: number; min_bend_radius_m: number }> = {
   thick: {
     diameter_m: CABLE_THICKNESS_META.thick.diameterM,
-    min_bend_radius_m: CABLE_THICKNESS_META.thick.minBendRadiusM,
+    min_bend_radius_m: 0,
   },
   thin: {
     diameter_m: CABLE_THICKNESS_META.thin.diameterM,
-    min_bend_radius_m: CABLE_THICKNESS_META.thin.minBendRadiusM,
+    min_bend_radius_m: 0,
   },
 }
 
@@ -289,7 +289,7 @@ export function toWireCable(c: CableConnection, objects: SceneObject[]): WireCab
     to: { object_id: c.to.objectId, port_id: c.to.portId },
     mode: visibility === 'hidden' ? 'backboard' : 'slot',
     diameter_m: meta.diameterM,
-    min_bend_radius_m: meta.minBendRadiusM,
+    min_bend_radius_m: 0,
     length_m: c.actualLengthM ?? null,
   }
 }

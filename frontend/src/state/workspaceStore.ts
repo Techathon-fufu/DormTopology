@@ -4,14 +4,16 @@ import type {
   LayoutAssignment,
   LayoutPlan,
   PowerStripConfig,
+  RoomConfig,
   SceneObject,
   Vec3,
 } from '@/types/project'
+import type { CableManagementConfig } from '@/types/cableManagement'
 import { ensureDefaultPorts as defaultPortsForObject } from '@/scene/ports'
 import { cableRoutingObjectsSignature, invalidateCableRoutes } from '@/scene/cables'
 import { computePowerStripSpecChange, stripLengthFor } from '@/scene/powerStrip'
 import { clonePlanData } from '@/lib/plans'
-import { assertScenePlacement, objectsWithAssignments } from '@/lib/organizationValidation'
+import { assertRecommendedScenePlacement, assertScenePlacement, objectsWithAssignments } from '@/lib/organizationValidation'
 import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
@@ -61,6 +63,7 @@ export type ObjectPatch = Partial<
 interface HistorySnapshot {
   objects: SceneObject[]
   cables: CableConnection[]
+  cableManagement?: RoomConfig['cableManagement']
 }
 
 const HISTORY_LIMIT = 40
@@ -169,13 +172,14 @@ interface WorkspaceState {
   ) => void
   removeCable: (projectId: string, cableId: string, record?: boolean) => void
   replaceCables: (projectId: string, cables: CableConnection[], record?: boolean) => void
+  updateCableManagement: (projectId: string, config: CableManagementConfig) => void
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   /** 统一的「记录历史 + 写入项目」入口（物品与线缆一并快照） */
   function commit(
     projectId: string,
-    patch: { objects?: SceneObject[]; cables?: CableConnection[] },
+    patch: { objects?: SceneObject[]; cables?: CableConnection[]; cableManagement?: CableManagementConfig },
     record: boolean,
   ) {
     if (useOrganizeStore.getState().applying) throw new Error('整理方案正在应用，请稍后再修改场景')
@@ -195,12 +199,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       useCableStore.getState().resetAnim()
     }
     set((s) => ({
-      past: record ? pushPast(s.past, { objects: project.objects, cables: project.cables }) : s.past,
+      past: record ? pushPast(s.past, { objects: project.objects, cables: project.cables, cableManagement: project.room.cableManagement }) : s.past,
       future: record ? [] : s.future,
     }))
     useProjectsStore.getState().update(projectId, (p) => ({
       ...p,
       objects: patch.objects ?? p.objects,
+      room: patch.cableManagement ? { ...p.room, cableManagement: patch.cableManagement } : p.room,
       cables,
     }))
   }
@@ -232,13 +237,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({
         past: state.past.slice(0, -1),
         future: [
-          { objects: project.objects, cables: project.cables },
+          { objects: project.objects, cables: project.cables, cableManagement: project.room.cableManagement },
           ...state.future,
         ].slice(0, HISTORY_LIMIT),
       })
       useProjectsStore.getState().update(projectId, (p) => ({
         ...p,
         objects: prev.objects,
+        room: { ...p.room, cableManagement: prev.cableManagement },
         cables: invalidateCableRoutes(prev.cables),
       }))
       useCableStore.getState().resetAnim()
@@ -252,13 +258,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (!next || !project) return
       set({
         future: state.future.slice(1),
-        past: pushPast(state.past, { objects: project.objects, cables: project.cables }),
+        past: pushPast(state.past, { objects: project.objects, cables: project.cables, cableManagement: project.room.cableManagement }),
       })
       useProjectsStore.getState().update(projectId, (p) => ({
         ...p,
         objects: next.objects,
+        room: { ...p.room, cableManagement: next.cableManagement },
         cables: invalidateCableRoutes(next.cables),
       }))
+      useCableStore.getState().resetAnim()
+    },
+
+    updateCableManagement(projectId, config) {
+      const project = useProjectsStore.getState().projects[projectId]
+      if (!project || JSON.stringify(project.room.cableManagement) === JSON.stringify(config)) return
+      commit(projectId, { cableManagement: config, cables: invalidateCableRoutes(project.cables) }, true)
       useCableStore.getState().resetAnim()
     },
 
@@ -415,7 +429,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             rotationY: a.rotationY,
           }))
         const nextObjects = objectsWithAssignments(project.objects, assignments)
-        assertScenePlacement(nextObjects, project.room, project.objects)
+        assertRecommendedScenePlacement(nextObjects, project.room, project.objects)
         commit(projectId, { objects: nextObjects, cables: invalidateCableRoutes(project.cables) }, true)
         useCableStore.getState().resetAnim()
         return finish({
@@ -455,7 +469,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           ports: snap.ports ? clonePlanData(snap.ports) : o.ports,
         }
       })
-      assertScenePlacement(nextObjects, project.room, project.objects)
+      assertRecommendedScenePlacement(nextObjects, project.room, project.objects)
 
       const portIdsByObject = new Map(nextObjects.map((o) => [o.id, new Set(o.ports.map((p) => p.id))]))
       const endpointOk = (end: CableConnection['from']): boolean => {

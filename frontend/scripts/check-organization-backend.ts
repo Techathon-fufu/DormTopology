@@ -14,7 +14,12 @@ const input = { projectId: demo.id, objects: demo.objects, room: demo.room, pref
 const scene = toPackingScene(input)
 assert.equal(scene.obstacles.length, 13)
 assert.equal(new Set(scene.regions.map((r) => r.id)).size, scene.regions.length)
-assert.deepEqual(scene.reserved_zones, [])
+assert.deepEqual(scene.reserved_zones, demo.room.cableHoles.map((hole) => {
+  const half = hole.diameter / 2 + .01
+  return { id: `packing:hole:${hole.id}`,
+    min: toPackingPosition([hole.position[0] - half, demo.room.desk.height, hole.position[2] - half], demo.room),
+    max: toPackingPosition([hole.position[0] + half, demo.room.desk.height + .05, hole.position[2] + half], demo.room) }
+}))
 const typing = scene.regions.find((region) => region.id === 'typing')!
 for (const preferredStorageZone of ['desk', 'shelf', 'underDesk'] as const) {
   const variant = toPackingScene({ ...input, preferences: { ...preferences, preferredStorageZone } })

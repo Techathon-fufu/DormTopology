@@ -78,7 +78,7 @@ assert.ok(check(cable, [from, to, closeBlocker]).issues.some((issue) => issue.ki
 const radiusBlocker = { ...blocker, id: 'radius-obstacle', transform: { position: [0, 1.3, 1.023] as Vec3, rotationY: 0 } }
 assert.ok(check(cable, [from, to, radiusBlocker]).issues.some((issue) => issue.kind === 'object'), 'collision includes the cable radius')
 const tight = { ...cable, route: { ...cable.route, points: [cable.from.position, [-0.01, 1.32, 1], [0, 1.33, 1], [0.01, 1.32, 1], cable.to.position] as Vec3[] } }
-assert.ok(check(tight).issues.some((issue) => issue.message.includes('弯曲半径')), 'a tight smooth turn fails the local bend estimate')
+assert.ok(!check(tight).issues.some((issue) => issue.message.includes('弯曲半径')), 'product routing does not impose a thickness-derived bend limit')
 
 const verifiedCable: CableConnection = { ...cable, status: 'planned', planSource: 'algorithm', route: { ...cable.route,
   pathLengthM: 0.36, verification: { sceneId: 'scene-test', sceneRevision: 1, status: 'valid', supportStatus: 'not_evaluated' } } }
@@ -144,7 +144,7 @@ const snapshotProject = makeProject([from, to].map((entry) => ({ ...entry,
 const snapshot = planFromProject(snapshotProject, 'candidate', 'previously validated')
 useProjectsStore.setState({ projects: { [fixture.id]: structuredClone(snapshotProject) } })
 const laterObstacle = { ...device('later-obstacle', 0), ports: [],
-  transform: { position: [0, demo.room.desk.height, 0.6] as Vec3, rotationY: 0 } }
+  transform: { position: [0, demo.room.desk.height, 0.5] as Vec3, rotationY: 0 } }
 workspace().addObject(fixture.id, laterObstacle)
 assert.equal(workspace().applyPlanSnapshot(fixture.id, snapshot)?.keptCables, 0)
 assert.equal(current().objects.some((entry) => entry.id === laterObstacle.id), true, 'restoring an old snapshot preserves later objects')
@@ -179,4 +179,4 @@ const occupiedResult = await mockCablePlanningService.planCables({ projectId: fi
   cables: [cable, { ...cable, id: 'second', to: endpointOf(third, third.ports[0]) }], preferences: resolveOrganizationPreferences(demo) })
 assert.equal(occupiedResult.plannedCount, 0, 'all cables sharing an over-capacity port fail, regardless of order')
 assert.equal(occupiedResult.conflictCount, 2)
-console.log('Cable validation checks passed: connection compatibility/capacity, length/reserve, swept volume, bend estimates, verified samples, full-scene staleness, confirmation and certification invalidation.')
+console.log('Cable validation checks passed: connection compatibility/capacity, length/reserve, swept volume, relaxed bends, verified samples, full-scene staleness, confirmation and certification invalidation.')

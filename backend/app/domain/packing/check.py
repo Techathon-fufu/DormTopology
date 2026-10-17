@@ -14,6 +14,7 @@ from ..geometry import (
 from ..models import Issue, LayoutCheck, Scene
 from ..plug_mounts import plug_mount_geometry_issues
 from ..rules import validate_scene
+from .spacing import spacing_conflict
 
 WALL_CATEGORIES = {"wall_socket", "wall_network"}
 
@@ -87,6 +88,14 @@ def check_layout(scene: Scene) -> LayoutCheck:
                 (
                     issue(a["id"], "collision", f"Overlaps item {b['id']}"),
                     issue(b["id"], "collision", f"Overlaps item {a['id']}"),
+                )
+            )
+        elif spacing_conflict(scene, a, b):
+            gap = scene["constraints"]["min_item_gap_m"]
+            problems.extend(
+                (
+                    issue(a["id"], "item_spacing", f"Needs at least {gap:g} m horizontal clearance from item {b['id']}"),
+                    issue(b["id"], "item_spacing", f"Needs at least {gap:g} m horizontal clearance from item {a['id']}"),
                 )
             )
     geometry_valid = not problems

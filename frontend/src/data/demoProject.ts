@@ -8,14 +8,15 @@ import {
   type Vec3,
 } from '@/types/project'
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
+import { endpointOf } from '@/scene/cables'
 
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
 
 /**
  * 内置示例项目的数据种子版本。
- * 每次修改示例场景（尺寸、物品、线缆等）都要 +1：浏览器里已存在的示例项目会在载入时
- * 按最新数据重种，避免"代码已更新、页面仍是旧场景"。
+ * 重建示例场景（尺寸、物品或家具）时 +1：浏览器已有示例会先归档再重种。
+ * 可安全识别的旧默认接线错误由 projectsStore 原位修复，保留用户布局与已编辑接线。
  * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
  * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
  * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
@@ -77,7 +78,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: 'USB-C 供电',
           powered: true,
           maxWatt: 65,
-          offset: [0.172, 0.03, -0.06],
+          offset: [0.172, 0.009, -0.06],
           direction: 'right',
         },
         {
@@ -85,7 +86,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           type: 'hdmi',
           label: 'HDMI 输出',
           powered: false,
-          offset: [0.172, 0.05, -0.01],
+          offset: [0.172, 0.009, -0.01],
           direction: 'right',
         },
         {
@@ -93,7 +94,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           type: 'usb-a',
           label: 'USB-A 数据',
           powered: false,
-          offset: [0.172, 0.015, 0.06],
+          offset: [0.172, 0.009, 0.06],
           direction: 'right',
         },
       ],
@@ -119,7 +120,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: '电源',
           powered: true,
           maxWatt: 40,
-          offset: [0.12, 0.05, -0.092],
+          offset: [0.12, 0.15, -0.012],
           direction: 'back',
         },
         {
@@ -127,7 +128,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           type: 'hdmi',
           label: 'HDMI 输入',
           powered: false,
-          offset: [-0.12, 0.05, -0.092],
+          offset: [-0.12, 0.15, -0.012],
           direction: 'back',
         },
       ],
@@ -192,7 +193,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: '电源',
           powered: true,
           maxWatt: 8,
-          offset: [0, 0.06, -0.092],
+          offset: [0, 0.009, -0.073],
           direction: 'back',
         },
       ],
@@ -259,9 +260,10 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'powerAdapter' },
       ports: [
         { id: 'port-adapter-ac', type: 'power-ac', label: '交流输入', powered: true, offset: [-0.05, 0.0175, 0], direction: 'left' },
-        { id: 'port-adapter-usbc', type: 'usb-c', label: 'USB-C 输出', powered: true, offset: [0.05, 0.0175, 0], direction: 'right' },
+        { id: 'port-adapter-usbc', type: 'usb-c', label: 'USB-C 输出 1', powered: true, offset: [0.05, 0.0175, -0.015], direction: 'right' },
+        { id: 'port-adapter-usbc-phone', type: 'usb-c', label: 'USB-C 输出 2', powered: true, offset: [0.05, 0.0175, 0.015], direction: 'right' },
       ],
-      quantity: 1, needsPower: true, source: 'demo', note: '演示物品：独立电源适配器，接线待用户确认',
+      quantity: 1, needsPower: true, source: 'demo', note: '演示物品：双 USB-C 输出适配器，两个输出分别连接笔记本与手机，交流输入连接插排',
     },
     {
       ...base, id: 'demo-thermos', name: '保温杯', category: 'nonElectrical',
@@ -337,7 +339,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       needsPower: true,
       frequent: true,
       source: 'demo',
-      note: '演示物品：手机（充电线默认「可见线」，规划后从桌面出线槽走线；线径默认细线）',
+      note: '演示物品：手机（充电线默认「可见线」，优先沿桌面后缘规划；线径默认细线）',
     },
     {
       id: 'demo-power-strip',
@@ -408,7 +410,8 @@ function makeCable(
 }
 
 /**
- * 演示用「现状线缆」：略微散乱，尚未走线（电源 ×3、视频 ×1、数据 ×1、充电 ×1）。
+ * 演示用「现状线缆」：略微散乱，尚未走线（电源 ×4、视频 ×1、数据 ×1、充电 ×1）。
+ * USB 充电经过独立适配器；七根设备线暂不包含插排至墙插的总线。
  * 端点坐标在渲染时由接口实时推导；散乱的折线仅作「原始走线」示意。
  * 线材类型（可见线 / 隐藏线）默认按设备名称推断：显示器 / 台灯 → 隐藏线，手机 / 笔记本 → 可见线。
  */
@@ -423,7 +426,8 @@ export function createDemoCables(
   const strip = find('demo-power-strip')
   const keyboard = find('demo-keyboard')
   const phone = find('demo-phone')
-  if (!laptop || !monitor || !lamp || !strip) return []
+  const adapter = find('demo-power-adapter')
+  if (!laptop || !monitor || !lamp || !strip || !adapter) return []
 
   const s = strip.transform.position
   const stripPoint: Vec3 = [s[0] + 0.03, s[1] + 0.03, s[2] + 0.01]
@@ -432,6 +436,8 @@ export function createDemoCables(
   const mp = monitor.transform.position
   const la = lamp.transform.position
   const kb = keyboard?.transform.position
+  const adapterOutput = endpointOf(adapter, adapter.ports.find((p) => p.id === 'port-adapter-usbc'))
+  const adapterInput = endpointOf(adapter, adapter.ports.find((p) => p.id === 'port-adapter-ac'))
 
   const cables: CableConnection[] = [
     makeCable(
@@ -439,7 +445,7 @@ export function createDemoCables(
       'demo-cable-laptop',
       'power',
       endpoint(laptop.id, 'port-laptop-usbc', [lp[0] - 0.06, 0.76, lp[2] - 0.06]),
-      endpoint(strip.id, 'port-strip-1', stripPoint),
+      adapterOutput,
       [
         [lp[0] - 0.06, 0.76, lp[2] - 0.06],
         [lp[0] - 0.16, 0.754, lp[2] + 0.06],
@@ -447,10 +453,19 @@ export function createDemoCables(
         [lp[0] - 0.02, 0.45, 0.04],
         [lp[0] - 0.08, 0.02, 0.1],
         [lp[0] - 0.14, 0.02, 0.24],
-        stripPoint,
+        adapterOutput.position,
       ],
-      '现状：笔记本充电线在桌面拖出松散弯折后斜跨垂落（待规划）',
+      '现状：笔记本 USB-C 充电线连接适配器输出 1（待规划）',
     ),
+    { ...makeCable(
+      projectId,
+      'demo-cable-adapter-ac',
+      'power',
+      adapterInput,
+      endpoint(strip.id, 'port-strip-1', stripPoint),
+      [adapterInput.position, [adapterInput.position[0], 0.757, 0.2], stripPoint],
+      '现状：适配器交流输入连接插排 1 号口（待规划）',
+    ), visibility: 'hidden' },
     makeCable(
       projectId,
       'demo-cable-monitor',
@@ -521,22 +536,23 @@ export function createDemoCables(
 
   if (phone) {
     const pp = phone.transform.position
+    const phoneOutput = endpointOf(adapter, adapter.ports.find((p) => p.id === 'port-adapter-usbc-phone'))
     cables.push(
       makeCable(
         projectId,
         'demo-cable-phone',
         'charging',
         endpoint(phone.id, 'port-phone-usbc', [pp[0], pp[1] + 0.006, pp[2] - 0.08]),
-        endpoint(strip.id, 'port-strip-4', stripPoint),
+        phoneOutput,
         [
           [pp[0], pp[1] + 0.006, pp[2] - 0.08],
           [pp[0] - 0.05, 0.757, pp[2] + 0.06],
           [pp[0] + 0.06, 0.75, 0.44],
           [lp[0] + 0.28, 0.44, 0.2],
           [lp[0] + 0.16, 0.02, 0.12],
-          stripPoint,
+          phoneOutput.position,
         ],
-        '现状：手机充电线散在桌面（默认「可见线」：规划后从桌面出线槽走线；线径默认细线）',
+        '现状：手机 USB-C 充电线连接适配器输出 2（待规划，默认细线）',
       ),
     )
   }

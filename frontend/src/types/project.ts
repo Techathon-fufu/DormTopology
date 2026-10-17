@@ -8,6 +8,7 @@
  */
 
 import type { OrganizationPreferences } from './organization'
+import type { CableManagementConfig, CableTrayAnalysis } from './cableManagement'
 
 export type Vec3 = [number, number, number]
 
@@ -78,6 +79,8 @@ export interface RoomConfig {
   posts: PostConfig[]
   cableHoles: CableHole[]
   outlets: PowerOutlet[]
+  /** Attachment proposals and user-confirmed installed cable management. */
+  cableManagement?: CableManagementConfig
   /** 创建时的说明（如：固定标准模型 / 可调范围） */
   note?: string
 }
@@ -336,7 +339,7 @@ export const CABLE_STRATEGY_META: Record<CableRouteStrategy, { label: string }> 
   backboard: { label: '背板后走线' },
 }
 
-/** 线径档位：粗线 / 细线（影响渲染管径、最小弯曲半径与线缆间距检查） */
+/** 线径档位：粗线 / 细线（影响渲染管径、净空与线缆间距检查） */
 export type CableThickness = 'thick' | 'thin'
 
 export const CABLE_THICKNESS_META: Record<
@@ -347,7 +350,7 @@ export const CABLE_THICKNESS_META: Record<
     diameterM: number
     /** 三维渲染半径（米，约按真实半径 1.7 倍放大以便观察，界面需标注） */
     renderRadiusM: number
-    /** 最小弯曲半径参考值（米） */
+    /** 旧场景的弯曲半径参考值（米）；产品走线不按粗细档位限制转弯。 */
     minBendRadiusM: number
   }
 > = {
@@ -568,6 +571,8 @@ export interface Project {
   /** 当前场景配置（工作台实时编辑并持久化） */
   objects: SceneObject[]
   cables: CableConnection[]
+  /** Backend tray recommendations from the same validated cable scene revision. */
+  cableTrayAnalysis?: CableTrayAnalysis
   /** 空间整理偏好（打字活动区 / 水杯活动区 / 偏好收纳分区等，用户可调整） */
   organization?: OrganizationPreferences
   /** 最近一次接受的整理方案来源（用于「保存方案」记录布局来源；未记录 = undefined） */
