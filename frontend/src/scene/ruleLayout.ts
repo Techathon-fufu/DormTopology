@@ -1,6 +1,6 @@
 import { describePrimitive } from './primitiveGeometry'
-import { objectExtent, objectFootprint, objectToWorld } from './collisionGeometry'
-import { allowsFloorPlacement } from './organizationPolicy'
+import { localCollision, objectExtent, objectFootprint, objectToWorld } from './collisionGeometry'
+import { allowsFloorPlacement, monitorViewRegion, printerSideRegions } from './organizationPolicy'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import {
   DESK_BEAM_DEPTH,
@@ -46,6 +46,7 @@ type Role =
   | 'keyboard'
   | 'mouse'
   | 'monitor'
+  | 'printer'
   | 'lamp'
   | 'laptop'
   | 'cup'
@@ -54,7 +55,7 @@ type Role =
   | 'powerStrip'
   | 'general'
 
-type PhaseKey = 'typing' | 'storage' | 'small' | 'desk' | 'under'
+type PhaseKey = 'typing' | 'monitor' | 'printer' | 'storage' | 'small' | 'desk' | 'under'
 
 interface Phase {
   key: PhaseKey
@@ -64,6 +65,8 @@ interface Phase {
 
 const PHASES: Phase[] = [
   { key: 'typing', label: '键鼠操作区归位', durationMs: 900 },
+  { key: 'monitor', label: '显示器主视区归位', durationMs: 900 },
+  { key: 'printer', label: '打印机侧部设备区归位', durationMs: 900 },
   { key: 'storage', label: '书本与收纳容器归位', durationMs: 1000 },
   { key: 'small', label: '小件物品入盒', durationMs: 800 },
   { key: 'desk', label: '桌面常用物品归位', durationMs: 1000 },
@@ -98,6 +101,7 @@ interface PlacementAllow {
 function classify(o: SceneObject): Role {
   const shape = o.model.shape
   const name = o.name
+  if (shape === 'printer') return 'printer'
   if (shape === 'keyboard' || name.includes('键盘')) return 'keyboard'
   if (shape === 'mouse' || name.includes('鼠标')) return 'mouse'
   if (shape === 'monitor' || name.includes('显示器') || name.includes('屏幕')) return 'monitor'
@@ -105,6 +109,7 @@ function classify(o: SceneObject): Role {
   if (shape === 'laptop' || name.includes('笔记本')) return 'laptop'
   if (shape === 'lamp' || name.includes('台灯') || name.includes('灯')) return 'lamp'
   if (shape === 'cup' || shape === 'thermos' || name.includes('杯')) return 'cup'
+  if (name.includes('打印机')) return 'printer'
   if (name.includes('书')) return 'book'
   if (shape === 'storageBox' || o.category === 'storage') return 'container'
   if (
@@ -468,6 +473,50 @@ export function computeRuleBasedPlan(input: {
     if (!place('typing', m, fallback)) reject(m, '打字活动区与桌面两侧均无鼠标位')
   }
 
+  // Reserve the viewing position before smaller items consume the shared desk bands.
+  for (const monitor of byRole('monitor')) {
+    const assignment = tryDeskGeneral(monitor, 'monitor')
+    if (!place('monitor', monitor, assignment)) {
+      reject(monitor, '显示器中央主视区不可用，桌面也无合法回退位置，保留原位')
+    }
+  }
+
+  const monitorPoses = visible.filter((object) => classify(object) === 'monitor').map((object) => {
+    const assignment = ctx.assignments.find((target) => target.objectId === object.id)
+    return assignment ? { ...object, transform: { position: assignment.position, rotationY: assignment.rotationY } } : object
+  })
+  const printerSides = printerSideRegions(zones, monitorPoses, true)
+  for (const printer of byRole('printer')) {
+    let assignment: PlanAssignment | null = null
+    const bounds = localCollision(printer).bounds
+    printerCandidates:
+    for (const side of printerSides) {
+      const { rect } = side
+      const x0 = rect.x0 - bounds.min[0], x1 = rect.x1 - bounds.max[0]
+      const z0 = rect.z0 - bounds.min[2], z1 = rect.z1 - bounds.max[2]
+      if (x0 > x1 + 1e-7 || z0 > z1 + 1e-7) continue
+      const startFromRight = (rect.x0 + rect.x1) / 2 > 0
+      const xs = [x0, x1]
+      for (let x = x0; x < x1; x += 0.01) xs.push(x)
+      xs.sort((a, b) => startFromRight ? b - a : a - b)
+      const zs = [z1, z0, (z0 + z1) / 2, Math.min(z1, Math.max(z0, printer.transform.position[2]))]
+      for (const x of xs) {
+        for (const z of zs) {
+          const position: Vec3 = [x, side.y, z]
+          if (!canPlace(ctx, printer, position, 0)) continue
+          assignment = {
+            objectId: printer.id, position, rotationY: 0, zone: 'desk',
+            reason: '打印机：放在桌面侧部设备区，正面朝向使用者并避开显示器主视列与键鼠操作区',
+          }
+          break printerCandidates
+        }
+      }
+    }
+    if (!place('printer', printer, assignment)) {
+      reject(printer, '打印机侧部设备区无合法空位，保留原位')
+    }
+  }
+
   // ── 阶段 2：书本与收纳容器（规则 2 / 3 + 偏好收纳分区） ──────────
   for (const c of byRole('container')) {
     const preferred = preferences.preferredStorageZone
@@ -543,11 +592,32 @@ export function computeRuleBasedPlan(input: {
   }
 
   // ── 阶段 4：桌面常用物品（规则 2 + 分类归位） ───────────────────
-  const tryDeskGeneral = (obj: SceneObject, role: Role): PlanAssignment | null => {
+  function tryDeskGeneral(obj: SceneObject, role: Role): PlanAssignment | null {
     // 是否为「高件」按真实碰撞高度判断：声明高度会误判，正是它导致显示器 / 台灯
     // 曾被排进书架搁板投影内。
     const tall = zones.shelf ? objectExtent(obj).height > zones.shelf.y - zones.deskSurface.y - 0.01 : false
     const tallAllow: PlacementAllow | undefined = tall ? { typing: true, cup: false } : undefined
+
+    if (role === 'monitor') {
+      const region = monitorViewRegion(obj, zones)
+      if (region) {
+        const bounds = localCollision(obj).bounds
+        const position: Vec3 = [
+          (zones.typing.rect.x0 + zones.typing.rect.x1) / 2,
+          region.y,
+          (region.rect.z0 + region.rect.z1 - bounds.min[2] - bounds.max[2]) / 2,
+        ]
+        if (canPlace(ctx, obj, position, 0)) {
+          return {
+            objectId: obj.id,
+            position,
+            rotationY: 0,
+            zone: 'desk',
+            reason: '显示器：优先放在中央主视区，与打字活动区中线对齐并正面朝向使用者',
+          }
+        }
+      }
+    }
 
     if (role === 'monitor' || role === 'lamp') {
       // 显示器 / 台灯：桌面后带；居中种子（显示器）与高件避让书架搁板投影
@@ -557,7 +627,7 @@ export function computeRuleBasedPlan(input: {
       }
       const reason =
         role === 'monitor'
-          ? '显示器：桌面常用区后带（视线高度，避让键鼠）'
+          ? '显示器中央主视区不可用：回退至桌面常用区后带（避让固定物品和场地）'
           : '台灯：桌面常用区后带（照明覆盖键鼠区）'
       let a = placeInBand(ctx, obj, zones.deskBackBand, 'desk:back', {
         zone: 'desk',
@@ -621,9 +691,14 @@ export function computeRuleBasedPlan(input: {
           reason: '水杯活动区：按偏好位置放置（远离键鼠与线缆）',
         }
       }
-      return placeInBand(ctx, obj, zones.deskRightBand, 'desk:right', {
+      const right = placeInBand(ctx, obj, zones.deskRightBand, 'desk:right', {
         zone: 'desk',
         reason: '水杯活动区被占：水杯暂放桌面右侧',
+      })
+      if (right) return right
+      return placeInBand(ctx, obj, zones.deskLeftBand, 'desk:left', {
+        zone: 'desk',
+        reason: '水杯活动区与右侧已满：水杯暂放桌面左侧',
       })
     }
 
@@ -649,7 +724,7 @@ export function computeRuleBasedPlan(input: {
     return firstFront ?? secondFront ?? back
   }
 
-  const deskOrder: Role[] = ['laptop', 'monitor', 'lamp', 'cup']
+  const deskOrder: Role[] = ['laptop', 'lamp', 'cup']
   for (const role of deskOrder) {
     for (const obj of byRole(role)) {
       const a = tryDeskGeneral(obj, role)
@@ -797,6 +872,8 @@ export function computeRuleBasedPlan(input: {
   const frequentCount = movables.filter((o) => o.frequent).length
   const rules = [
     `键鼠优先：打字活动区（约 ${typingWmm} × ${typingDmm} mm）保留给键盘 / 鼠标，其它物品默认避让`,
+    '显示器优先：先尝试与打字活动区中线对齐的中央主视区，正面朝向使用者；中央受阻时检查合法回退位置',
+    '打印机侧放：在收纳物与小件之前安排桌面侧部设备区，避开显示器主视列与键鼠操作区；无合法侧位时保留原位并报告',
     `常用物品：标记「常用」的 ${frequentCount} 件物品优先放在桌面常用区前排与两侧的易取位置`,
     shelfOn ? '书本优先：书本优先归入书架收纳区左侧' : '书本优先：未启用书架，书本退而放在桌面后带',
     '小件入盒：小件物品（最长边 ≤ 160mm）优先放入尺寸适配的收纳容器内部',
