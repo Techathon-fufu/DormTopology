@@ -4,6 +4,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber'
 import type { Project, SceneObject, Vec3 } from '@/types/project'
 import { resolveDropCommit } from '@/scene/dragCommit'
 import { placementIssues, raycastSupports } from '@/scene/sceneValidation'
+import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
@@ -77,7 +78,9 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
         -((ev.clientY - rect.top) / rect.height) * 2 + 1,
       )
       raycaster.setFromCamera(ndc, camera)
-      const hit = raycastSupports(raycaster.ray, project.room)
+      // 吸附面高度优先采用桌体 GLB 实测锚点（未加载 / 失败时回退 RoomConfig）
+      const metrics = useDeskModelStore.getState().metrics
+      const hit = raycastSupports(raycaster.ray, project.room, metrics)
       if (!hit) return // 指针未指向任何支撑面：保持上一次预览
       const position: Vec3 = [
         Math.round(hit.x / GRID) * GRID,
@@ -85,7 +88,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
         Math.round(hit.z / GRID) * GRID,
       ]
       const others = useProjectsStore.getState().projects[project.id]?.objects ?? project.objects
-      const issues = placementIssues(object, position, others, project.room)
+      const issues = placementIssues(object, position, others, project.room, metrics)
       const valid = !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap')
       moved = true
       lastPos = position

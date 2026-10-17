@@ -7,6 +7,7 @@ import { usePlansStore } from '@/state/plansStore'
 import { useJobsStore } from '@/state/jobsStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useCableStore } from '@/state/cableStore'
+import { useDeskModelStore } from '@/state/deskModelStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { services } from '@/api'
 import { resolveOrganizationPreferences } from '@/types/organization'
@@ -73,6 +74,7 @@ export function WorkspacePage() {
   const selectedCableId = useCableStore((s) => s.selectedCableId)
   const cableNotice = useCableStore((s) => s.notice)
   const cableAnimStatus = useCableStore((s) => s.animStatus)
+  const deskMetrics = useDeskModelStore((s) => s.metrics)
 
   const [busy, setBusy] = useState<'cable' | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
@@ -84,8 +86,11 @@ export function WorkspacePage() {
 
   // 场景摆放校验（越界 / 相交 / 悬空）：随项目数据变化实时重算
   const issuesById = useMemo(
-    () => (project ? validateScene(project.objects, project.room) : new Map<string, SceneIssue[]>()),
-    [project],
+    () =>
+      project
+        ? validateScene(project.objects, project.room, deskMetrics)
+        : new Map<string, SceneIssue[]>(),
+    [project, deskMetrics],
   )
 
   const showFlash = (msg: string) => {

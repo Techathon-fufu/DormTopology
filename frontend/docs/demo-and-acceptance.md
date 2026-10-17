@@ -131,7 +131,24 @@ npm run build        # tsc --noEmit && vite build
 | 9 | 打开指南并导出实际支持的文件 | 通过 | 指南由当前数据实时推导；导出 JSON、PNG 截图、浏览器打印 / PDF 版式；GLB 导出为真实文件；STL 保持「未接入」标注。 |
 | 10 | 小屏幕 / 键盘 / 空项目 / WebGL 不可用 | 通过（有限） | 小屏幕：面板收进抽屉、导览卡自适应宽度；键盘：撤销 / 重做 / 视角 / 旋转 / 微调 / 删除 / Esc；空项目：物品与线缆为空时各面板有空态说明；WebGL：工作台 / 交付页 / **空间配置预览（本轮补）**三处降级提示，编辑能力不受影响。**限制**：小屏幕与键盘操作未做真实设备实测记录，仅代码走查 + 浏览器手动抽验。 |
 
-## 8. 剩余限制（如实声明）
+## 8. 桌体 GLB 加载管线（第 05 阶段）
+
+结论口径同上（代码路径 + 构建 / 状态层冒烟验证；浏览器交互为手动验证）。
+
+| 要求（任务清单口径） | 结论 | 说明与依据 |
+| --- | --- | --- |
+| 加载 `models/dorm_desk_assembled.glb`，开发与构建后路径正确 | 管线就绪（资产未入库） | `frontend/public/models/dorm_desk_assembled.glb` 经 `import.meta.env.BASE_URL` 解析（dev `/models/...`、构建复制到 `dist/models/`）；仓库当前无该文件，未伪造资产 |
+| 桌体封装为独立组件，支持位置 / 缩放 / 旋转 / 显隐 / 加载中 / 失败状态 | 通过 | `scene/DormDeskModel.tsx`（position / rotationY / visible 属性 + 状态提示 `ui/workspace/DeskModelNotice.tsx`；工具栏显示 / 隐藏开关） |
+| 米制统一、居中 / 底部对齐 / 坐标轴校正 | 通过 | `scene/deskModel.ts` 归一化（unitScale / axisRotationY / fitWidthM / centerXZ / verticalAlign / offset），冒烟覆盖各分支 |
+| 按桌面 / 书架 / 穿线孔实际位置更新吸附面与碰撞边界 | 通过（交互层） | 桌面 / 搁板吸附、悬空校验、射线命中优先采用命名锚点实测值（`sceneValidation` 可选 `metrics`）；整理分区与规则布局仍按 RoomConfig（文档列明限制） |
+| 加载失败可理解提示并可恢复简化几何 | 通过 | 「未找到模型文件 + 放置路径」提示；「重试」与「改用简化几何」；偏好持久化，刷新恢复 |
+| 保留 `importModel(url, name, position)` 供后续物品模型复用 | 通过（接口） | `scene/importModel.ts` 底面中心锚点对齐 + `dispose`；当前物品渲染仍为参数化占位几何 |
+| GLB 逻辑不散落工作台页面 | 通过 | 集中在 `scene/`（deskModel / modelLoader / importModel / DormDeskModel / ParametricDesk）与 `state/deskModelStore.ts`；页面仅组装 |
+| 不删除示例项目与 mock 数据 | 通过 | 示例项目 / mock / 演示流程未改动；回退路径继续以参数化几何完成演示 |
+
+**未完成（如实声明）**：`dorm_desk_assembled.glb` 真实文件不在仓库，视觉验收（桌面比例、地面高度、真实吸附）需资产入库后复核；独立单品 GLB 与 Rodin 未接入。
+
+## 9. 剩余限制（如实声明）
 
 - 无自动化浏览器 E2E：以上交互项依赖手动验证；本仓库环境仅能跑类型检查 / 构建 / 状态层冒烟（见验证记录）。
 - 走线为规则式演示（非寻路算法），整理为可解释规则（非优化算法）；均未经真实算法验证。

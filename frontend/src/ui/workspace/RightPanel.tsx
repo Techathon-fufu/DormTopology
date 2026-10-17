@@ -37,6 +37,7 @@ import { PORT_TYPE_COLORS, portWorldPosition, resolvePortOffset } from '@/scene/
 import { useCableLink } from '@/lib/useCableLink'
 import { degToRad, formatMeters, formatMm, mToMm, radToDeg } from '@/lib/units'
 import { cn, formatDateTime, uid } from '@/lib/utils'
+import { useDeskModelStore } from '@/state/deskModelStore'
 import { useWorkspaceStore, type ObjectPatch } from '@/state/workspaceStore'
 import { Badge } from '@/ui/kit/badge'
 import { Button } from '@/ui/kit/button'
@@ -297,8 +298,9 @@ function ObjectInspector({
   const status = object.model.status
   const locked = object.locked
 
-  // 下方最近的支撑面（用于「吸附到支撑面」与悬空提示）
-  const support = nearestSupport(project.room, pos[0], pos[2], pos[1])
+  // 下方最近的支撑面（用于「吸附到支撑面」与悬空提示）；高度优先取桌体 GLB 实测锚点
+  const deskMetrics = useDeskModelStore((s) => s.metrics)
+  const support = nearestSupport(project.room, pos[0], pos[2], pos[1], deskMetrics)
   const supportDeltaMm = support ? Math.round((pos[1] - support.y) * 1000) : null
 
   return (

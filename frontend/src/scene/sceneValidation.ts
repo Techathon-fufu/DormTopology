@@ -1,10 +1,12 @@
 import * as THREE from 'three'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
+import type { DeskSurfaceMetrics } from '@/scene/deskModel'
 
 /**
  * 场景摆放校验与支撑面计算（本地真实计算，非模拟）。
  *
- * - 支撑面：桌面 / 书架搁板 / 地面（用于拖拽吸附与「吸附到支撑面」）
+ * - 支撑面：桌面 / 书架搁板 / 地面（用于拖拽吸附与「吸附到支撑面」）；
+ *   高度优先采用桌体 GLB 实测锚点（DeskSurfaceMetrics），未加载模型 / 无锚点时回退 RoomConfig
  * - 校验：越界（房间外 / 地面下 / 超层高）、明显相交（物品间）、悬空（无支撑）
  * - 相交检测使用旋转矩形 SAT（x-z 平面）+ 高度区间重叠，旋转角不同也能正确判断
  */
@@ -29,12 +31,22 @@ const OVERLAP_TOLERANCE = 0.01
 /** 越界判定容差（米） */
 const BOUNDS_EPSILON = 0.001
 
-export function shelfTopY(room: RoomConfig): number {
-  return room.desk.height + room.shelf.heightAboveDesk + SHELF_THICKNESS / 2
+/** 桌面高度：优先采用桌体 GLB 实测锚点（deskModelStore.metrics），否则回退 RoomConfig */
+export function deskTopY(room: RoomConfig, metrics?: DeskSurfaceMetrics | null): number {
+  return metrics?.deskTopY ?? room.desk.height
+}
+
+export function shelfTopY(room: RoomConfig, metrics?: DeskSurfaceMetrics | null): number {
+  return metrics?.shelfTopY ?? room.desk.height + room.shelf.heightAboveDesk + SHELF_THICKNESS / 2
 }
 
 /** 指定 x-z 位置之上的所有房间支撑面（含被上方遮挡的） */
-export function supportsContaining(room: RoomConfig, x: number, z: number): SupportInfo[] {
+export function supportsContaining(
+  room: RoomConfig,
+  x: number,
+  z: number,
+  metrics?: DeskSurfaceMetrics | null,
+): SupportInfo[] {
   const list: SupportInfo[] = []
   const desk = room.desk
   if (
@@ -43,10 +55,10 @@ export function supportsContaining(room: RoomConfig, x: number, z: number): Supp
     z >= DESK_GAP &&
     z <= DESK_GAP + room.shelf.depth
   ) {
-    list.push({ kind: 'shelf', y: shelfTopY(room), label: '书架搁板' })
+    list.push({ kind: 'shelf', y: shelfTopY(room, metrics), label: '书架搁板' })
   }
   if (Math.abs(x) <= desk.width / 2 && z >= DESK_GAP && z <= DESK_GAP + desk.depth) {
-    list.push({ kind: 'desk', y: desk.height, label: '桌面' })
+    list.push({ kind: 'desk', y: deskTopY(room, metrics), label: '桌面' })
   }
   if (Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width) {
     list.push({ kind: 'floor', y: 0, label: '地面' })
@@ -55,8 +67,14 @@ export function supportsContaining(room: RoomConfig, x: number, z: number): Supp
 }
 
 /** 与当前高度最接近的支撑面（用于「吸附到支撑面」按钮：不强行把桌面物品吸上搁板） */
-export function nearestSupport(room: RoomConfig, x: number, z: number, baseY: number): SupportInfo | null {
-  const list = supportsContaining(room, x, z)
+export function nearestSupport(
+  room: RoomConfig,
+  x: number,
+  z: number,
+  baseY: number,
+  metrics?: DeskSurfaceMetrics | null,
+): SupportInfo | null {
+  const list = supportsContaining(room, x, z, metrics)
   if (list.length === 0) return null
   return [...list].sort((a, b) => Math.abs(a.y - baseY) - Math.abs(b.y - baseY))[0]
 }
@@ -74,7 +92,11 @@ const _hit = new THREE.Vector3()
  * 拖拽用：把指针射线投射到支撑面上，取距离相机最近的一张面。
  * 指针悬在桌面上方 → 吸附桌面；悬在书架上方 → 吸附搁板；悬在地面 → 落地。
  */
-export function raycastSupports(ray: THREE.Ray, room: RoomConfig): SupportHit | null {
+export function raycastSupports(
+  ray: THREE.Ray,
+  room: RoomConfig,
+  metrics?: DeskSurfaceMetrics | null,
+): SupportHit | null {
   const hits: SupportHit[] = []
 
   const tryPlane = (y: number, kind: SupportKind, label: string, contains: (x: number, z: number) => boolean) => {
@@ -86,14 +108,14 @@ export function raycastSupports(ray: THREE.Ray, room: RoomConfig): SupportHit | 
 
   tryPlane(0, 'floor', '地面', (x, z) => Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width)
   tryPlane(
-    room.desk.height,
+    deskTopY(room, metrics),
     'desk',
     '桌面',
     (x, z) => Math.abs(x) <= room.desk.width / 2 && z >= DESK_GAP && z <= DESK_GAP + room.desk.depth,
   )
   if (room.shelf.enabled) {
     tryPlane(
-      shelfTopY(room),
+      shelfTopY(room, metrics),
       'shelf',
       '书架搁板',
       (x, z) =>
@@ -237,6 +259,7 @@ export function placementIssues(
   position: Vec3,
   others: SceneObject[],
   room: RoomConfig,
+  metrics?: DeskSurfaceMetrics | null,
 ): SceneIssue[] {
   const issues: SceneIssue[] = []
   const [x, y, z] = position
@@ -277,7 +300,7 @@ export function placementIssues(
 
   // 3) 悬空（下方无支撑面 / 与支撑面距离过远）
   let supportY: number | null = null
-  for (const support of supportsContaining(room, x, z)) {
+  for (const support of supportsContaining(room, x, z, metrics)) {
     if (support.y <= y + FLOATING_TOLERANCE) {
       supportY = supportY === null ? support.y : Math.max(supportY, support.y)
     }
@@ -313,11 +336,15 @@ export function placementIssues(
 }
 
 /** 校验整个场景，返回 物品 id → 问题列表 */
-export function validateScene(objects: SceneObject[], room: RoomConfig): Map<string, SceneIssue[]> {
+export function validateScene(
+  objects: SceneObject[],
+  room: RoomConfig,
+  metrics?: DeskSurfaceMetrics | null,
+): Map<string, SceneIssue[]> {
   const map = new Map<string, SceneIssue[]>()
   const visible = objects.filter((o) => o.visible)
   for (const object of visible) {
-    const issues = placementIssues(object, object.transform.position, visible, room)
+    const issues = placementIssues(object, object.transform.position, visible, room, metrics)
     if (issues.length > 0) map.set(object.id, issues)
   }
   return map
