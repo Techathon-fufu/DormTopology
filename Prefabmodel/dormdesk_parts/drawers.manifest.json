@@ -1,0 +1,98 @@
+{
+ "unit": "m",
+ "up": "y",
+ "shift_m": [
+  -0.55,
+  -0.0075,
+  0.84
+ ],
+ "note": "每个抽屉含 5 个原始部件（箱壳拆为底板+4壁以保内腔；面板/拉手槽/双滑轨取原网格）",
+ "drawers": [
+  {
+   "name": "drawer_bottom",
+   "source_prefix": "Cabinet_Drawer_Bot_",
+   "file": "drawer_bottom.glb",
+   "parts": [
+    "floor",
+    "front",
+    "pull",
+    "rail_l",
+    "rail_r",
+    "wall_x0",
+    "wall_x1",
+    "wall_z0",
+    "wall_z1"
+   ],
+   "part_count": 9,
+   "cavity_size_m": [
+    0.28,
+    0.171,
+    0.293
+   ],
+   "cavity_empty": true,
+   "shift_m": [
+    -0.55,
+    -0.0075,
+    0.84
+   ]
+  },
+  {
+   "name": "drawer_middle",
+   "source_prefix": "Cabinet_Drawer_Mid_",
+   "file": "drawer_middle.glb",
+   "parts": [
+    "floor",
+    "front",
+    "pull",
+    "rail_l",
+    "rail_r",
+    "wall_x0",
+    "wall_x1",
+    "wall_z0",
+    "wall_z1"
+   ],
+   "part_count": 9,
+   "cavity_size_m": [
+    0.28,
+    0.141,
+    0.293
+   ],
+   "cavity_empty": true,
+   "shift_m": [
+    -0.55,
+    -0.0075,
+    0.84
+   ]
+  },
+  {
+   "name": "drawer_top",
+   "source_prefix": "Cabinet_Drawer_Top_",
+   "file": "drawer_top.glb",
+   "parts": [
+    "floor",
+    "front",
+    "lock_keyhole",
+    "lock_plate",
+    "pull",
+    "rail_l",
+    "rail_r",
+    "wall_x0",
+    "wall_x1",
+    "wall_z0",
+    "wall_z1"
+   ],
+   "part_count": 11,
+   "cavity_size_m": [
+    0.28,
+    0.121,
+    0.293
+   ],
+   "cavity_empty": true,
+   "shift_m": [
+    -0.55,
+    -0.0075,
+    0.84
+   ]
+  }
+ ]
+}
