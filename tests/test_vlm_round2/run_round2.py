@@ -87,8 +87,8 @@ def run_round2():
 请按【桌面左侧区】 -> 【桌面中央主操作区】 -> 【桌面右侧供电与外设区】的顺序逐区扫描，找出所有物品。
 请重点识别出：
 1. 常用核心外设（笔记本、机械键盘、鼠标、鼠标垫、数位板/平板）；
-2. 供电设备与充电桩（排插、充电器插头）；
-3. 散落杂物（卷尺、纸巾包等）。
+2. 便携散落杂物（纸巾包等）。
+注意：【排插】为固定标准件，由团队其他成员专门负责，本模块严禁识别或输出排插！
 
 请精简思考过程，直接结合键盘（长约 32cm）等尺寸基准推算各物品实际尺寸。
 强制输出合法的 JSON，格式如下：
@@ -129,8 +129,10 @@ def run_round2():
         clean_json_str = clean_json_str.split("```")[1].split("```")[0].strip()
         
     parsed_data = json.loads(clean_json_str)
-    items = parsed_data.get("items", [])
-    print(f"\n[OK] 第二轮成功解析出 {len(items)} 个物品:")
+    # Filter out standard parts (power strip handled by another teammate)
+    items = [it for it in parsed_data.get("items", []) if not any(k in it.get("name", "") for k in ["排插", "插排", "接线板"])]
+    parsed_data["items"] = items
+    print(f"\n[OK] 第二轮成功解析出 {len(items)} 个物品 (已自动剔除排插标准件):")
     
     # Draw visualization
     img_draw = Image.open(IMAGE_FILE).convert("RGB")
@@ -150,9 +152,11 @@ def run_round2():
         py1 = int(ymax / 1000.0 * orig_h)
         
         # 3D coordinate mapping
+        # Observer at chair (+Y) facing desk (-Y):
+        # User's left hand is towards +X (wardrobe, X=1.450), right hand is towards -X (drawers, X=0.410)
         u = (xmin + xmax) / 2000.0
         v = ymax / 1000.0
-        x_3d = 0.410 + u * 1.040
+        x_3d = 1.450 - u * 1.040
         y_3d = 0.085 + v * 0.500
         z_3d = 0.770
         it["current_pos"] = [round(x_3d, 3), round(y_3d, 3), round(z_3d, 3)]

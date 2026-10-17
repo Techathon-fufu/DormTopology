@@ -4,4 +4,5 @@
 __pycache__/
 *key*.txt
 *.env
-_temp_*
+_temp_*
+*.blend1
