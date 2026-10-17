@@ -28,8 +28,28 @@ tests/
 │   └── vlm_result_round2.json     # 对齐 data_contract.md 规范的完整感知结果
 └── test_rodin_pipeline/           # 第 3 轮：DeemosTech Rodin 3D 模型生成与几何校验
     ├── test_rodin_client.py       # API 连接、余额查询与错误码拦截测试
-    └── test_glb_inspection.py     # GLB 二进制头、PBR 层次与多部件拓扑校验测试
+    ├── test_glb_inspection.py     # GLB 二进制头、PBR 层次与多部件拓扑校验测试
+    └── test_prefab_routing.py     # Prefabmodel/ 资产布局、prefab 路由与保真度分层校验
 ```
+
+---
+
+## 模型资产布局（`Prefabmodel/`）
+
+全部 GLB 资产统一存放在仓库根的 `Prefabmodel/` 下，其中包含两类保真度层级，**共处一个平面目录**：
+
+| 类别 | 文件 | 是否参与 prefab 路由 |
+| --- | --- | --- |
+| 低模 prefab | 12 个（`mouse` / `keyboard` / `cup` / `monitor` / `phone` / `charger` / `mousepad` / `tissue_box` / `stainless_bottle` / `laptop_fold` / `laptop_extend` / `books_stack`） | 是，按 `PREFAB_KEYWORDS` 匹配 |
+| Rodin 高模（重名） | `charger_detail.glb`、`mousepad_detail.glb` | 否，`_detail` 后缀区分 |
+| Rodin 回退资产 | `power_strip.glb`、`tablet.glb`、`tape_measure.glb`、`tissue_pack.glb` | 否，关键词无匹配时按物品 id 回退 |
+
+命名与路由约定：
+
+- `resolve_prefab_rel_path()` 支持命名变体：去下划线（`mouse_pad` → `mousepad.glb`）、空格转下划线（`stainless bottle` → `stainless_bottle.glb`）、`expand`/`extend` 互换（`laptop_expand` → `laptop_extend.glb`）。目标文件一律为**轻量低模**，高模不得被路由命中。
+- 同名不同保真度用 `_detail` 后缀共存，不用覆盖：`charger.glb`（4.5 KB，prefab）与 `charger_detail.glb`（474 KB，Rodin 高模）是同一物品的两个层级。
+- 代码中统一使用 `vlm_adapter.ASSET_DIR_NAME` 常量拼接资产相对路径，不写死目录名字面量。
+- `objects/` **只保留 Blender / OBJ 源文件**（`.blend` / `.obj`），不再存放任何 GLB。
 
 ---
 
@@ -39,14 +59,22 @@ tests/
 ```bash
 python tests/test_rodin_pipeline/test_glb_inspection.py
 ```
-* 验证已下载的 `objects/tape_measure.glb`（11 个独立几何件）与 `objects/mouse.glb`（31 个独立结构件）。
+* 验证已下载的 `Prefabmodel/tape_measure.glb`（11 个独立几何件）与 `Prefabmodel/mouse.glb`（31 个独立结构件）。
 
-### 2. 验证 Rodin API 云端连接与余额
+### 2. 验证模型资产布局与 prefab 路由
+```bash
+python tests/test_rodin_pipeline/test_prefab_routing.py
+```
+* 校验 12 个 `PREFAB_KEYWORDS` 全部解析到真实存在的**轻量低模**（体积上限 2 MB，防止高模误入路由）。
+* 校验 `_detail` 高模确实比对应低模大，且不可被任何 prefab key 命中。
+* 校验 Rodin 回退资产存在，并断言除 `Prefabmodel/` 外仓库内不存在游离 GLB。
+
+### 3. 验证 Rodin API 云端连接与余额
 ```bash
 python tests/test_rodin_pipeline/test_rodin_client.py
 ```
 
-### 3. 复现第 2 轮 VLM 感知测试
+### 4. 复现第 2 轮 VLM 感知测试
 ```bash
 python tests/test_vlm_round2/run_round2.py
 ```

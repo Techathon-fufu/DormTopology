@@ -43,14 +43,17 @@ def main():
     print("Running 3D Asset Validation Tests...")
     print("=" * 60)
     
-    test_glb_asset("objects/tape_measure.glb", expected_min_geometries=5)
-    test_glb_asset("objects/mouse.glb", expected_min_geometries=10)
-    test_glb_asset("objects/charger.glb", expected_min_geometries=1)
-    test_glb_asset("objects/keyboard.glb", expected_min_geometries=1)
-    test_glb_asset("objects/mousepad.glb", expected_min_geometries=1)
-    test_glb_asset("objects/power_strip.glb", expected_min_geometries=1)
-    test_glb_asset("objects/tissue_pack.glb", expected_min_geometries=1)
-    test_glb_asset("objects/tablet.glb", expected_min_geometries=1)
+    # 全部 GLB 资产统一放在 Prefabmodel/ 下（objects/ 只保留 Blender/OBJ 源文件）。
+    # charger/mousepad 存在两个保真度层级：低模 prefab 与 Rodin 高模（-detail 后缀）；
+    # mouse/keyboard 两个目录原本逐字节相同，已合并为一份。
+    test_glb_asset("Prefabmodel/tape_measure.glb", expected_min_geometries=5)
+    test_glb_asset("Prefabmodel/mouse.glb", expected_min_geometries=10)
+    test_glb_asset("Prefabmodel/charger_detail.glb", expected_min_geometries=1)
+    test_glb_asset("Prefabmodel/keyboard.glb", expected_min_geometries=1)
+    test_glb_asset("Prefabmodel/mousepad_detail.glb", expected_min_geometries=1)
+    test_glb_asset("Prefabmodel/power_strip.glb", expected_min_geometries=1)
+    test_glb_asset("Prefabmodel/tissue_pack.glb", expected_min_geometries=1)
+    test_glb_asset("Prefabmodel/tablet.glb", expected_min_geometries=1)
     
     print("\n[SUCCESS] All 3D asset validation tests passed!")
 
