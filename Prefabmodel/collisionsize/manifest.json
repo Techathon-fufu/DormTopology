@@ -1,0 +1,154 @@
+{
+ "schema": "dormtopology.colliders/1",
+ "scope": "items only (room fixtures such as desk and drawers are expressed by obstacles[])",
+ "unit": "m",
+ "up": "y",
+ "anchor": "bottom-center (local coords)",
+ "tolerance": 1e-07,
+ "models": {
+  "books_stack.glb": {
+   "file": "books_stack.collision.json",
+   "source_glb": "books_stack.glb",
+   "strategy": "convex",
+   "source_parts": 1,
+   "collider_parts": 1,
+   "vertices": 8,
+   "faces": 12,
+   "notes": [
+    "1 source parts -> 1 convex parts (route A)"
+   ]
+  },
+  "charger.glb": {
+   "file": "charger.collision.json",
+   "source_glb": "charger.glb",
+   "strategy": "convex",
+   "source_parts": 1,
+   "collider_parts": 1,
+   "vertices": 24,
+   "faces": 44,
+   "notes": [
+    "1 source parts -> 1 convex parts (route A)"
+   ]
+  },
+  "cup.glb": {
+   "file": "cup.collision.json",
+   "source_glb": "cup.glb",
+   "strategy": "convex",
+   "source_parts": 2,
+   "collider_parts": 2,
+   "vertices": 113,
+   "faces": 218,
+   "notes": [
+    "2 source parts -> 2 convex parts (route A)"
+   ]
+  },
+  "keyboard.glb": {
+   "file": "keyboard.collision.json",
+   "source_glb": "keyboard.glb",
+   "strategy": "aabb",
+   "source_parts": 93,
+   "collider_parts": 1,
+   "vertices": 8,
+   "faces": 12,
+   "notes": [
+    "AABB of 93 source parts -> 1 box (route B)"
+   ]
+  },
+  "laptop_extend.glb": {
+   "file": "laptop_extend.collision.json",
+   "source_glb": "laptop_extend.glb",
+   "strategy": "convex",
+   "source_parts": 4,
+   "collider_parts": 4,
+   "vertices": 32,
+   "faces": 48,
+   "notes": [
+    "4 source parts -> 4 convex parts (route A)"
+   ]
+  },
+  "laptop_fold.glb": {
+   "file": "laptop_fold.collision.json",
+   "source_glb": "laptop_fold.glb",
+   "strategy": "convex",
+   "source_parts": 4,
+   "collider_parts": 4,
+   "vertices": 48,
+   "faces": 80,
+   "notes": [
+    "4 source parts -> 4 convex parts (route A)"
+   ]
+  },
+  "monitor.glb": {
+   "file": "monitor.collision.json",
+   "source_glb": "monitor.glb",
+   "strategy": "convex",
+   "source_parts": 1,
+   "collider_parts": 1,
+   "vertices": 16,
+   "faces": 28,
+   "notes": [
+    "1 source parts -> 1 convex parts (route A)"
+   ]
+  },
+  "mouse.glb": {
+   "file": "mouse.collision.json",
+   "source_glb": "mouse.glb",
+   "strategy": "aabb",
+   "source_parts": 31,
+   "collider_parts": 1,
+   "vertices": 8,
+   "faces": 12,
+   "notes": [
+    "AABB of 31 source parts -> 1 box (route B)"
+   ]
+  },
+  "mousepad.glb": {
+   "file": "mousepad.collision.json",
+   "source_glb": "mousepad.glb",
+   "strategy": "convex",
+   "source_parts": 1,
+   "collider_parts": 1,
+   "vertices": 72,
+   "faces": 140,
+   "notes": [
+    "1 source parts -> 1 convex parts (route A)"
+   ]
+  },
+  "phone.glb": {
+   "file": "phone.collision.json",
+   "source_glb": "phone.glb",
+   "strategy": "convex",
+   "source_parts": 1,
+   "collider_parts": 1,
+   "vertices": 48,
+   "faces": 92,
+   "notes": [
+    "1 source parts -> 1 convex parts (route A)"
+   ]
+  },
+  "stainless_bottle.glb": {
+   "file": "stainless_bottle.collision.json",
+   "source_glb": "stainless_bottle.glb",
+   "strategy": "convex",
+   "source_parts": 1,
+   "collider_parts": 1,
+   "vertices": 64,
+   "faces": 124,
+   "notes": [
+    "1 source parts -> 1 convex parts (route A)"
+   ]
+  },
+  "tissue_box.glb": {
+   "file": "tissue_box.collision.json",
+   "source_glb": "tissue_box.glb",
+   "strategy": "convex",
+   "source_parts": 1,
+   "collider_parts": 1,
+   "vertices": 8,
+   "faces": 12,
+   "notes": [
+    "1 source parts -> 1 convex parts (route A)"
+   ]
+  }
+ }
+}
