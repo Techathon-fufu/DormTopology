@@ -1,8 +1,9 @@
 import { HelpCircle } from 'lucide-react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { isMockMode } from '@/api'
 import { LogoMark } from '@/ui/brand/LogoMark'
 import { Button } from '@/ui/kit/button'
-import { DataBadge } from '@/ui/kit/data-badge'
+import { ServiceStatusCluster } from '@/ui/service/ServiceStatusCluster'
 import { DemoTour } from '@/ui/tour/DemoTour'
 import { cn } from '@/lib/utils'
 import { DEMO_PROJECT_ID } from '@/data/demoProject'
@@ -36,7 +37,7 @@ export function AppShell() {
             </NavLink>
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <DataBadge kind="demo" label="演示模式" className="hidden sm:inline-flex" />
+            <ServiceStatusCluster placement="down" className="hidden sm:flex" />
             <Button
               variant="outline"
               size="sm"
@@ -60,7 +61,9 @@ export function AppShell() {
       </main>
       <footer className="border-t border-border py-4">
         <p className="mx-auto max-w-6xl px-6 text-xs text-faint">
-          演示模式：识别 / 模型生成 / 规划结果均为本地模拟数据；真实能力将通过应用后端接入
+          {isMockMode
+            ? '演示模式：识别 / 模型生成 / 规划结果均为本地模拟数据；真实能力通过 VITE_API_MODE=real 接入应用后端'
+            : '真实后端模式：识别 / 模型生成 / 规划调用应用后端（VITE_API_MODE=real）；服务密钥只在后端持有，前端不存储任何密钥'}
         </p>
       </footer>
       <DemoTour />

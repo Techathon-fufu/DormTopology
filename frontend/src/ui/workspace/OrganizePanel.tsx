@@ -26,7 +26,8 @@ import {
   type CupCorner,
   type OrganizationPreferences,
 } from '@/types/organization'
-import { services } from '@/api'
+import { isMockMode, services } from '@/api'
+import { SwitchToDemoButton } from '@/ui/service/SwitchToDemoButton'
 import { useJobsStore } from '@/state/jobsStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { usePlansStore } from '@/state/plansStore'
@@ -154,7 +155,12 @@ export function OrganizePanel({
   const generate = async () => {
     const p = useProjectsStore.getState().projects[project.id]
     if (!p) return
-    const job = createJob({ projectId: p.id, type: 'layout', title: '生成整理方案（规则式演示）' })
+    const job = createJob({
+      projectId: p.id,
+      type: 'layout',
+      title: isMockMode ? '生成整理方案（规则式演示）' : '生成整理方案（真实后端）',
+      mock: isMockMode,
+    })
     setStatus('planning')
     setError(null)
     setStage('准备中')
@@ -172,7 +178,16 @@ export function OrganizePanel({
       })
       setPlan(result, p.objects)
       updateJob(job.id, { status: 'success', progress: 1, resultNote: result.summary })
-      onFlash('整理方案已生成（规则式演示）：可播放整理动画、对比前后，再「接受方案」')
+      const warnCount = result.serviceMeta?.warnings?.length ?? 0
+      onFlash(
+        isMockMode
+          ? '整理方案已生成（规则式演示）：可播放整理动画、对比前后，再「接受方案」'
+          : `整理方案已生成（真实后端${
+              result.serviceMeta?.algorithmVersion
+                ? `，算法版本 ${result.serviceMeta.algorithmVersion}`
+                : ''
+            }）${warnCount > 0 ? `；本地校验提示 ${warnCount} 条` : ''}：可播放整理动画、对比前后，再「接受方案」`,
+      )
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
@@ -219,7 +234,11 @@ export function OrganizePanel({
           空间整理
         </h2>
         <div className="flex items-center gap-1.5">
-          <DataBadge kind="computed" label="规则式演示" />
+          {isMockMode ? (
+            <DataBadge kind="computed" label="规则式演示" />
+          ) : (
+            <DataBadge kind="real" label="真实后端算法" />
+          )}
           {onClose ? (
             <Button variant="ghost" size="icon" className="h-7 w-7" title="关闭面板" onClick={onClose}>
               <X className="h-3.5 w-3.5" />
@@ -415,9 +434,10 @@ export function OrganizePanel({
             </section>
 
             {error ? (
-              <div className="flex items-start gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>方案生成失败：{error}</span>
+              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span className="flex-1">方案生成失败：{error}</span>
+                <SwitchToDemoButton />
               </div>
             ) : null}
 
@@ -426,7 +446,9 @@ export function OrganizePanel({
               {planning ? `生成中 · ${stage || '准备中'}` : '生成整理方案'}
             </Button>
             <p className="text-[11px] leading-relaxed text-faint">
-              演示算法为可解释的规则式布局（本地计算，标注「规则式演示方案」）；真实布局 / 搬运优化算法入口已在服务层保留（未接入）。
+              {isMockMode
+                ? '演示算法为可解释的规则式布局（本地计算，标注「规则式演示方案」）；真实布局 / 搬运优化算法入口已接入服务层（VITE_API_MODE=real 时调用后端）。'
+                : '真实模式：方案由后端布局算法生成（经前端本地边界与引用校验，标注「真实后端算法」）；不可用时不会自动降级，请重试或切换到演示模式。'}
             </p>
           </>
         ) : (

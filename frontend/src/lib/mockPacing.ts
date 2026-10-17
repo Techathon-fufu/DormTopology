@@ -2,7 +2,7 @@
  * 模拟服务的节奏控制（演示用，仅影响 mock 服务的本地等待时长）：
  * - 默认：按各模拟服务的阶段延时播放，便于观察「等待 / 分析中」状态；
  * - 「跳过等待」（演示加速）开启后：所有进行中的等待立即完成，之后的等待不再计时；
- * - 真实服务接入（VITE_SERVICE_MODE=service）后不经过本模块，行为不受影响。
+ * - 真实后端模式（VITE_API_MODE=real）不经过本模块，行为不受影响。
  */
 let fastForward = false
 const pending = new Set<() => void>()

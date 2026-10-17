@@ -26,6 +26,7 @@ import { cn, uid } from '@/lib/utils'
 import { mockSleep } from '@/lib/mockPacing'
 import { deleteFile, putFile } from '@/state/storage/idb'
 import { isMockMode, services, type RecognizedItem } from '@/api'
+import { SwitchToDemoButton } from '@/ui/service/SwitchToDemoButton'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
 import { useJobsStore, useProjectJobs } from '@/state/jobsStore'
 import { useTourStore } from '@/state/tourStore'
@@ -157,6 +158,7 @@ export function ImportPage() {
   const [dragging, setDragging] = useState(false)
   const [phase, setPhase] = useState<RecognizePhase>('idle')
   const [forceFail, setForceFail] = useState(false)
+  const [recogError, setRecogError] = useState<string | null>(null)
   const [recogJobId, setRecogJobId] = useState<string | null>(null)
   const [recognized, setRecognized] = useState<RecognizedItem[] | null>(null)
   const [recogNote, setRecogNote] = useState<string | null>(null)
@@ -247,11 +249,20 @@ export function ImportPage() {
   // ── 识别（模拟服务：等待 → 分析中 → 待确认 → 完成 / 失败） ─────────
 
   const runRecognition = async () => {
-    const job = createJob({ projectId, type: 'recognition', title: '照片识别（模拟）' })
+    const job = createJob({
+      projectId,
+      type: 'recognition',
+      title: isMockMode ? '照片识别（模拟）' : '照片识别（真实后端）',
+      mock: isMockMode,
+    })
     setRecogJobId(job.id)
+    setRecogError(null)
     setPhase('waiting')
-    updateJob(job.id, { status: 'waiting', stageLabel: '已加入队列，等待处理' })
-    await mockSleep(600)
+    updateJob(job.id, {
+      status: 'waiting',
+      stageLabel: isMockMode ? '已加入队列，等待处理' : '已提交后端，等待处理',
+    })
+    if (isMockMode) await mockSleep(600)
     setPhase('analyzing')
     updateJob(job.id, { status: 'running', stageLabel: '正在分析照片' })
     try {
@@ -263,7 +274,7 @@ export function ImportPage() {
       })
       setRecognized(result.items)
       setRecogLow(result.lowConfidence)
-      setRecogNote(result.note ?? null)
+      setRecogNote([result.note, ...(result.warnings ?? [])].filter(Boolean).join('；') || null)
       setPhase('awaitConfirm')
       updateJob(job.id, {
         status: 'awaiting',
@@ -272,11 +283,10 @@ export function ImportPage() {
       })
       setStep(2)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setRecogError(msg)
       setPhase('failed')
-      updateJob(job.id, {
-        status: 'failed',
-        error: err instanceof Error ? err.message : String(err),
-      })
+      updateJob(job.id, { status: 'failed', error: msg })
     }
   }
 
@@ -350,7 +360,7 @@ export function ImportPage() {
       source: 'recognized',
       recognition: {
         confidence: item.confidence,
-        source: 'mock',
+        source: isMockMode ? 'mock' : 'ai',
         dimensionSource: item.dimensionSource,
       },
     }))
@@ -400,8 +410,9 @@ export function ImportPage() {
     const job = createJob({
       projectId,
       type: 'model',
-      title: `生成 3D 资产（${targets.length} 件，模拟）`,
+      title: `生成 3D 资产（${targets.length} 件，${isMockMode ? '模拟' : '真实后端'}）`,
       itemIds: targets.map((o) => o.id),
+      mock: isMockMode,
     })
     setGenerating(true)
     setLastBatch(null)
@@ -422,13 +433,14 @@ export function ImportPage() {
           projectId,
           object,
           attempt,
-          // 模拟任务没有真实百分比：仅更新阶段文字，界面不显示精确进度
+          // 后端未提供精确百分比时只更新阶段文字，界面不显示伪造进度
           onProgress: (_p, stageLabel) => setModel(object.id, { stage: stageLabel }),
         })
         setModel(object.id, {
-          status: 'placeholder',
+          status: res.assetUrl ? 'ready' : 'placeholder',
           source: 'generated',
-          format: 'placeholder-box',
+          format: res.format ?? (res.assetUrl ? 'glb' : 'placeholder-box'),
+          assetUrl: res.assetUrl,
           shape: object.model.shape ?? 'genericBox',
           stage: undefined,
           note: res.note,
@@ -451,7 +463,7 @@ export function ImportPage() {
       resultNote:
         failed > 0
           ? `${ok} 件成功，${failed} 件失败（可重试失败项，或使用占位盒后继续）`
-          : `全部 ${ok} 件生成完成（模拟占位模型）`,
+          : `全部 ${ok} 件生成完成（${isMockMode ? '模拟占位模型' : '真实后端任务'}）`,
     })
     setLastBatch({ ok, failed, total: targets.length })
     setGenerating(false)
@@ -523,7 +535,7 @@ export function ImportPage() {
           <RecognizeRail phase={phase} />
           <div className="flex items-center gap-2 text-xs text-faint">
             识别状态
-            {isMockMode ? <DataBadge kind="mock" /> : null}
+            {isMockMode ? <DataBadge kind="mock" /> : <DataBadge kind="real" label="真实后端" />}
           </div>
         </div>
       ) : null}
@@ -532,11 +544,16 @@ export function ImportPage() {
         <section className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">① 上传桌面照片</h2>
-            {isMockMode ? <DataBadge kind="mock" label="识别为模拟结果" /> : null}
+            {isMockMode ? (
+              <DataBadge kind="mock" label="识别为模拟结果" />
+            ) : (
+              <DataBadge kind="real" label="识别由后端执行" />
+            )}
           </div>
           <p className="text-[13px] leading-relaxed text-muted-foreground">
-            照片原图保存在浏览器 IndexedDB（大文件不进入 localStorage）。演示模式下识别使用模拟数据，
-            可选择真实照片，也可直接使用示例照片或开始识别。
+            {isMockMode
+              ? '照片原图保存在浏览器 IndexedDB（大文件不进入 localStorage）。演示模式下识别使用模拟数据，可选择真实照片，也可直接使用示例照片或开始识别。'
+              : '照片原图保存在浏览器 IndexedDB；真实识别会把所选照片上传到应用后端分析，返回清单经你确认后才写入场景（尺寸为估计值，需人工核对）。'}
           </p>
 
           {project.isDemo ? (
@@ -647,19 +664,26 @@ export function ImportPage() {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-faint">尚未选择照片。演示模式可直接开始识别（使用模拟结果）。</p>
+            <p className="text-xs text-faint">
+              {isMockMode
+                ? '尚未选择照片。演示模式可直接开始识别（使用模拟结果）。'
+                : '尚未选择照片。真实识别需先上传照片或使用示例照片（照片会上传到应用后端）。'}
+            </p>
           )}
 
           {phase === 'failed' ? (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-[13px] text-danger">
               <XCircle className="h-4 w-4 shrink-0" />
               <span className="flex-1">
-                识别失败（演示异常流程）。可重试；取消勾选「强制失败」后重试即可成功。
+                {isMockMode
+                  ? '识别失败（演示异常流程）。可重试；取消勾选「强制失败」后重试即可成功。'
+                  : `识别失败：${recogError ?? '未知原因'}。可重试，或切换到演示模式继续体验。`}
               </span>
               <Button variant="outline" size="sm" onClick={() => void runRecognition()}>
                 <RefreshCw className="h-3.5 w-3.5" />
                 重试识别
               </Button>
+              <SwitchToDemoButton />
             </div>
           ) : null}
 
@@ -670,7 +694,7 @@ export function ImportPage() {
                 ? phase === 'waiting'
                   ? '等待处理…'
                   : '识别中…'
-                : `开始识别${photos.length > 0 ? `（${photos.length} 张照片）` : '（模拟）'}`}
+                : `开始识别${photos.length > 0 ? `（${photos.length} 张照片）` : isMockMode ? '（模拟）' : '（真实后端）'}`}
             </Button>
             <Button variant="outline" onClick={() => void addSamplePhotos()} disabled={busy}>
               <ImagePlus className="h-4 w-4" />
@@ -707,7 +731,7 @@ export function ImportPage() {
               </Badge>
             ) : null}
             <span className="text-muted-foreground">{recogNote}</span>
-            {isMockMode ? <DataBadge kind="mock" /> : null}
+            {isMockMode ? <DataBadge kind="mock" /> : <DataBadge kind="real" label="真实后端识别" />}
           </div>
 
           <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[13px] leading-relaxed text-warning">
@@ -885,16 +909,23 @@ export function ImportPage() {
             {failedObjects.length > 0 ? (
               <Badge variant="danger">失败 {failedObjects.length} 件</Badge>
             ) : null}
-            {isMockMode ? <DataBadge kind="mock" label="生成为模拟" /> : null}
+            {isMockMode ? (
+              <DataBadge kind="mock" label="生成为模拟" />
+            ) : (
+              <DataBadge kind="real" label="生成由后端执行" />
+            )}
             <FastForwardToggle compact />
             <span className="text-xs text-faint">
-              演示：台灯首次生成会失败，重试后成功（用于演示失败 / 重试 / 部分成功）
+              {isMockMode
+                ? '演示：台灯首次生成会失败，重试后成功（用于演示失败 / 重试 / 部分成功）'
+                : '真实后端：模型生成按件提交 jobId 长任务；失败项可重试'}
             </span>
           </div>
 
           <p className="text-xs text-faint">
-            模型生成按件排队，状态为 等待 / 生成中 / 完成 / 失败；模拟任务无法提供真实进度，只显示阶段文字。
-            模型未完成时，工作台会以匹配尺寸的几何占位物显示该物品。
+            {isMockMode
+              ? '模型生成按件排队，状态为 等待 / 生成中 / 完成 / 失败；模拟任务无法提供真实进度，只显示阶段文字。模型未完成时，工作台会以匹配尺寸的几何占位物显示该物品。'
+              : '模型生成按件排队，状态为 等待 / 生成中 / 完成 / 失败；后端未提供精确进度时只显示阶段文字。资产就绪前（含失败 / 重试中），工作台以匹配尺寸的几何占位物显示该物品。'}
           </p>
 
           {lastBatch ? (
@@ -913,7 +944,7 @@ export function ImportPage() {
               )}
               {lastBatch.failed > 0
                 ? `部分成功：成功 ${lastBatch.ok} 件，失败 ${lastBatch.failed} 件。可重试失败项或使用占位盒，不影响继续进入工作台。`
-                : `全部 ${lastBatch.total} 件生成完成（模拟占位模型）。`}
+                : `全部 ${lastBatch.total} 件生成完成（${isMockMode ? '模拟占位模型' : '真实后端任务，资产已登记'}）。`}
             </div>
           ) : null}
 

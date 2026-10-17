@@ -320,13 +320,15 @@
 - Banner 内操作：逐项重试 / 全部重试 / 继续使用占位。
 - 交付页导出部分成功：导出可下载，缺失项在文档中标记「待补充」。
 
-### 8.5 数据来源三态
+### 8.5 数据来源标注
 
 | 标签 | 样式 | 含义 |
 |---|---|---|
-| 模拟 | 灰色描边 pill「模拟」 | 演示/占位数据 |
+| 模拟 | 灰色描边 pill「模拟」 | 演示/占位数据（本地 mock 服务） |
 | 计算值 | 无 pill，数值后缀「≈」+ tooltip 说明算法 | 本地真实计算（整理度、长度） |
 | 未接入 | 虚线描边 + 禁用 + tooltip「服务未接入」 | 后端能力未就绪 |
+| 真实服务 | 绿色描边 pill「真实服务」 | 后端返回结果（经前端本地校验；0.6.0 起） |
+| 演示数据 | 琥珀描边 pill「演示数据」 | 内置示例项目内容 |
 
 ---
 
@@ -334,7 +336,7 @@
 
 - React 18 + TypeScript + Vite 5；React Router 6；Tailwind CSS 3.4 + shadcn/ui；Zustand（+ persist）。
 - three + @react-three/fiber 8 + @react-three/drei 9（互相兼容的 8.x/9.x 稳定线）。
-- 服务适配层：`src/services/types.ts` 定义 `RecognitionService / AssetService / ExportService` 接口；`src/services/mock/*` 与 `src/services/http/*` 两套实现；`VITE_SERVICE_MODE=demo|api` 切换；密钥仅存在于后端（Rodin 等经应用后端代理，前端不持有）。
+- 服务适配层（已实现，0.6.0）：`src/api/types.ts` 定义服务接口，`src/api/mock/*` 与 `src/api/http/*` 两套实现，`src/api/core/*` 为统一 HTTP 客户端 / jobId 长任务轮询 / wire 契约映射与本地校验；`VITE_API_MODE=mock|real` 切换（兼容旧 `VITE_SERVICE_MODE`），运行时可在界面切换到演示模式；密钥仅存在于后端（Rodin 等经应用后端代理，前端不持有）。契约与缺口见 [api-integration.md](api-integration.md)。
 - 状态划分：`projectStore`、`spaceStore`、`itemsStore`、`cableStore`、`historyStore`、`taskStore`、`uiStore`（模式/视角/选中/对比）。
 - 持久化：项目草稿全量本地持久化（IndexedDB 存照片与模型文件，localStorage 存元数据）。
 

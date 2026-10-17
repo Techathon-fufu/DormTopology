@@ -377,7 +377,7 @@ export function GuidePage() {
       app: 'DormTopology 3D',
       kind: 'delivery-guide',
       exportedAt: new Date().toISOString(),
-      mode: isMockMode ? 'mock' : 'service',
+      mode: isMockMode ? 'mock' : 'real',
       project: {
         id: project.id,
         name: project.name,

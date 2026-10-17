@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 /**
  * 「跳过模拟等待」开关（仅演示模式渲染）：
  * 开启后所有进行中的模拟等待立即完成、后续模拟等待不再计时；
- * 真实服务（VITE_SERVICE_MODE=service）不经过该模块，控件自动隐藏。
+ * 真实后端模式（VITE_API_MODE=real）不经过该模块，控件自动隐藏。
  */
 export function FastForwardToggle({
   compact,

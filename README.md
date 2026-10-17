@@ -64,4 +64,4 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 
 新增后端时按[分层架构与依赖方向](docs/implementation_roadmap.md#分层与依赖方向)组织工程：`domain` 承载规则与算法，`service` 编排用例，`api` 处理 HTTP，`db` 与外部适配器实现存储及供应商能力。当前走线模块已保持纯函数和无外部 I/O；后续由统一装配入口接入 service，不能把 Web、数据库或凭证依赖放回算法模块。
 
-前端应用的安装、启动与环境变量说明见 [frontend/README.md](frontend/README.md)，当前为本地 Mock 演示模式。后端 FastAPI 服务的启动命令、环境变量和依赖安装说明将在实现后补充。
+前端应用的安装、启动与环境变量说明见 [frontend/README.md](frontend/README.md)。默认为本地 Mock 演示模式（`VITE_API_MODE=mock`）；服务适配层已实现（0.6.0，`VITE_API_MODE=real` 调用应用后端，契约见 [frontend/docs/api-integration.md](frontend/docs/api-integration.md)），但后端 FastAPI 服务尚未实现、暂无法真实联调。后端 FastAPI 服务的启动命令、环境变量和依赖安装说明将在实现后补充。
