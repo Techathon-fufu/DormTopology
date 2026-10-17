@@ -36,6 +36,8 @@ python3 -B -m backend.examples.packing_demo --output-dir /tmp/dormtopology-packi
 
 最后一条命令生成 `success`、`partial`、`infeasible`、`revision_2` 各自的 `*_scene.json` 和 `*_packing_result.json`，输出文件名不同但内容均直接遵循场景与整理结果契约。样例生成器在 `backend/examples/packing_demo.py`；领域算法不依赖此生成器，也不通过磁盘通信。
 
+需要三维查看时，在仓库根目录运行 `python3 -B -m backend.examples.algorithm_fixtures`，随后进入前端 `/algorithm-lab`。工作台包含上述四类布局及四类走线诊断场景，直接解析真实算法结果；生成方式、版本规则和 Playwright 检查见[算法可视化验证](algorithm_visual_testing.md)。
+
 ## 摆放与复查
 
 1. 根据允许区域数量、底面积、使用频率和物品 ID 确定稳定的贪心顺序，固定物品从始至终保留原变换。
@@ -85,5 +87,5 @@ D 的走线核心现位于 `backend/app/domain/routing/`，曲线与线缆体积
 ## 待联调
 
 - B 尚需实现 FastAPI、场景持久化、原子版本条件更新和真实布局应用；算法保留版本号不等于已实现服务端并发保护。
-- A 尚需完成契约坐标/字段转换，解析、预览和导出真实 `packing_result.json`；前端目前仍使用规则式演示。
+- 独立算法工作台已支持真实 `packing_result.json` 的解析、预览和导出；A 尚需将产品工作台的坐标/字段统一并接入 B，产品流程仍使用规则式演示。
 - 真实桌体 GLB、真实场景几何、走线可行通道、4/6/8 位插排与 Rodin 仍按各自任务验收，不由本次算法测试代替。

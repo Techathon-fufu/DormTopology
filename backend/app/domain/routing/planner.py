@@ -42,6 +42,8 @@ from .geometry import (
     segment_segment_distance,
     sub,
 )
+from .optimizer import optimize_underside_trays
+from .support import SupportContext, analyze_support, build_support_context
 
 ERROR_MESSAGES = {
     "invalid_input": "The scene or cable fields are invalid",
@@ -52,6 +54,7 @@ ERROR_MESSAGES = {
     "endpoint_blocked": "An endpoint lead-out is blocked",
     "no_path": "No path satisfies clearance, bend, and exclusion constraints",
     "unsupported_mode": "The selected routing mode has no configured channel",
+    "unsupported_span": "The route exceeds the configured unsupported span; add mounted ties or a tray",
 }
 
 
@@ -89,6 +92,7 @@ class Arc:
     length: float
     edge_id: str | None
     exposed: bool
+    unsupported_length: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -158,9 +162,12 @@ def _issue(cable: dict, reason: str) -> dict:
         "path_points": [],
         "path_length_m": None,
         "reason_code": reason,
+        "support_check": {"status": "not_evaluated", "max_unsupported_span_m": None, "support_ids": []},
     }
 
-def _valid(cable: dict, segments: Sequence[Sequence[Point]], samples: Sequence[Point], path_length: float) -> dict:
+def _valid(cable: dict, segments: Sequence[Sequence[Point]], samples: Sequence[Point], path_length: float,
+           support_context: SupportContext | None = None) -> dict:
+    support = analyze_support(segments, support_context, cable["diameter_m"] / 2) if support_context else None
     return {
         "id": cable["id"],
         "start_port_id": cable["start_port_id"],
@@ -174,6 +181,11 @@ def _valid(cable: dict, segments: Sequence[Sequence[Point]], samples: Sequence[P
         "path_points": [list(p) for p in samples],
         "path_length_m": path_length,
         "reason_code": None,
+        "support_check": {
+            "status": "verified" if support else "not_evaluated",
+            "max_unsupported_span_m": support.max_unsupported_span_m if support else None,
+            "support_ids": list(support.support_ids) if support else [],
+        },
     }
 
 
@@ -493,6 +505,7 @@ def _search_path(
     banned_edges: set[str],
     use_dijkstra: bool,
     candidate_node_ids: set[str] | None = None,
+    support_context: SupportContext | None = None,
 ) -> tuple[SearchPath | None, bool, bool]:
     """Search the mode-specific graph and return path plus endpoint candidates.
 
@@ -517,6 +530,13 @@ def _search_path(
     adjacency[end_node] = []
     start_candidates = False
     end_candidates = False
+    def support_for(*points: Point):
+        if support_context is None:
+            return None
+        segments = [_line_control_points(first, last) for first, last in pairwise(points)
+                    if distance(first, last) > 1e-12]
+        return analyze_support(segments, support_context, spec.radius) if segments else None
+
     for node_id, (node_position, _) in nodes.items():
         if candidate_node_ids is not None and node_id not in candidate_node_ids:
             continue
@@ -524,14 +544,20 @@ def _search_path(
             _arc_clearance(start.position, start_exit, spec.radius, start_connection_boxes)
             and _arc_clearance(start_exit, node_position, spec.radius, all_boxes)
         ):
-            adjacency[start_node].append(Arc(node_id, distance(start_exit, node_position), None, False))
             start_candidates = True
+            support = support_for(start.position, start_exit, node_position)
+            if support is None or support.valid:
+                adjacency[start_node].append(Arc(node_id, distance(start_exit, node_position), None, False,
+                                                 support.unsupported_length_m if support else 0.0))
         if (
             _arc_clearance(node_position, end_exit, spec.radius, all_boxes)
             and _arc_clearance(end_exit, end.position, spec.radius, end_connection_boxes)
         ):
-            adjacency[node_id].append(Arc(end_node, distance(node_position, end_exit) + end_leadout, None, False))
             end_candidates = True
+            support = support_for(node_position, end_exit, end.position)
+            if support is None or support.valid:
+                adjacency[node_id].append(Arc(end_node, distance(node_position, end_exit) + end_leadout, None, False,
+                                              support.unsupported_length_m if support else 0.0))
 
     for edge in edges:
         edge_id = edge["id"]
@@ -543,9 +569,13 @@ def _search_path(
             continue
         if not _arc_clearance(from_position, to_position, spec.radius, all_boxes):
             continue
+        support = support_for(from_position, to_position)
+        if support is not None and not support.valid:
+            continue
         edge_length = distance(from_position, to_position)
-        adjacency[from_id].append(Arc(to_id, edge_length, edge_id, bool(edge["exposed"])))
-        adjacency[to_id].append(Arc(from_id, edge_length, edge_id, bool(edge["exposed"])))
+        unsupported = support.unsupported_length_m if support else 0.0
+        adjacency[from_id].append(Arc(to_id, edge_length, edge_id, bool(edge["exposed"]), unsupported))
+        adjacency[to_id].append(Arc(from_id, edge_length, edge_id, bool(edge["exposed"]), unsupported))
 
     required_kind = "slot" if spec.mode == "slot" else "fixing_point"
     positions = {node_id: value[0] for node_id, value in nodes.items()}
@@ -559,7 +589,7 @@ def _search_path(
                 nodes[arc.target][1] == required_kind,
                 False,
                 start_node,
-                start_leadout + arc.length,
+                start_leadout + arc.length + 3.0 * arc.unsupported_length,
             )
         )
     if not start_states:
@@ -605,7 +635,7 @@ def _search_path(
                     previous_direction = normalize(previous_vector)
                     next_direction = normalize(next_vector)
                     turn_cost = bend_penalty * (1.0 - dot(previous_direction, next_direction))
-            next_cost = cost + arc.length + (exposure_penalty * arc.length if arc.exposed else 0.0) + turn_cost
+            next_cost = cost + arc.length + (exposure_penalty * arc.length if arc.exposed else 0.0) + turn_cost + 3.0 * arc.unsupported_length
             next_state = (arc.target, next_passed, next_used_edge, node_id)
             if next_cost + 1e-12 >= costs.get(next_state, math.inf):
                 continue
@@ -682,6 +712,7 @@ def _validate_curve(
     required_points: Sequence[Point] = (),
     required_tolerance: float = EPSILON,
     corridors: Sequence[tuple[Point, Point, float | None]] = (),
+    support_context: SupportContext | None = None,
 ) -> tuple[str | None, float]:
     for previous, following in pairwise(segments):
         if distance(previous[3], following[0]) > 1e-9:
@@ -752,6 +783,8 @@ def _validate_curve(
     path_length = beziers_arc_length(segments)
     if path_length + spec.cable["slack_m"] > spec.cable["length_m"] + EPSILON:
         return "length_exceeded", path_length
+    if support_context and not analyze_support(segments, support_context, spec.radius).valid:
+        return "unsupported_span", path_length
     return None, path_length
 
 
@@ -766,6 +799,7 @@ def _plan_one(
     item_boxes: dict[str, AABB | OBB],
     occupied: Sequence[tuple[Sequence[Point], float]],
     use_dijkstra: bool,
+    support_context: SupportContext | None = None,
 ) -> tuple[dict, tuple[Sequence[Point], float] | None]:
     start = endpoints[cable["start_port_id"]]
     end = endpoints[cable["end_port_id"]]
@@ -805,6 +839,7 @@ def _plan_one(
     banned_edges: set[str] = set()
     last_reason = "no_path"
     saw_length_exceeded = False
+    saw_unsupported = False
     for _attempt in range(3):
         search_path, start_candidates, end_candidates = _search_path(
             nodes,
@@ -818,12 +853,20 @@ def _plan_one(
             banned_edges,
             use_dijkstra,
             candidate_node_ids,
+            support_context,
         )
         if search_path is None:
             if not start_candidates or not end_candidates:
                 last_reason = "endpoint_blocked"
             else:
                 last_reason = "no_path"
+                if support_context:
+                    geometric_path, _, _ = _search_path(
+                        nodes, edges, start, end, spec, obstacle_boxes, reserved_boxes,
+                        item_boxes, banned_edges, use_dijkstra, candidate_node_ids,
+                    )
+                    if geometric_path is not None:
+                        last_reason = "unsupported_span"
             break
         start_exit = _endpoint_exit(start, spec.radius)
         end_exit = _endpoint_exit(end, spec.radius)
@@ -872,6 +915,7 @@ def _plan_one(
                 search_path.required_points,
                 path_required_tolerance,
                 search_path.corridors,
+                support_context,
             )
             if last_reason == "no_path" and occupied and _tube_conflicts(samples, spec.radius, occupied):
                 edge_clearances = [
@@ -902,22 +946,27 @@ def _plan_one(
                         search_path.required_points,
                         required_tolerance=max(path_required_tolerance, channel_clearance),
                         corridors=search_path.corridors,
+                        support_context=support_context,
                     )
                     if lane_reason is None:
-                        return _valid(cable, lane_segments, lane_samples, lane_length), (
+                        return _valid(cable, lane_segments, lane_samples, lane_length, support_context), (
                             lane_samples,
                             spec.radius,
                         )
             if last_reason is None:
-                return _valid(cable, segments, samples, path_length), (samples, spec.radius)
+                return _valid(cable, segments, samples, path_length, support_context), (samples, spec.radius)
             if last_reason == "length_exceeded":
                 saw_length_exceeded = True
+            if last_reason == "unsupported_span":
+                saw_unsupported = True
         if search_path.edge_ids:
             banned_edges.add(search_path.edge_ids[min(_attempt, len(search_path.edge_ids) - 1)])
         else:
             break
     if saw_length_exceeded and last_reason in {"no_path", "length_exceeded"}:
         last_reason = "length_exceeded"
+    if saw_unsupported and last_reason == "no_path":
+        last_reason = "unsupported_span"
     return _issue(cable, last_reason), None
 
 
@@ -990,6 +1039,7 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
     implementation against the same non-negative graph cost function.
     """
     validate_scene(scene)
+    support_context = build_support_context(scene)
     endpoints = _build_endpoints(scene)
     nodes = {node["id"]: (point(node["position"]), node["kind"]) for node in scene["routing_graph"]["nodes"]}
     edges = scene["routing_graph"]["edges"]
@@ -1031,6 +1081,7 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
             item_boxes,
             occupied,
             use_dijkstra,
+            support_context,
         )
         results_by_id[cable["id"]] = result
         if tube is not None:
@@ -1088,4 +1139,5 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
             "baseline_exposed_length_m": baseline_length,
         },
         "issues": issues,
+        "underside_tray_optimizations": optimize_underside_trays(scene, results),
     }

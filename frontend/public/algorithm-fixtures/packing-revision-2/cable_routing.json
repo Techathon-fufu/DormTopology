@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "packing_demo",
+  "scene_revision": 3,
+  "status": "infeasible",
+  "cables": [
+    {
+      "id": "strip_bus",
+      "start_port_id": "strip_in",
+      "end_port_id": "wall_power_port",
+      "cable_type": "power",
+      "thickness": "thin",
+      "mode": "slot",
+      "diameter_m": 0.004,
+      "status": "failed",
+      "curve_segments": [],
+      "path_points": [],
+      "path_length_m": null,
+      "reason_code": "endpoint_blocked",
+      "support_check": {
+        "status": "not_evaluated",
+        "max_unsupported_span_m": null,
+        "support_ids": []
+      }
+    },
+    {
+      "id": "charger_power",
+      "start_port_id": "charger_port",
+      "end_port_id": "strip_socket_1",
+      "cable_type": "power",
+      "thickness": "thin",
+      "mode": "slot",
+      "diameter_m": 0.004,
+      "status": "failed",
+      "curve_segments": [],
+      "path_points": [],
+      "path_length_m": null,
+      "reason_code": "endpoint_blocked",
+      "support_check": {
+        "status": "not_evaluated",
+        "max_unsupported_span_m": null,
+        "support_ids": []
+      }
+    },
+    {
+      "id": "keyboard_usb",
+      "start_port_id": "keyboard_port",
+      "end_port_id": "tablet_port",
+      "cable_type": "usb",
+      "thickness": "thin",
+      "mode": "slot",
+      "diameter_m": 0.004,
+      "status": "failed",
+      "curve_segments": [],
+      "path_points": [],
+      "path_length_m": null,
+      "reason_code": "endpoint_blocked",
+      "support_check": {
+        "status": "not_evaluated",
+        "max_unsupported_span_m": null,
+        "support_ids": []
+      }
+    }
+  ],
+  "metrics": {
+    "exposed_length_m": null,
+    "baseline_exposed_length_m": null
+  },
+  "issues": [
+    {
+      "entity_id": "strip_bus",
+      "code": "endpoint_blocked",
+      "message": "An endpoint lead-out is blocked"
+    },
+    {
+      "entity_id": "charger_power",
+      "code": "endpoint_blocked",
+      "message": "An endpoint lead-out is blocked"
+    },
+    {
+      "entity_id": "keyboard_usb",
+      "code": "endpoint_blocked",
+      "message": "An endpoint lead-out is blocked"
+    }
+  ],
+  "underside_tray_optimizations": []
+}

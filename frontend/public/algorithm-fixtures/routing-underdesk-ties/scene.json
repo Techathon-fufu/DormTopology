@@ -1,0 +1,382 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "routing_underdesk_cable_tie",
+  "scene_revision": 1,
+  "baseline_id": "routing_underdesk_cable_tie_baseline",
+  "template_id": "diagnostic_desk_v1",
+  "desk": {
+    "width_m": 1.45,
+    "depth_m": 0.6,
+    "top_height_m": 0.77
+  },
+  "wall": {
+    "z_m": -0.1,
+    "bounds_xy_m": [
+      0.0,
+      1.45,
+      0.0,
+      1.2
+    ]
+  },
+  "regions": [
+    {
+      "id": "desktop_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        0,
+        1.45,
+        0,
+        0.6
+      ],
+      "clearance_height_m": 1.0
+    }
+  ],
+  "items": [
+    {
+      "id": "source",
+      "name": "source",
+      "category": "device",
+      "size_m": [
+        0.08,
+        0.05,
+        0.08
+      ],
+      "position": [
+        0.12,
+        0.692,
+        0.15
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": true,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "source_port",
+          "type": "power_source",
+          "local_position": [
+            0.04,
+            0.04,
+            0
+          ],
+          "local_direction": [
+            1,
+            0,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "sink",
+      "name": "sink",
+      "category": "device",
+      "size_m": [
+        0.08,
+        0.05,
+        0.08
+      ],
+      "position": [
+        1.3,
+        0.692,
+        0.15
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": true,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "sink_port",
+          "type": "power_sink",
+          "local_position": [
+            -0.04,
+            0.04,
+            0
+          ],
+          "local_direction": [
+            -1,
+            0,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "desk_top",
+      "min": [
+        0,
+        0.745,
+        0
+      ],
+      "max": [
+        1.45,
+        0.77,
+        0.6
+      ]
+    }
+  ],
+  "reserved_zones": [],
+  "exposure_zones": [
+    {
+      "id": "desktop_exposure",
+      "min": [
+        0.0,
+        0.77,
+        0.0
+      ],
+      "max": [
+        1.45,
+        1.0,
+        0.6
+      ]
+    }
+  ],
+  "routing_graph": {
+    "support_policy": {
+      "max_unsupported_span_m": 0.23
+    },
+    "nodes": [
+      {
+        "id": "supported_node_0",
+        "position": [
+          0.21,
+          0.732,
+          0.15
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "supported_node_1",
+        "position": [
+          0.4,
+          0.732,
+          0.15
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "supported_node_2",
+        "position": [
+          0.6,
+          0.732,
+          0.15
+        ],
+        "kind": "fixing_point"
+      },
+      {
+        "id": "supported_node_3",
+        "position": [
+          0.8,
+          0.732,
+          0.15
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "supported_node_4",
+        "position": [
+          1.0,
+          0.732,
+          0.15
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "supported_node_5",
+        "position": [
+          1.2,
+          0.732,
+          0.15
+        ],
+        "kind": "corner"
+      }
+    ],
+    "edges": [
+      {
+        "id": "supported_edge_0",
+        "from_node_id": "supported_node_0",
+        "to_node_id": "supported_node_1",
+        "modes": [
+          "backboard"
+        ],
+        "clearance_radius_m": 0.025,
+        "exposed": false
+      },
+      {
+        "id": "supported_edge_1",
+        "from_node_id": "supported_node_1",
+        "to_node_id": "supported_node_2",
+        "modes": [
+          "backboard"
+        ],
+        "clearance_radius_m": 0.025,
+        "exposed": false
+      },
+      {
+        "id": "supported_edge_2",
+        "from_node_id": "supported_node_2",
+        "to_node_id": "supported_node_3",
+        "modes": [
+          "backboard"
+        ],
+        "clearance_radius_m": 0.025,
+        "exposed": false
+      },
+      {
+        "id": "supported_edge_3",
+        "from_node_id": "supported_node_3",
+        "to_node_id": "supported_node_4",
+        "modes": [
+          "backboard"
+        ],
+        "clearance_radius_m": 0.025,
+        "exposed": false
+      },
+      {
+        "id": "supported_edge_4",
+        "from_node_id": "supported_node_4",
+        "to_node_id": "supported_node_5",
+        "modes": [
+          "backboard"
+        ],
+        "clearance_radius_m": 0.025,
+        "exposed": false
+      }
+    ],
+    "supports": [
+      {
+        "id": "underside_tie_0",
+        "kind": "cable_tie",
+        "obstacle_id": "desk_top",
+        "face": "y_min",
+        "bounds_uv_m": [
+          0.19,
+          0.22999999999999998,
+          0.13,
+          0.17
+        ],
+        "stand_off_m": 0.02
+      },
+      {
+        "id": "underside_tie_1",
+        "kind": "cable_tie",
+        "obstacle_id": "desk_top",
+        "face": "y_min",
+        "bounds_uv_m": [
+          0.38,
+          0.42000000000000004,
+          0.13,
+          0.17
+        ],
+        "stand_off_m": 0.02
+      },
+      {
+        "id": "underside_tie_2",
+        "kind": "cable_tie",
+        "obstacle_id": "desk_top",
+        "face": "y_min",
+        "bounds_uv_m": [
+          0.58,
+          0.62,
+          0.13,
+          0.17
+        ],
+        "stand_off_m": 0.02
+      },
+      {
+        "id": "underside_tie_3",
+        "kind": "cable_tie",
+        "obstacle_id": "desk_top",
+        "face": "y_min",
+        "bounds_uv_m": [
+          0.78,
+          0.8200000000000001,
+          0.13,
+          0.17
+        ],
+        "stand_off_m": 0.02
+      },
+      {
+        "id": "underside_tie_4",
+        "kind": "cable_tie",
+        "obstacle_id": "desk_top",
+        "face": "y_min",
+        "bounds_uv_m": [
+          0.98,
+          1.02,
+          0.13,
+          0.17
+        ],
+        "stand_off_m": 0.02
+      },
+      {
+        "id": "underside_tie_5",
+        "kind": "cable_tie",
+        "obstacle_id": "desk_top",
+        "face": "y_min",
+        "bounds_uv_m": [
+          1.18,
+          1.22,
+          0.13,
+          0.17
+        ],
+        "stand_off_m": 0.02
+      }
+    ]
+  },
+  "cables": [
+    {
+      "id": "power",
+      "start_port_id": "source_port",
+      "end_port_id": "sink_port",
+      "cable_type": "power",
+      "thickness": "thin",
+      "length_m": 3.0,
+      "diameter_m": 0.004,
+      "min_bend_radius_m": 0.015,
+      "slack_m": 0.05,
+      "mode": "backboard"
+    }
+  ]
+}

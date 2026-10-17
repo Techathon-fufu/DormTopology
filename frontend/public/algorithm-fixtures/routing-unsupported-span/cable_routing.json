@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "routing_underdesk_none",
+  "scene_revision": 1,
+  "status": "infeasible",
+  "cables": [
+    {
+      "id": "power",
+      "start_port_id": "source_port",
+      "end_port_id": "sink_port",
+      "cable_type": "power",
+      "thickness": "thin",
+      "mode": "backboard",
+      "diameter_m": 0.004,
+      "status": "failed",
+      "curve_segments": [],
+      "path_points": [],
+      "path_length_m": null,
+      "reason_code": "unsupported_span",
+      "support_check": {
+        "status": "not_evaluated",
+        "max_unsupported_span_m": null,
+        "support_ids": []
+      }
+    }
+  ],
+  "metrics": {
+    "exposed_length_m": null,
+    "baseline_exposed_length_m": null
+  },
+  "issues": [
+    {
+      "entity_id": "power",
+      "code": "unsupported_span",
+      "message": "The route exceeds the configured unsupported span; add mounted ties or a tray"
+    }
+  ],
+  "underside_tray_optimizations": []
+}

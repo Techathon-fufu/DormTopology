@@ -112,6 +112,12 @@ class CurveSegment(TypedDict):
     control_points: list[Vec3]
 
 
+class SupportCheck(TypedDict):
+    status: Literal["verified", "not_evaluated"]
+    max_unsupported_span_m: float | None
+    support_ids: list[str]
+
+
 class CableRoute(TypedDict):
     id: str
     start_port_id: str
@@ -125,11 +131,32 @@ class CableRoute(TypedDict):
     path_points: list[Vec3]
     path_length_m: float | None
     reason_code: str | None
+    support_check: NotRequired[SupportCheck]
 
 
 class RoutingMetrics(TypedDict):
     exposed_length_m: float | None
     baseline_exposed_length_m: float | None
+
+
+class TrayMount(TypedDict):
+    obstacle_id: str
+    face: Literal["y_min"]
+    bounds_uv_m: list[float]
+    stand_off_m: float
+
+
+class UndersideTrayOptimization(TypedDict):
+    id: str
+    status: Literal["recommended", "verified", "not_used"]
+    support_id: str | None
+    cable_ids: list[str]
+    shared_length_m: float
+    occupied_width_m: float
+    available_width_m: float | None
+    requires_installation: bool
+    reason_code: str | None
+    mount: TrayMount
 
 
 class RoutingResult(TypedDict):
@@ -140,3 +167,4 @@ class RoutingResult(TypedDict):
     cables: list[CableRoute]
     metrics: RoutingMetrics
     issues: list[Issue]
+    underside_tray_optimizations: NotRequired[list[UndersideTrayOptimization]]

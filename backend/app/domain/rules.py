@@ -262,6 +262,59 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _enum(mode, {"slot", "backboard"}, path + ".modes")
         _number(edge["clearance_radius_m"], path + ".clearance_radius_m", positive=True)
         _boolean(edge["exposed"], path + ".exposed")
+    if "supports" in graph and "support_policy" not in graph:
+        _fail("routing_graph.support_policy", "supports require an explicit policy")
+    if "support_policy" in graph:
+        policy = _object(
+            graph["support_policy"], "max_unsupported_span_m", "routing_graph.support_policy"
+        )
+        _number(
+            policy["max_unsupported_span_m"],
+            "routing_graph.support_policy.max_unsupported_span_m",
+            positive=True,
+        )
+    obstacles = {zone["id"]: zone for zone in scene["obstacles"]}
+    for collection in ("supports", "tray_candidates"):
+        for i, value in enumerate(_array(graph.get(collection, []), f"routing_graph.{collection}")):
+            path = f"routing_graph.{collection}[{i}]"
+            support = entity(value, "kind obstacle_id face bounds_uv_m stand_off_m", path)
+            _enum(support["kind"], {"surface", "cable_tie", "cable_tray"}, path + ".kind")
+            if collection == "tray_candidates":
+                _enum(support["kind"], {"cable_tray"}, path + ".kind")
+                _enum(support["face"], {"y_min"}, path + ".face")
+            obstacle_id = _string(support["obstacle_id"], path + ".obstacle_id")
+            if obstacle_id not in obstacles:
+                _fail(path + ".obstacle_id", "support must mount on an obstacle")
+            _enum(
+                support["face"],
+                {"x_min", "x_max", "y_min", "y_max", "z_min", "z_max"},
+                path + ".face",
+            )
+            if support["kind"] == "surface" and support["face"] != "y_max":
+                _fail(path + ".face", "passive surface support must face upward")
+            _bounds(support["bounds_uv_m"], path + ".bounds_uv_m")
+            axis = "xyz".index(support["face"][0])
+            tangents = [other for other in range(3) if other != axis]
+            obstacle = obstacles[obstacle_id]
+            u0, u1, v0, v1 = support["bounds_uv_m"]
+            for tangent, lower, upper in zip(tangents, (u0, v0), (u1, v1)):
+                if lower < obstacle["min"][tangent] or upper > obstacle["max"][tangent]:
+                    _fail(path + ".bounds_uv_m", "patch must stay within the mounting face")
+            stand_off = _number(support["stand_off_m"], path + ".stand_off_m", positive=True)
+            limit = {"surface": 0.02, "cable_tie": 0.05, "cable_tray": 0.10}[support["kind"]]
+            if stand_off > limit:
+                _fail(path + ".stand_off_m", "support reach exceeds the prototype limit")
+            if support["kind"] == "cable_tie" and max(u1 - u0, v1 - v0) > 0.05 + 1e-10:
+                _fail(path + ".bounds_uv_m", "a tie patch must not exceed 0.05m per side")
+            if collection == "tray_candidates":
+                _object(support, "cable_ids", path)
+                cable_ids = _array(support["cable_ids"], path + ".cable_ids")
+                if len(cable_ids) < 2:
+                    _fail(path + ".cable_ids", "a tray candidate needs at least two cable IDs")
+                for identifier in cable_ids:
+                    _string(identifier, path + ".cable_ids")
+                if len(set(cable_ids)) != len(cable_ids):
+                    _fail(path + ".cable_ids", "duplicate cable ID")
     for i, value in enumerate(_array(scene["cables"], "cables")):
         path = f"cables[{i}]"
         cable = entity(
@@ -294,3 +347,7 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                 _fail(path + ".baseline_path_points", "expected at least two points")
             for p in points:
                 _vector(p, 3, path + ".baseline_path_points")
+    cable_ids = {cable["id"] for cable in scene["cables"]}
+    for i, candidate in enumerate(graph.get("tray_candidates", [])):
+        if any(identifier not in cable_ids for identifier in candidate["cable_ids"]):
+            _fail(f"routing_graph.tray_candidates[{i}].cable_ids", "unknown cable ID")

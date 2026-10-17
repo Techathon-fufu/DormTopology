@@ -1,6 +1,6 @@
 # DormTopology 3D 前端（成员 A）
 
-React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线演示应用。当前为**本地演示模式**：照片识别、模型生成、布局整理与走线规划均由本地 Mock 适配器与规则式演示实现，尚未接入后端 FastAPI 服务、真实算法与 Rodin 生成；界面已就地标注各处数据的真实来源（演示数据 / 模拟 / 计算值 / 未接入）。
+React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线演示应用。产品流程当前为**本地演示模式**：照片识别、模型生成、布局整理与走线规划由本地 Mock 适配器与规则式演示实现，尚未接入后端 FastAPI 服务与 Rodin。独立的 `/algorithm-lab` 现可读取真实 Python 领域算法导出的 JSON，查看布局、路径和失败原因；这不代表产品流程联调已完成。
 
 本目录的设计基线见 [docs/design-spec.md](docs/design-spec.md)；仓库级约定以 [实施方案](../docs/implementation_roadmap.md) 与 [数据契约](../docs/data_contract.md) 为准。
 
@@ -14,8 +14,14 @@ npm run typecheck  # tsc --noEmit
 npm run build      # tsc --noEmit && vite build
 ```
 
-- Node.js ≥ 18（开发验证使用 Node 24 / npm 11），依赖版本已固定（`package.json` 无 `^` 范围）。
+- 开发及浏览器测试使用 Node.js ≥ 20（本轮验证 Node 22 / npm 10），依赖版本已固定（`package.json` 无 `^` 范围）。
 - 环境变量见 `.env.example`：`VITE_SERVICE_MODE=mock`（默认，本地模拟）或 `service`（调用应用后端）；`VITE_API_BASE_URL` 仅 service 模式使用。Rodin 等第三方凭证只在后端持有，前端不配置、不直接调用供应商接口。
+
+## 算法验证入口
+
+从项目首页点击「算法验证」，或打开 `/algorithm-lab`。内置 13 组真实算法输入/结果，支持整理前后、碰撞体/支撑区域/网络图层、已验证路径、失败原因、物品详情及契约 JSON 导入导出。「固定与支撑」图层显示已安装支撑及悬空跨距上界；「集线槽建议」独立显示三线综合案例的可选收束位置、分组与占用宽度，不影响逐线有效性。历史数据标记支撑未评估。查看器直接使用契约坐标，不转换为产品演示模型。
+
+在仓库根目录运行 `python3 -B -m backend.examples.algorithm_fixtures` 可重新生成样例。在本目录运行 `npx playwright install chromium` 后，`npm run test:e2e` 执行桌面/手机 Chromium 检查，`npm run test:e2e:report` 查看截图与报告。完整的文件、版本和验收边界见[算法可视化验证](../docs/algorithm_visual_testing.md)。
 
 ## 已实现的流程（演示数据 + 本地规则）
 
@@ -43,6 +49,7 @@ npm run build      # tsc --noEmit && vite build
 
 ```text
 frontend/src/
+  algorithm-lab/  真实领域 JSON 的独立解析、三维查看与版本检查
   api/      HTTP 客户端与 Mock 适配器（服务契约、模式切换与数据来源）
   state/    Zustand 状态（项目、工作台、线缆、整理、任务、交付、导览、演示加速）与 IndexedDB 存取
   scene/    Three.js/R3F 场景与本地几何规则（场景校验、走线规划、路径节点、模型资源）
@@ -61,7 +68,7 @@ frontend/src/
 3. **字段命名**：内部领域类型为 camelCase（`types/project.ts`），契约 JSON 为 snake_case（`scene.json` / `packing_result.json` / `cable_routing.json`）；`api/` 层负责双向转换。
 4. **接口与线缆模型**：契约端口含 `capacity` / `confirmed`，线缆含 `thickness` / `mode` / `length_m` / `min_bend_radius_m` / `slack_m` 及失败原因码；本应用演示模型尚未包含这些字段与枚举，联调时按契约补齐。
 5. **结果状态语义**：契约使用 `success/partial/infeasible`、`valid/failed` 与统一 `reason_code`；本应用内部状态（planned/stale/conflict 等）仅用于本地展示，需在 `api/` 层映射。
-6. **算法来源**：整理与走线目前为前端本地规则式演示（`scene/ruleLayout.ts`、`scene/cableRoute.ts`）；`algorithm/` 的 Python 走线实现与后端 service 尚未接入。
+6. **算法来源**：产品工作台仍使用前端本地规则式演示（`scene/ruleLayout.ts`、`scene/cableRoute.ts`）；Python 领域实现位于 `backend/app/domain/`。独立验证入口已解析其真实 JSON，产品 service 调用仍未接入。
 
 ## 未完成事项（对应[任务清单](../docs/project_tasks.md)成员 A）
 
@@ -74,6 +81,8 @@ frontend/src/
 - 手机端上传、预览与场景查看的实测记录。
 
 ## 验证记录（2026-10-17，工作台阶段复检与路演三幕）
+
+新增算法验证入口的检查记录独立维护于[算法可视化验证](../docs/algorithm_visual_testing.md#验证记录2026-10-17)：真实样例生成、构建以及桌面/手机 Chromium 自动检查通过，最新检查数量见该记录。下文为此前产品 Mock 流程的历史记录。
 
 - `npm run typecheck` 通过；`npm run build` 通过（产物 1,376.29 kB JS + 25.67 kB CSS，含 Three.js 单块体积警告，属预期）。
 - Headless 冒烟（esbuild 打包 + Node 运行，38 项断言全过）：拖拽落点决策 6 种情形（有效提交 / 无效回退到最后有效位置 / 未移动与无效回退不提交）、选中状态、属性与位姿同步、引用设备的 3 条线缆 stale 标记与撤销还原、撤销 / 重做时间线、localStorage 序列化内容断言（名称 / 位置）、视角预设强制重应用、导览三幕定义与提示、收拢动画共用入口（无原始走线提示 / 播放 / 导览信号 / 推进到末态）、摆放校验（越界 / 相交 / 空位）。

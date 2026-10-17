@@ -1,0 +1,355 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "routing_length_exceeded",
+  "scene_revision": 1,
+  "baseline_id": "routing_slot_baseline",
+  "template_id": "diagnostic_desk_v1",
+  "desk": {
+    "width_m": 1.45,
+    "depth_m": 0.6,
+    "top_height_m": 0.77
+  },
+  "wall": {
+    "z_m": -0.1,
+    "bounds_xy_m": [
+      0.0,
+      1.45,
+      0.0,
+      1.2
+    ]
+  },
+  "regions": [
+    {
+      "id": "desk_left_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        0.0,
+        0.75,
+        0.0,
+        0.6
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "desk_right_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        0.85,
+        1.45,
+        0.0,
+        0.6
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "desk_slot_back_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        0.75,
+        0.85,
+        0.0,
+        0.1
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "desk_slot_front_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        0.75,
+        0.85,
+        0.2,
+        0.6
+      ],
+      "clearance_height_m": 1.0
+    }
+  ],
+  "items": [
+    {
+      "id": "source",
+      "name": "source",
+      "category": "device",
+      "size_m": [
+        0.1,
+        0.1,
+        0.1
+      ],
+      "position": [
+        0.15,
+        0.77,
+        0.15
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": true,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "source_port",
+          "type": "power_source",
+          "local_position": [
+            0.05,
+            0.05,
+            0.0
+          ],
+          "local_direction": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "sink",
+      "name": "sink",
+      "category": "device",
+      "size_m": [
+        0.1,
+        0.1,
+        0.1
+      ],
+      "position": [
+        1.2,
+        0.3,
+        0.15
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": true,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "sink_port",
+          "type": "power_sink",
+          "local_position": [
+            -0.05,
+            0.05,
+            0.0
+          ],
+          "local_direction": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "desk_left",
+      "min": [
+        0.0,
+        0.745,
+        0.0
+      ],
+      "max": [
+        0.75,
+        0.77,
+        0.6
+      ]
+    },
+    {
+      "id": "desk_right",
+      "min": [
+        0.85,
+        0.745,
+        0.0
+      ],
+      "max": [
+        1.45,
+        0.77,
+        0.6
+      ]
+    },
+    {
+      "id": "desk_slot_back",
+      "min": [
+        0.75,
+        0.745,
+        0.0
+      ],
+      "max": [
+        0.85,
+        0.77,
+        0.1
+      ]
+    },
+    {
+      "id": "desk_slot_front",
+      "min": [
+        0.75,
+        0.745,
+        0.2
+      ],
+      "max": [
+        0.85,
+        0.77,
+        0.6
+      ]
+    },
+    {
+      "id": "backboard",
+      "min": [
+        0.0,
+        0.1,
+        -0.015
+      ],
+      "max": [
+        1.45,
+        0.74,
+        -0.005
+      ]
+    }
+  ],
+  "reserved_zones": [],
+  "exposure_zones": [
+    {
+      "id": "desktop_exposure",
+      "min": [
+        0.0,
+        0.77,
+        0.0
+      ],
+      "max": [
+        1.45,
+        1.0,
+        0.6
+      ]
+    }
+  ],
+  "routing_graph": {
+    "nodes": [
+      {
+        "id": "slot_top",
+        "position": [
+          0.8,
+          0.82,
+          0.15
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "slot_down",
+        "position": [
+          0.8,
+          0.65,
+          0.15
+        ],
+        "kind": "slot"
+      },
+      {
+        "id": "slot_low",
+        "position": [
+          0.8,
+          0.35,
+          0.15
+        ],
+        "kind": "fixing_point"
+      },
+      {
+        "id": "back_top",
+        "position": [
+          0.8,
+          0.82,
+          -0.08
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "back_bottom",
+        "position": [
+          0.8,
+          0.35,
+          -0.08
+        ],
+        "kind": "fixing_point"
+      }
+    ],
+    "edges": [
+      {
+        "id": "slot_entry",
+        "from_node_id": "slot_top",
+        "to_node_id": "slot_down",
+        "modes": [
+          "slot"
+        ],
+        "clearance_radius_m": 0.06,
+        "exposed": false
+      },
+      {
+        "id": "slot_vertical",
+        "from_node_id": "slot_down",
+        "to_node_id": "slot_low",
+        "modes": [
+          "slot"
+        ],
+        "clearance_radius_m": 0.06,
+        "exposed": false
+      },
+      {
+        "id": "back_vertical",
+        "from_node_id": "back_top",
+        "to_node_id": "back_bottom",
+        "modes": [
+          "backboard"
+        ],
+        "clearance_radius_m": 0.06,
+        "exposed": false
+      }
+    ]
+  },
+  "cables": [
+    {
+      "id": "power",
+      "start_port_id": "source_port",
+      "end_port_id": "sink_port",
+      "cable_type": "power",
+      "thickness": "thin",
+      "length_m": 0.2,
+      "diameter_m": 0.004,
+      "min_bend_radius_m": 0.015,
+      "slack_m": 0.05,
+      "mode": "slot"
+    }
+  ]
+}

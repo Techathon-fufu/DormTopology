@@ -7,6 +7,7 @@ import { SpaceSetupPage } from '@/ui/pages/SpaceSetupPage'
 import { ImportPage } from '@/ui/pages/ImportPage'
 import { WorkspacePage } from '@/ui/pages/WorkspacePage'
 import { GuidePage } from '@/ui/pages/GuidePage'
+import { AlgorithmLabPage } from '@/algorithm-lab/AlgorithmLabPage'
 import { useProjectsStore } from '@/state/projectsStore'
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
       </Route>
       {/* 三维工作台为整屏布局，不套 AppShell */}
       <Route path="/projects/:id/workspace" element={<WorkspacePage />} />
+      <Route path="/algorithm-lab" element={<AlgorithmLabPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
