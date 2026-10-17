@@ -1,5 +1,5 @@
 import { describePrimitive } from './primitiveGeometry'
-import { objectExtent, objectToWorld } from './collisionGeometry'
+import { objectExtent, objectFootprint, objectToWorld } from './collisionGeometry'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import {
   DESK_BEAM_DEPTH,
@@ -122,12 +122,12 @@ function isSmallItem(o: SceneObject, role: Role): boolean {
   return Math.max(o.dimensions.width, o.dimensions.height, o.dimensions.depth) <= 0.16
 }
 
-function footprintOverlapsRect(x: number, z: number, w: number, d: number, r: ZoneRect): boolean {
+function footprintOverlapsRect(footprint: ZoneRect, r: ZoneRect): boolean {
   return (
-    x - w / 2 < r.x1 - 0.001 &&
-    x + w / 2 > r.x0 + 0.001 &&
-    z - d / 2 < r.z1 - 0.001 &&
-    z + d / 2 > r.z0 + 0.001
+    footprint.x0 < r.x1 - 0.001 &&
+    footprint.x1 > r.x0 + 0.001 &&
+    footprint.z0 < r.z1 - 0.001 &&
+    footprint.z1 > r.z0 + 0.001
   )
 }
 
@@ -150,11 +150,11 @@ function canPlace(
   const onDesk = Math.abs(position[1] - ctx.zones.deskSurface.y) < 0.03
   if (onDesk) {
     // 旋转后足迹取世界 AABB，落在轴对齐的活动区矩形之外时才算不压到
-    const [halfX, halfZ] = footprintHalfExtents(object, rotationY)
-    if (!allow.typing && footprintOverlapsRect(position[0], position[2], halfX * 2, halfZ * 2, ctx.zones.typing.rect)) {
+    const footprint = objectFootprint(object, position, rotationY)
+    if (!allow.typing && footprintOverlapsRect(footprint, ctx.zones.typing.rect)) {
       return false
     }
-    if (!allow.cup && footprintOverlapsRect(position[0], position[2], halfX * 2, halfZ * 2, ctx.zones.cup.rect)) {
+    if (!allow.cup && footprintOverlapsRect(footprint, ctx.zones.cup.rect)) {
       return false
     }
   }
@@ -165,17 +165,6 @@ function canPlace(
   }))
   const issues = placementIssues(candidate, position, obstacles, ctx.room)
   return !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap' || i.type === 'roomCollision' || i.type === 'floating')
-}
-
-/**
- * Half-extents of the rotated real footprint (world xz), used for zone avoidance.
- * A rotated L-shape must be covered by its rotated AABB, which is exactly what this is.
- */
-function footprintHalfExtents(object: SceneObject, rotationY: number): [number, number] {
-  const e = objectExtent(object)
-  const c = Math.abs(Math.cos(rotationY))
-  const s = Math.abs(Math.sin(rotationY))
-  return [(e.width * c + e.depth * s) / 2, (e.width * s + e.depth * c) / 2]
 }
 
 interface BandOptions {
@@ -358,11 +347,11 @@ export function estimateDeskFreeArea(
     )
     if (contained) continue // 收纳在容器内的小件按容器面积一并估算，避免重复计入
     // 按真实碰撞足迹计入占用：台灯 / 显示器比声明盒窄，声明盒会高估占用面积。
-    const [halfX, halfZ] = footprintHalfExtents(object, object.transform.rotationY)
-    const x0 = Math.max(dx0, position[0] - halfX)
-    const x1 = Math.min(dx1, position[0] + halfX)
-    const z0 = Math.max(dz0, position[2] - halfZ)
-    const z1 = Math.min(dz1, position[2] + halfZ)
+    const footprint = objectFootprint(object, position)
+    const x0 = Math.max(dx0, footprint.x0)
+    const x1 = Math.min(dx1, footprint.x1)
+    const z0 = Math.max(dz0, footprint.z0)
+    const z1 = Math.min(dz1, footprint.z1)
     if (x1 > x0 && z1 > z0) occupied += (x1 - x0) * (z1 - z0)
   }
   return Math.max(0, desk.width * desk.depth - occupied)

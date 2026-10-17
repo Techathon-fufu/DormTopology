@@ -715,6 +715,66 @@ class CompoundCollisionTests(unittest.TestCase):
         scene.update(items=[obj], regions=[region("desktop", [-0.3, 0.3, 0.1, 0.5])])
         return scene
 
+    def asymmetric_monitor(self):
+        obj = item("monitor", "monitor", (0.2, 0.5, 0.2), (0.9, 0.75, 0.9), ["desktop"])
+        parts = []
+        for size, bottom, offset_z in (
+            ((0.072, 0.0175, 0.16), 0.0, -0.01),
+            ((0.015, 0.11, 0.036), 0.0175, 0.05),
+            ((0.2, 0.3725, 0.022), 0.1275, 0.0),
+        ):
+            part = compound_box(*size)["parts"][0]
+            for vertex in part["vertices_m"]:
+                vertex[1] += bottom
+                vertex[2] += offset_z
+            parts.append(part)
+        obj["collision"] = {"type": "compound", "parts": parts}
+        return obj
+
+    def test_asymmetric_monitor_fits_exact_region_before_and_after_rotation(self):
+        for angle, bounds, axis in (
+            (0.0, [0.0, 1.0, 0.1, 0.26], 2),
+            (math.pi / 2, [0.1, 0.26, 0.1, 0.5], 0),
+        ):
+            with self.subTest(angle=angle):
+                obj = self.asymmetric_monitor()
+                obj["allowed_rotations_y_rad"] = [angle]
+                scene = self.scene_with(obj)
+                target = region("desktop", bounds)
+                scene["regions"] = [target]
+                result = plan_packing(scene)
+                self.assertEqual(result["status"], "success")
+                placed = result["items"][0]
+                self.assertEqual(placed["placement_status"], "placed")
+                self.assertEqual(placed["target_rotation_y_rad"], angle)
+                self.assertAlmostEqual(placed["target_pos"][axis], 0.19)
+                moved = {
+                    **obj, "position": placed["target_pos"], "rotation_y_rad": angle,
+                }
+                self.assertTrue(fits_region(moved, target))
+                box = aabb_from_item(moved)
+                self.assertAlmostEqual(box.minimum[axis], 0.1)
+                self.assertAlmostEqual(box.maximum[axis], 0.26)
+
+    def test_asymmetric_monitor_uses_real_offsets_next_to_blockers(self):
+        obj = self.asymmetric_monitor()
+        obj["allowed_rotations_y_rad"] = [0.0]
+        scene = self.scene_with(obj)
+        scene["regions"] = [region("desktop", [0.0, 1.0, 0.1, 0.6])]
+        scene["obstacles"] = [
+            zone("front", (0.0, 0.77, 0.1), (1.0, 1.4, 0.2)),
+            zone("back", (0.0, 0.77, 0.362), (1.0, 1.4, 0.6)),
+        ]
+        result = plan_packing(scene)
+        self.assertEqual(result["status"], "success")
+        placed = result["items"][0]
+        self.assertAlmostEqual(placed["target_pos"][2], 0.291)
+        moved = {**obj, "position": placed["target_pos"]}
+        for obstacle in scene["obstacles"]:
+            self.assertFalse(item_intersects_box(
+                moved, AABB(tuple(obstacle["min"]), tuple(obstacle["max"])),
+            ))
+
     def test_pose_extent_is_relative_to_the_anchor_not_absolute(self):
         obj = item("lamp", "electrical", (0.16, 0.45, 0.18), (0.47, 0.75, 0.46), ["desktop"])
         obj["collision"] = compound_box(0.16, 0.45, 0.18)

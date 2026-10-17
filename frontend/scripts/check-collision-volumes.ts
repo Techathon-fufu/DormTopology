@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { createDemoProject, createStandardRoom } from '../src/data/demoProject'
 import { cachedRoomSolids, roomSolids } from '../src/scene/roomCollision'
-import { objectExtent, objectRoomHits, objectsCollide } from '../src/scene/collisionGeometry'
-import { computeRuleBasedPlan } from '../src/scene/ruleLayout'
+import { objectExtent, objectFootprint, objectRoomHits, objectsCollide } from '../src/scene/collisionGeometry'
+import { computeOrganizationZones } from '../src/scene/organizationZones'
+import { computeRuleBasedPlan, estimateDeskFreeArea } from '../src/scene/ruleLayout'
 import { resolveOrganizationPreferences } from '../src/types/organization'
 import {
   DESK_BEAM_DEPTH,
@@ -185,8 +186,41 @@ assert.deepEqual(planOffenders, [], `plan placements must not penetrate the room
 // 方案指标里的「未解决问题」也必须与几何复核一致，不能报 0 却有穿模
 assert.ok(plan.metrics.outOfBoundsCount >= 0, 'plan metrics must report an out-of-bounds count')
 
+// A monitor base is offset toward +z; centering its width/depth loses that offset.
+const asymmetricRoom: RoomConfig = {
+  ...room,
+  desk: { ...room.desk, depth: 0.87 },
+  shelf: { ...room.shelf, enabled: false },
+}
+const preferences = resolveOrganizationPreferences(demo)
+const asymmetricMonitor = obj('asymmetric-monitor', 'monitor', [0.54, 0.20, 0.70], [0, room.desk.height, 0.35])
+const typing = computeOrganizationZones(asymmetricRoom, preferences).typing.rect
+const originalFootprint = objectFootprint(asymmetricMonitor, asymmetricMonitor.transform.position)
+assert.ok(originalFootprint.z1 > typing.z0 + 0.004, 'fixture must put the real base 5mm inside the typing area')
+assert.deepEqual(placementIssues(asymmetricMonitor, asymmetricMonitor.transform.position, [], asymmetricRoom), [], 'fixture must be physically supported without furniture collisions')
+const asymmetricPlan = computeRuleBasedPlan({
+  projectId: demo.id,
+  objects: [asymmetricMonitor],
+  room: asymmetricRoom,
+  preferences,
+})
+assert.equal(asymmetricPlan.assignments.length, 0, 'ordinary monitor placement must not occupy the reserved typing area')
+assert.equal(asymmetricPlan.unplaced[0]?.objectId, asymmetricMonitor.id, 'rejected placement must keep the item in the result')
+
+// High objects explicitly allowed into the typing area retain that existing policy.
+const tallMonitor = { ...asymmetricMonitor, dimensions: { ...asymmetricMonitor.dimensions, height: 0.46 } }
+const tallRoom = { ...asymmetricRoom, shelf: { ...asymmetricRoom.shelf, enabled: true } }
+const tallPlan = computeRuleBasedPlan({ projectId: demo.id, objects: [tallMonitor], room: tallRoom, preferences })
+assert.equal(tallPlan.assignments.length, 1, 'explicit typing allowance for tall objects must remain available')
+assert.ok(objectFootprint(tallMonitor, tallPlan.assignments[0].position).z1 > typing.z0, 'allowed tall placement must exercise the typing exception')
+
+// Full real footprint remains on the desk; the offset must not clip 9mm off its area.
+const edgeMonitor = obj('edge-monitor', 'monitor', [0.54, 0.46, 0.18], [0, room.desk.height, 0.113])
+const freeArea = estimateDeskFreeArea(asymmetricRoom, [{ object: edgeMonitor, position: edgeMonitor.transform.position }])
+assert.ok(Math.abs(freeArea - (asymmetricRoom.desk.width * asymmetricRoom.desk.depth - 0.54 * 0.144)) < 1e-7, 'desk area must clip the actual offset footprint')
+
 console.log(
   `Collision volume checks passed: ${solids.length} room solids, desk/shelf/beam/post penetration caught, ` +
     `face-touching rest and 1mm clearance tolerated, rotated compound geometry honoured, ` +
-    `${demoVisible.length} demo objects clean, item-vs-item SAT intact.`,
+    `${demoVisible.length} demo objects clean, item-vs-item SAT intact, asymmetric reserved-area and desk-area checks passed.`,
 )

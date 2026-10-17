@@ -123,15 +123,11 @@ def aabb_from_zone(zone: dict) -> AABB:
 
 
 def pose_extent(item: dict) -> tuple[float, float, float]:
-    """Real collision-volume extents relative to the item's bottom-centre anchor.
+    """Unrotated collision half-sizes and vertical clearance extent.
 
-    Returns ``(half_width, half_depth, height)``: the two footprint half-extents centred on
-    the anchor, plus the full height above it. The planner scans a region with these, so they
-    must be **relative to the anchor**, never absolute world coordinates.
-
-    ``aabb_from_item`` reports a world box and must not be used here: reading its ``maximum``
-    as a half-extent only happens to work when the anchor sits at the origin, and a compound
-    item anywhere else yields its absolute coordinate instead (a large overestimate).
+    Footprint half-sizes describe the bounding box, not distances from the anchor
+    to its edges. Candidate placement must retain actual min/max offsets when
+    the collision geometry is asymmetric about the anchor.
     """
     if item.get("collision", {}).get("type") == "compound":
         from .convex import local_parts, bounds
