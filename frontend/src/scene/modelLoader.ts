@@ -33,7 +33,7 @@ function describeLoadError(url: string, error: unknown): string {
         : ((error as { message?: string } | null | undefined)?.message ?? '未知错误')
   // 404（生产静态服务）或 SPA 回退把 index.html 当模型返回（Vite dev 对缺失文件）
   if (/404/.test(raw) || /Unexpected token '<'|<!DOCTYPE|<html/i.test(raw)) {
-    return `未找到模型文件（${url}）。请将 dormdesk_body.glb 放入 frontend/public/models/ 目录，然后点击「重试」。`
+    return `未找到模型文件（${url}）。请将 dorm_desk_assembled.glb 放入 frontend/public/models/ 目录，然后点击「重试」。`
   }
   return `模型加载失败：${raw}`
 }

@@ -3,8 +3,8 @@ import type { RoomConfig, Vec3 } from '@/types/project'
 import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
 
 /**
- * 桌体 GLB 模型接入：配置、归一化与实测锚点。
- * 运行时副本 `frontend/public/models/`，源资产见 `Prefabmodel/dormdesk_parts/`。
+ * 桌体 GLB 模型（frontend/public/models/dorm_desk_assembled.glb，源资产 Prefabmodel/dormdesk.glb）接入：
+ * 配置、归一化与实测锚点。拆分版资产见 `Prefabmodel/dormdesk_parts/`。
  *
  * 口径说明（与 sceneValidation / deskModelStore 的分工）：
  * - 逻辑坐标（吸附面 / 碰撞边界 / 校验）仍以 RoomConfig 为单一事实来源；
