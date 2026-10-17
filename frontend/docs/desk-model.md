@@ -1,4 +1,4 @@
-# 桌体 GLB（dormdesk.glb → dorm_desk_assembled.glb）接入说明
+# 桌体 GLB（dormdesk.glb → dorm_desk_body.glb）接入说明
 
 > 状态（2026-10-17，0.9.0）：资产已入仓库并接入运行时（三维工作台 / 方案对比页 / 空间配置三维预览；预览另叠加书架搁板 / 出线孔 / 插座实时标记）。
 > 加载失败 / 主动跳过时回退参数化桌体（ParametricDesk）并给出可恢复提示；未伪造模型内容。
@@ -9,7 +9,7 @@
 
 - **源资产**：`Prefabmodel/dormdesk.glb`（Blender 源 `objects/dormdesk.blend`；整组「上床下桌」家具：
   床架 / 上层四格书架 / L 形桌面（主桌 + 回台）/ 三抽屉侧柜 / 衣柜 / 护栏 / 爬梯 / 四立柱）。
-- **运行时副本**：`frontend/public/models/dorm_desk_assembled.glb`
+- **运行时副本**：`frontend/public/models/dorm_desk_body.glb` 与 `dorm_desk_drawer_{bottom,middle,top}.glb`
   （Vite `public/` 原样复制：开发 `/models/...`、生产 `dist/models/...`；`resolvePublicAssetUrl()` 兼容子路径部署）。
 - 更新资产的流程：从 `Prefabmodel/` 复制到 `frontend/public/models/`，然后运行
   `npx tsx scripts/check-desk-model.ts` 校验命名与尺寸契约是否仍然成立；
@@ -19,7 +19,7 @@
 
 ### 1.1 拆分版资产（无抽屉桌体 + 独立抽屉）
 
-`Prefabmodel/dormdesk_parts/` 另提供一套**拆分版**资产，供「抽屉可抽拉」的实现使用：
+`Prefabmodel/dormdesk_parts/` 的拆分资产已用于运行时，支持抽屉推拉：
 
 | 资产 | 源文件 | 网格数 |
 | --- | --- | --- |
@@ -30,17 +30,15 @@
 
 每次抽屉均带同目录 `*.collision.json` 碰撞体（箱壳按底板 + 四壁拆分以保留内腔）。
 
-**与整组资产的关键差异 —— 切换到拆分版时配置必须改：**
+**运行时装配：桌体和三只抽屉共用变换矩阵。**
 
-- 抽屉与桌体**共用同一世界原点**，抽屉是独立的绝对坐标文件，**不会随桌体一起平移**。
+- 抽屉与桌体**共用同一装配原点**，抽屉是独立的绝对坐标文件，加载器必须显式施加共同变换。
 - `dormdesk_body.glb` 实测 `x` 最小与 `y` 最小均为 **0**，已符合数据契约第 1 节原点。
-- 因此**不得**对桌体做水平居中：`centerXZ` 必须为 `false`，`verticalAlign` 用 `'bottom'`，
-  且不要设 `backWallZ`。沿用整组资产的 `centerXZ: true` + `backWallZ: 0` 会把桌体平移
-  约 1.0 m / 0.3 m，而抽屉不动 —— 两者直接错位。
-- 桌高按拆分模型实测重新确定，**不要照搬**整组资产的 `deskTop` 对齐（两者标称高度不同）。
+- 当前展示保留 `centerXZ: true`、`backWallZ: 0` 与 `verticalAlign: 'deskTop'`；`DormDeskModel` 将桌体归一化矩阵同时施加到三只抽屉。不得只移动桌体，或分别按包围盒居中抽屉。
+- 源资产相对坐标不变。共同展示变换不表示真实家具碰撞、支撑面与后端坐标已接通。
 
 抽屉的抽拉轴与行程实测：**抽出方向 -x**（面板位于 x 最小侧，滑轨沿 x 延伸），
-滑轨长 304 mm，行程建议 ≤ 280 mm 以免完全脱出。部件名与抽屉初始 bounds 见
+滑轨长 304 mm，当前交互行程 300 mm，由资产与运动学脚本检查。部件名与抽屉初始 bounds 见
 `Prefabmodel/dormdesk_parts/drawers.manifest.json`。
 完整约定见 `docs/data_contract.md` 第 1.1 节。
 
@@ -110,7 +108,7 @@
 
 1. `cd frontend && npm run dev`，打开示例项目三维工作台：
    - 应看到 GLB 整组家具（L 形桌面、右侧三抽屉立柜、上层四格书架、床架）；俯视应隐藏床体 / 护栏 / 爬梯；
-   - 移除 `frontend/public/models/dorm_desk_assembled.glb` 时应回退参数化几何并给出提示，放回后点「重试」恢复。
+   - 移除 `frontend/public/models/dorm_desk_body.glb` 时应回退参数化几何并给出提示，放回后点「重试」恢复。
 2. `npx tsx scripts/check-desk-model.ts`：资产契约通过（命名 / 尺寸 / 锚点 / 摆放复算）。
 3. `npm run typecheck && npm run build`：`dist/models/` 应包含模型文件。
 4. `npm run test:e2e -- tests/workspace.spec.ts`：桌面与模拟手机各 2 项应通过（覆盖含模型的场景渲染）。
@@ -119,6 +117,6 @@
 
 若改用 `Prefabmodel/dormdesk_parts/` 的拆分资产，除上述步骤外必须确认：
 
-- `centerXZ: false`、`verticalAlign: 'bottom'`、不设 `backWallZ` —— 否则桌体被平移而抽屉不动；
+- 桌体与抽屉使用同一归一化矩阵；不得只对桌体平移或分别居中抽屉；
 - 抽屉单独加载后，三个抽屉应恰好嵌在柜体自下而上三层，与桌体无可见错缝；
 - 抽屉沿 **-x** 抽出，最大行程不超过滑轨长度（304 mm），抽出时不与柜体前侧结构穿插。

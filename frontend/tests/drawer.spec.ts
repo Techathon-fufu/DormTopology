@@ -8,17 +8,23 @@ const demoProjectId = 'demo-dorm-101'
  * 抽屉推拉端到端：单击开 / 关、拖拽跟手 + 松手吸附、Esc 回弹、拖拽期相机锁定。
  *
  * 说明：
- * - 抽屉正面朝 -x（与清单 pull_axis=-x 一致），默认透视机位（右前上方）看不到抽屉正面，
- *   用例通过 workspaceStore 切到「左视」预设（[-2.6, 1.3, 0.7] → 目标 [0, 0.9, 0.45]）；
+ * - 抽屉正面朝 -x（与清单 pull_axis=-x 一致），默认透视机位（右前上方）看不到抽屉正面；
+ *   用例通过 workspaceStore 切到「左视」预设。左视预设置为室内对角线机位
+ *   [-1.05, 1.35, 1.95] → 目标 [0.55, 0.6, 0.7]，从室内射向抽屉正面的视线首个命中
+ *   即真实抽屉前板（不与不透明左墙 / 重叠演示物冲突，见 .work/merge-prefab/drawer-probe.log）；
  * - 鼠标坐标在 Node 侧用 three 按同一机位复算投影（fov 42 与 Viewport Canvas 一致）；
  * - 交互结果通过页面内动态导入 drawerStore 模块（Vite 已加载的同一实例）读取，
  *   与 workspace.spec.ts 的 jobsStore 口径一致。
+ *
+ * 关键测试约束：抽屉前板位置随 progress 缓动，命中测试只在抽屉真正停稳后进行；
+ * 因此每次对「全开 / 全关」屏幕坐标点击前，必须等待 progress 收敛（settled），
+ * 否则点击会落在仍在移动的网格上（射线落空 → 不进 onPointerDown → target 不变）。
  */
 
-/** 与 CameraRig 预设一致的相机参数（本次用左视） */
+/** 与 CameraRig 左视预设完全一致（室内对角线机位，正对抽屉正面） */
 const LEFT_VIEW = {
-  position: [-2.6, 1.3, 0.7] as const,
-  target: [0, 0.9, 0.45] as const,
+  position: [-1.05, 1.35, 1.95] as const,
+  target: [0.55, 0.6, 0.7] as const,
   fov: 42,
 }
 
@@ -27,6 +33,9 @@ const TOP_FRONT_CLOSED = [0.619, 0.6175, 0.6705] as const
 /** 上层抽屉盒体中心（拖拽投影基准，与 useDrawerInteraction 相同口径） */
 const TOP_BOX_CENTER_CLOSED = [0.771, 0.6175, 0.6705] as const
 const TOP_TRAVEL_M = 0.3
+
+/** progress 收敛阈值：靠近端点即认为缓动停稳，可安全对端点屏幕坐标做命中测试 */
+const SETTLED_EPS = 0.0001
 
 interface DrawerSnapshot {
   loadedIds: string[]
@@ -45,6 +54,17 @@ async function readDrawers(page: Page): Promise<DrawerSnapshot> {
     const state = useDrawerStore.getState()
     return { loadedIds: state.loadedIds, draggingId: state.draggingId, drawers: state.drawers }
   })
+}
+
+/** 等待 top 抽屉缓动停稳到端点（progress≈target），确保命中测试命中真实网格 */
+async function waitForTopSettled(page: Page, endpoint: 0 | 1) {
+  await expect.poll(async () => {
+    const { drawers, draggingId } = await readDrawers(page)
+    if (draggingId !== null) return false
+    const { progress, target } = drawers.top
+    if (target !== endpoint) return false
+    return Math.abs(progress - endpoint) <= SETTLED_EPS
+  }).toBe(true)
 }
 
 async function applyViewPreset(page: Page, preset: ViewPreset) {
@@ -118,17 +138,29 @@ test('toggles, drags and cancels the top desk drawer from the left view', async 
   const openVector = travelVectorPx(box, [TOP_BOX_CENTER_CLOSED[0] - TOP_TRAVEL_M, TOP_BOX_CENTER_CLOSED[1], TOP_BOX_CENTER_CLOSED[2]])
   expect(closedVector.length, '滑出轴在屏幕上应有可辨识的位移（拖拽投影可用）').toBeGreaterThan(6)
 
-  // 1) 单击：关 → 开
+  // 1) 单击：关 → 开（先等初始 settled，确认从全关坐标起点击）
+  await waitForTopSettled(page, 0)
   await page.mouse.click(closed.x, closed.y)
   await expect.poll(async () => (await readDrawers(page)).drawers.top.target).toBe(1)
-  await expect.poll(async () => (await readDrawers(page)).drawers.top.progress).toBeGreaterThan(0.9)
+  // 必须等到缓动停稳，front-panel 才真正到达 open 屏幕坐标
+  await waitForTopSettled(page, 1)
 
-  // 2) 单击：开 → 关（前板此时位于全开位置）
+  // 2) 单击：开 → 关（前板此时已停稳在全开位置；open 坐标即真实网格位置）
   await page.mouse.click(open.x, open.y)
   await expect.poll(async () => (await readDrawers(page)).drawers.top.target).toBe(0)
-  await expect.poll(async () => (await readDrawers(page)).drawers.top.progress).toBeLessThan(0.1)
+  await waitForTopSettled(page, 0)
 
-  // 3) 拖拽跟手：按住前板沿滑出方向拖出（超程 2.5 倍 → 全开），拖拽期间相机锁定
+  // 3) 取消（未拖拽）：按下后立即 Esc，不应切换抽屉、drggingId 应归零
+  await page.mouse.move(closed.x, closed.y)
+  await page.mouse.down()
+  expect((await readDrawers(page)).draggingId).toBe('top')
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  expect((await readDrawers(page)).draggingId).toBe(null)
+  await expect.poll(async () => (await readDrawers(page)).drawers.top.target).toBe(0)
+  await waitForTopSettled(page, 0)
+
+  // 4) 拖拽跟手：按住前板沿滑出方向拖出（超程 2.5 倍 → 全开），拖拽期间相机锁定
   await page.mouse.move(closed.x, closed.y)
   await page.mouse.down()
   await moveAlong(page, closed, closedVector, 2.5)
@@ -136,9 +168,9 @@ test('toggles, drags and cancels the top desk drawer from the left view', async 
   await page.mouse.up()
   expect((await readDrawers(page)).draggingId).toBe(null)
   await expect.poll(async () => (await readDrawers(page)).drawers.top.target).toBe(1)
-  await expect.poll(async () => (await readDrawers(page)).drawers.top.progress).toBeGreaterThan(0.9)
+  await waitForTopSettled(page, 1)
 
-  // 4) Esc 回弹：从全开拖回约 20% 处按 Esc → 吸附到最近吸附点（全关）
+  // 5) Esc 回弹：从全开拖回约 20% 处按 Esc → 吸附到最近吸附点（全关）
   await page.mouse.move(open.x, open.y)
   await page.mouse.down()
   await moveAlong(page, open, openVector, -0.8)
@@ -146,7 +178,7 @@ test('toggles, drags and cancels the top desk drawer from the left view', async 
   await page.keyboard.press('Escape')
   await page.mouse.up()
   await expect.poll(async () => (await readDrawers(page)).drawers.top.target).toBe(0)
-  await expect.poll(async () => (await readDrawers(page)).drawers.top.progress).toBeLessThan(0.1)
+  await waitForTopSettled(page, 0)
   expect((await readDrawers(page)).draggingId).toBe(null)
 
   await attachViewport(page, testInfo, 'drawer-left-view')

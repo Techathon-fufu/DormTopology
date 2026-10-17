@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-前端已有可运行的应用（`frontend/`，React + R3F），默认保留本地 Mock 演示。产品工作台的物品整理新增真实后端通道：确认尺寸与整理前位置后同步完整布局场景，调用 Python 布局算法，预览后由后端复查并原子应用。可单独启用真实整理，其余识别、Rodin、走线及指南仍为演示能力。首页「一键演示」6 步导览与原有流程继续可用；历史演示记录见 [frontend/docs/demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)，真实整理接口见[接入说明](frontend/docs/api-integration.md)。
+前端已有产品工作台（React + R3F），支持单独启用真实 Python 整理服务；另有独立 `/workflow`，完成完整契约场景保存、基线确认、真实整理预览与原子应用、走线、对比及 Markdown 指南。两者由同一 FastAPI 应用启动：产品接口保留 `/api/v1`，独立工作流使用 `/api/v1/workflow`。照片识别与实时 Rodin 尚未接入，旧产品端走线和指南仍为演示能力。详见[服务接入](frontend/docs/api-integration.md)与[闭环验收](docs/closed_loop_acceptance.md)。
 
-物品布局与走线核心统一位于 `backend/app/domain/`，包含共享几何、多平面贪心摆放、布局复查、连续可用面积、双策略走线搜索与曲线验证；已有算法回归和仅加载领域目录的隔离测试。`algorithm/cable_routing/` 保留兼容导入。新增 FastAPI、SQLite、受限后台整理任务、不可变基线与版本条件更新；领域算法仍不依赖 Web 或存储。真实识别、Rodin、走线服务及完整首版流程尚未完成，各交付轮次见 [CHANGELOG.md](CHANGELOG.md)。
+物品布局与走线核心统一位于 `backend/app/domain/`，包含共享几何、多平面摆放、布局复查、连续可用面积、双策略走线及曲线验证。产品整理使用受限后台任务；独立工作流通过限流的实时算法调用完成整理、走线和指南。领域算法不依赖 Web 或存储。两个入口尚未统一为同一个产品场景，不能据此认定首版全部完成。
 
 新增独立[算法可视化验证工作台](docs/algorithm_visual_testing.md)：前端 `/algorithm-lab` 直接查看 14 组 Python 真实算法 JSON，支持整理前后、几何图层、有效路径、失败原因和导入导出，并提供桌面/手机 Chromium 的 Playwright 检查。包含桌沿/孔边/柜侧固定、桌下扎带、连续集线托盘、无支撑失败，以及先逐线规划再推荐集线槽的三线案例；候选槽与已安装支撑分开。新增[综合桌面样例](docs/integrated_desk_scenario.md)，包含高优先级显示器和打印机、直插插排的适配器，以及应用整理后重新生成的三根线。开启支撑策略时复查最终曲线的最大悬空跨距，历史场景明确标记支撑未评估。无需先准备精细模型；该入口与产品 Mock 流程独立，不计为 FastAPI、真实资产或完整流程验收。
 
@@ -22,7 +22,7 @@
 | `algorithm/cable_routing/` | 旧走线模块的兼容导出，不再承载业务实现 |
 | `backend/app/domain/` | C/D 的纯 Python 布局与走线算法、共享几何、输入校验及领域类型；调用与证据见[布局算法交接](docs/packing_algorithm.md)和[走线算法说明](docs/routing_algorithm_plan.md) |
 
-`objects/` 现仅保留 Blender 与 OBJ 源文件（`.blend` / `.obj`），**不再存放 GLB**；全部 GLB 资产已统一到 `Prefabmodel/` 下。仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dormdesk_body.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
+`objects/` 保留 Blender 与 OBJ 源文件。运行时桌体已采用 `frontend/public/models/dorm_desk_body.glb` 与三个独立抽屉 GLB，支持推拉交互；12 个单品预制 GLB 位于 `frontend/public/models/items/`，示例中 8 件已替换。详见[桌体说明](frontend/docs/desk-model.md)。真实桌面/书架支撑面、实体碰撞、物品入抽屉吸附及示例重排仍未完成；贡献者交接记录为 15/17 件与真实家具重叠，此项未在本轮重新计数。预制资产不计为实时 Rodin 生成。
 
 ## 首版目标
 

@@ -55,6 +55,7 @@ export function ProjectsPage() {
           <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground">从一张照片开始，确认物品与空间，在三维预览中整理摆放、规划走线，得到一份可照着执行的指南。</p>
           <div className="mt-7 flex flex-wrap gap-3"><Button size="lg" onClick={startDemoTour}><Sparkles className="h-4 w-4" />体验整理演示<ArrowRight className="h-4 w-4" /></Button><Button size="lg" variant="outline" onClick={() => navigate('/projects/new')}><Plus className="h-4 w-4" />创建我的空间</Button><Button size="lg" variant="outline" onClick={() => navigate('/algorithm-lab')}><FlaskConical className="h-4 w-4" />算法验证</Button></div>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">演示使用示例数据，可随时暂停与重播。</p>
+          <Button className="mt-3" variant="outline" onClick={() => navigate('/workflow')}>打开真实整理工作台<ArrowRight className="h-4 w-4" /></Button>
         </div>
         <div className="relative hidden items-center justify-center px-6 lg:flex"><DeskIllustration className="max-w-lg" /><span className="absolute bottom-6 right-6 text-[11px] text-muted-foreground">空间整理示意</span></div>
       </section>

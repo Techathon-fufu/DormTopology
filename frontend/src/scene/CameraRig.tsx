@@ -9,7 +9,8 @@ const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [numb
   persp: { pos: [1.35, 1.2, 1.9], target: [0, 0.78, 0.35] },
   front: { pos: [0, 1.05, 3.0], target: [0, 0.95, 0.4] },
   top: { pos: [0, 2.7, 0.46], target: [0, 0.75, 0.45] },
-  left: { pos: [-2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
+  // 从室内斜前方看抽屉，避免左墙遮挡操作面。
+  left: { pos: [-1.05, 1.35, 1.95], target: [0.55, 0.6, 0.7] },
   right: { pos: [2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
   desk: { pos: [0.75, 1.9, 2.0], target: [0, 0.85, 0.45] },
 }
@@ -70,7 +71,7 @@ export function CameraRig({
       minDistance={0.5}
       maxDistance={8}
       maxPolarAngle={Math.PI / 2 - 0.02}
-      target={[0, 0.9, 0.45]}
+      target={[PRESETS[preset].target[0], PRESETS[preset].target[1] + targetShiftY, PRESETS[preset].target[2]]}
     />
   )
 }

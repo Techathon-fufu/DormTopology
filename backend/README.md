@@ -1,6 +1,6 @@
 # DormTopology 3D 后端核心实现层
 
-本目录包含领域算法、整理应用服务、SQLite 持久化、FastAPI 接口，以及独立的外部服务适配器与脚本。整理服务调用真实 `plan_packing`；照片识别、Rodin、走线的应用接口尚未接入，返回 HTTP 501，独立脚本不等于应用接口验收。
+本目录包含领域算法、产品整理服务、独立完整场景工作流、SQLite 和 FastAPI。产品整理调用真实 `plan_packing`；独立 `/api/v1/workflow` 接入真实整理、走线、对比和指南。识别、Rodin 以及旧产品走线端点仍返回 HTTP 501，独立脚本不等于应用接口验收。
 
 ## 启动整理服务
 
@@ -57,6 +57,8 @@ ruff check backend/app/service backend/app/db backend/app/api backend/app/bootst
 ```
 
 新增服务与接口测试使用临时 SQLite 文件，覆盖真实算法、原始基线、并发版本、取消、重启恢复、不可行结果和重复应用，不产生仓库数据库或改写 `objects/`。2026-10-17 本轮 22 项 service/API 回归及新增后端 Ruff 通过；前端真实 HTTP 脚本另验证 16 个场景同步恢复/拒绝案例，运行方式见[接入验证](../frontend/docs/api-integration.md#5-验证)。
+
+2026-10-17 新增最小 FastAPI 应用：`app/bootstrap.py` 统一装配 `service`、SQLite `db` 与 `api`，供前端 `/workflow` 调用真实布局和走线算法。根目录安装 `python -m pip install -r backend/requirements.txt`，再运行 `python backend/scripts/serve.py --port 8000`。独立工作流默认数据库为产品数据库旁的 `workflow.sqlite3`，照片目录为同级 `workflow-data/photos/`；环境变量 `DORMTOPOLOGY_WORKFLOW_DB_PATH`、`DORMTOPOLOGY_WORKFLOW_DATA_DIR` 可覆盖。工作流 API 前缀为 `/api/v1/workflow`。完整接口、版本事务、测试与当前限制见[真实整理闭环](../docs/closed_loop_acceptance.md)。下方供应商命令仍为独立实验脚本，不代表已接入新产品入口。
 
 ---
 

@@ -19,13 +19,22 @@ async function openWorkspace(page: Page) {
   await expect(page.getByRole('banner').getByTitle('示例：上床下桌·四人间')).toBeVisible()
   await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
   await expect(page.locator('canvas')).toBeVisible()
+  await expect.poll(async () => page.evaluate(async () => {
+    const url = performance.getEntriesByType('resource').map(entry => entry.name)
+      .filter(name => new URL(name).pathname === '/src/state/deskModelStore.ts').at(-1)
+    if (!url) return 'missing'
+    const { useDeskModelStore } = await import(url)
+    return useDeskModelStore.getState().status
+  }), { message: 'The split desk GLBs should finish loading before visual checks.' }).toBe('loaded')
 }
 
 async function expectNonblankCanvas(page: Page) {
+  let lastMetrics: unknown
+  try {
   await expect.poll(async () => {
     // The production WebGL buffer is discarded after presentation, so inspect the displayed image.
     const screenshot = await page.locator('canvas').screenshot({ scale: 'css', animations: 'disabled' })
-    return page.evaluate(async (base64) => {
+    const metrics = await page.evaluate(async (base64) => {
       const image = new Image()
       image.src = `data:image/png;base64,${base64}`
       await image.decode()
@@ -35,14 +44,39 @@ async function expectNonblankCanvas(page: Page) {
       const context = canvas.getContext('2d')!
       context.drawImage(image, 0, 0)
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
-      const colors = new Set<number>()
+      let count = 0
+      let sum = 0
+      let squareSum = 0
+      const cells = new Map<number, { count: number; sum: number }>()
       const stride = Math.max(1, Math.floor((canvas.width * canvas.height) / 10_000))
       for (let index = 0; index < pixels.length; index += stride * 4) {
-        if (pixels[index + 3]) colors.add((pixels[index] << 16) + (pixels[index + 1] << 8) + pixels[index + 2])
+        if (pixels[index + 3] < 128) continue
+        const luminance = 0.2126 * pixels[index] + 0.7152 * pixels[index + 1] + 0.0722 * pixels[index + 2]
+        count += 1
+        sum += luminance
+        squareSum += luminance * luminance
+        const pixel = index / 4
+        const x = pixel % canvas.width
+        const y = Math.floor(pixel / canvas.width)
+        const cellId = Math.floor(y * 4 / canvas.height) * 4 + Math.floor(x * 4 / canvas.width)
+        const cell = cells.get(cellId) ?? { count: 0, sum: 0 }
+        cell.count += 1
+        cell.sum += luminance
+        cells.set(cellId, cell)
       }
-      return colors.size
+      const samples = Math.ceil(canvas.width * canvas.height / stride)
+      const coverage = count / samples
+      const variance = count ? squareSum / count - (sum / count) ** 2 : 0
+      const means = [...cells.values()].map(cell => cell.sum / cell.count)
+      const spatialRange = means.length ? Math.max(...means) - Math.min(...means) : 0
+      return { coverage, variance, cells: cells.size, spatialRange }
     }, screenshot.toString('base64'))
-  }, { message: 'The workspace should render varied, nontransparent 3D geometry.' }).toBeGreaterThan(32)
+    lastMetrics = metrics
+    return metrics.coverage > 0.5 && metrics.variance > 25 && metrics.cells >= 8 && metrics.spatialRange > 5
+  }, { message: 'The workspace should render nonuniform geometry across the canvas.' }).toBe(true)
+  } catch (error) {
+    throw new Error(`Canvas metrics: ${JSON.stringify(lastMetrics)}`, { cause: error })
+  }
 }
 
 async function attachViewport(page: Page, testInfo: TestInfo, name: string) {
