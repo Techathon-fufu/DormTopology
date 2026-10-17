@@ -2,6 +2,8 @@
 
 2026-10-17 新增 `/workflow`。首页“打开真实整理工作台”进入；旧 `/projects/:id/workspace` 仍使用原有 Mock/HTTP 适配，不据此宣称全部产品入口已经联调。
 
+后续整合说明：最新 main 已接入产品真实整理/走线与固定家具；本页保留独立工作流的首次交付记录。最终 API 前缀为 `/api/v1/workflow`，两套入口共用一个应用工厂，当前范围与验收结果以[分支整合记录](merge_workflow_prefab_acceptance.md)为准。
+
 ## 本轮交付
 
 ```text

@@ -14,7 +14,7 @@ function collectRuntimeFailures(page: Page) {
   return failures
 }
 
-async function openWorkspace(page: Page) {
+async function openWorkspace(page: Page, expectedModelStatus: 'loaded' | 'failed' = 'loaded') {
   await page.goto(`/projects/${demoProjectId}/workspace`)
   await expect(page.getByRole('banner').getByTitle('示例：上床下桌·四人间')).toBeVisible()
   await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
@@ -25,7 +25,18 @@ async function openWorkspace(page: Page) {
     if (!url) return 'missing'
     const { useDeskModelStore } = await import(url)
     return useDeskModelStore.getState().status
-  }), { message: 'The split desk GLBs should finish loading before visual checks.' }).toBe('loaded')
+  }), { message: 'The split desk GLBs should reach the expected state before visual checks.' }).toBe(expectedModelStatus)
+}
+
+async function deskState(page: Page) {
+  return page.evaluate(async () => {
+    const url = performance.getEntriesByType('resource').map((entry) => entry.name)
+      .filter((name) => new URL(name).pathname === '/src/state/deskModelStore.ts').at(-1)
+    if (!url) throw new Error('deskModelStore.ts was not loaded')
+    const { useDeskModelStore } = await import(url)
+    const { status, metrics } = useDeskModelStore.getState()
+    return { status, metrics }
+  })
 }
 
 async function expectNonblankCanvas(page: Page) {
@@ -123,7 +134,14 @@ async function mutateJob(page: Page, mutation: JobMutation): Promise<string | nu
 
 test('opens the example workspace without a render loop and keeps its scene visible', async ({ page }, testInfo) => {
   const failures = collectRuntimeFailures(page)
+  const loaded = new Set<string>()
+  page.on('response', (response) => {
+    if (response.status() === 200 && response.url().includes('/models/dormdesk_parts/')) loaded.add(new URL(response.url()).pathname)
+  })
   await openWorkspace(page)
+  await expect.poll(async () => (await deskState(page)).status).toBe('loaded')
+  expect(loaded.size).toBe(4)
+  expect((await deskState(page)).metrics?.deskTopY).toBeCloseTo(.75)
   await expectNonblankCanvas(page)
   await selectView(page, 'top')
   await expectNonblankCanvas(page)
@@ -133,6 +151,45 @@ test('opens the example workspace without a render loop and keeps its scene visi
   await page.reload()
   await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
   await expectNonblankCanvas(page)
+  expect(failures).toEqual([])
+})
+
+test('keeps the fixed furniture visible after a partial asset failure and recovers on retry', async ({ page }, testInfo) => {
+  const failures = collectRuntimeFailures(page)
+  const asset = '**/models/dormdesk_parts/drawer_middle.glb'
+  await page.route(asset, (route) => route.fulfill({ status: 404, body: 'Missing drawer' }))
+  await openWorkspace(page, 'failed')
+  await expect.poll(async () => (await deskState(page)).status).toBe('failed')
+  await expectNonblankCanvas(page)
+  await attachViewport(page, testInfo, 'fixed-furniture-fallback')
+  await page.unroute(asset)
+  await page.getByText('简化桌体', { exact: true }).click()
+  await page.getByRole('button', { name: '重新加载', exact: true }).click()
+  await expect.poll(async () => (await deskState(page)).status).toBe('loaded')
+  await expectNonblankCanvas(page)
+  await attachViewport(page, testInfo, 'fixed-furniture-recovered')
+  expect(failures).toEqual([])
+})
+
+test('uses fixed storage geometry in setup and rejects a hole in the L-shaped void', async ({ page }, testInfo) => {
+  const failures = collectRuntimeFailures(page)
+  await page.goto(`/projects/${demoProjectId}/setup`)
+  await expect(page.locator('canvas')).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: '书架', exact: true })).toBeDisabled()
+  await expect(page.getByLabel('离桌高度（最下层）', { exact: true })).toBeDisabled()
+  await expect(page.getByText('未发现数值越界或明显结构冲突', { exact: true })).toBeVisible()
+  await expectNonblankCanvas(page)
+  await page.getByLabel('孔 X（左右）', { exact: true }).fill('0')
+  await page.getByLabel('孔 Z（距后墙）', { exact: true }).fill('750')
+  await page.getByLabel('孔 Z（距后墙）', { exact: true }).blur()
+  await expect(page.getByText('出线孔需完整位于真实 L 形桌面内，不能位于缺口或桌外', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '保存空间并前往照片导入', exact: true })).toBeDisabled()
+  await page.getByLabel('孔 X（左右）', { exact: true }).fill('500')
+  await page.getByLabel('孔 Z（距后墙）', { exact: true }).fill('280')
+  await page.getByLabel('孔 Z（距后墙）', { exact: true }).blur()
+  await expect(page.getByText('未发现数值越界或明显结构冲突', { exact: true })).toBeVisible()
+  await attachViewport(page, testInfo, 'fixed-furniture-setup')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
   expect(failures).toEqual([])
 })
 

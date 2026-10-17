@@ -1,20 +1,24 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 
 /**
  * 桌体分离件同步（运行：npx tsx scripts/sync-desk-parts.ts）：
  *
- * - 把 `Prefabmodel/dormdesk_parts/` 的桌体与三只抽屉复制为运行时副本
- *   （`frontend/public/models/dorm_desk_body.glb` + `dorm_desk_drawer_{bottom,middle,top}.glb`）；
+ * - 把源 `Prefabmodel/dormdesk_parts/` 的桌体与三只抽屉复制为运行时副本，
+ *   输出到与最新 main 运行时一致的规范路径：
+ *   `frontend/public/models/dormdesk_parts/{dormdesk_body,drawer_bottom,drawer_middle,drawer_top}.glb`；
  * - 上游导出的抽屉 GLB **不含材质**（直接加载会渲染为默认白色）：从整装源
  *   `Prefabmodel/dormdesk.glb` 复制材质定义，并按节点名恢复分配——
  *   盒体 = 松木 / 面板 = 暖橡木 / 拉手槽与锁孔 = 深木 / 滑轨与锁片 = 金属；
- * - 几何数据（BIN chunk）原样保留，仅重写 JSON chunk。
+ * - 几何数据（BIN chunk）原样保留，仅重写 JSON chunk；
+ * - 只读取 `Prefabmodel/` 源资产并写入运行时副本，不覆盖源资产。
  *
  * 资产更新后重跑本脚本，再运行 `npx tsx scripts/check-desk-model.ts` 校验契约。
  */
 
 const sourceDir = new URL('../../Prefabmodel/', import.meta.url)
-const outDir = new URL('../public/models/', import.meta.url)
+// 规范运行时路径：public/models/dormdesk_parts/（与渲染器 / 校验器一致）
+const outDir = new URL('../public/models/dormdesk_parts/', import.meta.url)
+mkdirSync(outDir, { recursive: true })
 
 interface GlbChunks {
   json: Record<string, unknown>
@@ -95,22 +99,22 @@ function patchDrawer(json: Record<string, unknown>, file: string): void {
   }
 }
 
-// ── 桌体：原样复制 ───────────────────────────────────────────────────────────
+// ── 桌体：原样复制到运行时副本 ───────────────────────────────────────────────
 const body = readFileSync(new URL('dormdesk_parts/dormdesk_body.glb', sourceDir))
-writeFileSync(new URL('dorm_desk_body.glb', outDir), body)
-console.log('dorm_desk_body.glb ← dormdesk_parts/dormdesk_body.glb（原样）')
+writeFileSync(new URL('dormdesk_body.glb', outDir), body)
+console.log('dormdesk_parts/dormdesk_body.glb ← dormdesk_parts/dormdesk_body.glb（原样）')
 
 // ── 抽屉：复制 + 材质注入 ────────────────────────────────────────────────────
 const DRAWER_FILES: Array<[string, string]> = [
-  ['dormdesk_parts/drawer_bottom.glb', 'dorm_desk_drawer_bottom.glb'],
-  ['dormdesk_parts/drawer_middle.glb', 'dorm_desk_drawer_middle.glb'],
-  ['dormdesk_parts/drawer_top.glb', 'dorm_desk_drawer_top.glb'],
+  ['dormdesk_parts/drawer_bottom.glb', 'drawer_bottom.glb'],
+  ['dormdesk_parts/drawer_middle.glb', 'drawer_middle.glb'],
+  ['dormdesk_parts/drawer_top.glb', 'drawer_top.glb'],
 ]
 for (const [source, target] of DRAWER_FILES) {
   const { json, bin } = parseGlb(new URL(source, sourceDir))
   patchDrawer(json, source)
   writeFileSync(new URL(target, outDir), serializeGlb(json, bin))
-  console.log(`${target} ← ${source}（注入 ${materials.length} 个材质并按节点名分配）`)
+  console.log(`dormdesk_parts/${target} ← ${source}（注入 ${materials.length} 个材质并按节点名分配）`)
 }
 
 // ── 回读校验：材质必须已写入 ─────────────────────────────────────────────────
@@ -126,5 +130,5 @@ for (const [, target] of DRAWER_FILES) {
       assigned += 1
     }
   }
-  console.log(`${target} 校验通过（${mats.length} 材质 / ${assigned} 个 primitive 已分配）`)
+  console.log(`dormdesk_parts/${target} 校验通过（${mats.length} 材质 / ${assigned} 个 primitive 已分配）`)
 }

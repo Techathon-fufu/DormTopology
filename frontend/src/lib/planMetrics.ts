@@ -10,8 +10,9 @@ import type {
 import { CABLE_VISIBILITY_META } from '@/types/project'
 import type { OrganizationPreferences, ZoneKind } from '@/types/organization'
 import { ZONE_LABELS } from '@/types/organization'
-import { cableDisplayPoints, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
-import { checkCableRoute, estimateCableLength } from '@/scene/cableRoute'
+import { cableDisplayPoints, hasUsableCableRoute, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
+import { checkCableRoute } from '@/scene/cableRoute'
+import { totalCablePathLength } from '@/scene/cableGeometry'
 import { computeCableAvoidZones } from '@/scene/routeNodes'
 import { validateScene } from '@/scene/sceneValidation'
 import { estimateDeskFreeArea } from '@/scene/ruleLayout'
@@ -24,7 +25,7 @@ import { estimateDeskFreeArea } from '@/scene/ruleLayout'
  * - 已连接线缆数量：快照中的线缆条数；旧版本方案无该数据（显示「—」）。
  * - 桌面可用面积：桌面矩形 − 平放桌面物品包围盒与桌面矩形的相交面积（与整理方案同口径）；
  *   旧版本方案借用当前物品尺寸 + 快照位姿估算，属估算值。
- * - 走线总长度：按路径控制点折线估算（未平滑），属估算值；未规划线缆不计入。
+ * - 走线总长度：真实曲线积分优先，演示路径按展示采样估算；任意线路不可用则总长未知。
  * - 未解决问题：摆放校验问题条数（越界 / 相交 / 悬空）+ 已规划线缆的几何检查问题条数。
  * - 全部指标由方案快照 / 当前场景实时计算，不使用写死的演示数字。
  */
@@ -125,7 +126,7 @@ function summarizeCables(cables: CableConnection[], objects: SceneObject[]): Pla
     const strategy = cable.route.strategy ?? CABLE_VISIBILITY_META[visibility].strategy
     if (strategy === 'backboard') summary.strategyBackboard += 1
     else summary.strategyCableHole += 1
-    if (cable.route.points.length < 2) summary.unplannedCount += 1
+    if (!hasUsableCableRoute(cable)) summary.unplannedCount += 1
   }
   return summary
 }
@@ -171,18 +172,25 @@ export function computePlanMetrics(
 
     const avoidZones = computeCableAvoidZones(room, opts.preferences)
     let cableIssueCount = 0
-    let cableLengthM = 0
+    const cableLengthM = totalCablePathLength(cables, objects)
     for (const cable of cables) {
+      if (!hasUsableCableRoute(cable)) {
+        cableIssueCount += 1
+        continue
+      }
+      if (cable.planSource === 'algorithm' && cable.route.verification?.status === 'valid') continue
       const points = cableDisplayPoints(cable, objects, 'suggested')
-      if (points.length < 2) continue
-      cableLengthM += estimateCableLength(points)
       const result = checkCableRoute({
         points,
+        smooth: cable.route.smooth,
         from: cable.from,
         to: cable.to,
         objects,
         room,
         avoidZones,
+        cables,
+        cable,
+        selfCableId: cable.id,
       })
       cableIssueCount += result.issues.length
     }
@@ -207,7 +215,7 @@ export function computePlanMetrics(
           objects.filter((o) => o.visible).map((o) => ({ object: o, position: o.transform.position })),
         ),
       ),
-      cableLengthM: round2(cableLengthM),
+      cableLengthM: cableLengthM === null ? null : round2(cableLengthM),
       issueCount: placementIssueCount + cableIssueCount,
       placementIssueCount,
       cableIssueCount,
@@ -215,7 +223,7 @@ export function computePlanMetrics(
       powerStrips,
       zoneCounts,
       objectZones,
-      estimated: { deskFreeArea: true, cableLength: true, issues: false },
+      estimated: { deskFreeArea: true, cableLength: cableLengthM !== null && cables.some((c) => c.route.pathLengthM === undefined), issues: false },
     }
   }
 

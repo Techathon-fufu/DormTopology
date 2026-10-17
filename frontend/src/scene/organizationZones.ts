@@ -1,4 +1,5 @@
 import type { RoomConfig } from '@/types/project'
+import { furnitureSurfaces, hasFixedFurniture, type FurnitureSurface } from './fixedFurniture'
 import { DESK_GAP, shelfTopY } from '@/scene/sceneValidation'
 import {
   CUP_AREA_SIZE,
@@ -34,6 +35,8 @@ export function clampNumber(v: number, min: number, max: number): number {
 }
 
 export interface OrganizationZones {
+  deskSurfaces?: RectOnPlane[]
+  storageSurfaces?: FurnitureSurface[]
   /** 桌面整体可用面（含打字 / 水杯活动区投影，用于放置面定位） */
   deskSurface: RectOnPlane
   /** 桌面后带（靠墙一侧，显示器 / 台灯 / 带电设备） */
@@ -76,18 +79,21 @@ export function computeOrganizationZones(
   prefs: OrganizationPreferences,
 ): OrganizationZones {
   const desk = room.desk
-  const x0 = -desk.width / 2 + 0.03
-  const x1 = desk.width / 2 - 0.03
-  const z0 = DESK_GAP + 0.02
-  const z1 = DESK_GAP + desk.depth - 0.02
+  const fixed = hasFixedFurniture(room)
+  const surfaces = fixed ? furnitureSurfaces(room, false) : []
+  const main = surfaces.find((s) => s.id.includes('Main'))
+  const x0 = main ? main.rect.x0 + .02 : -desk.width / 2 + .03
+  const x1 = main ? main.rect.x1 - .02 : desk.width / 2 - .03
+  const z0 = (main?.rect.z0 ?? DESK_GAP) + 0.02
+  const z1 = (main?.rect.z1 ?? DESK_GAP + desk.depth) - 0.02
   const deskY = desk.height
 
   // 打字活动区：桌面靠人一侧居中（可偏左 / 偏右、可调宽度）
-  const typingW = clampNumber(prefs.typingWidth, 0.32, Math.max(0.32, desk.width - 0.5))
+  const typingW = clampNumber(prefs.typingWidth, 0.32, Math.max(0.32, fixed ? x1 - x0 - .3 : desk.width - .5))
   const typingCx = clampNumber(
     prefs.typingOffsetX,
-    -desk.width / 2 + typingW / 2 + 0.04,
-    desk.width / 2 - typingW / 2 - 0.04,
+    fixed ? x0 + typingW / 2 + .02 : -desk.width / 2 + typingW / 2 + .04,
+    fixed ? x1 - typingW / 2 - .02 : desk.width / 2 - typingW / 2 - .04,
   )
   const typingZ1 = z1
   const typingZ0 = Math.max(z0 + 0.06, z1 - TYPING_AREA_DEPTH)
@@ -97,8 +103,9 @@ export function computeOrganizationZones(
   }
 
   // 水杯活动区：桌面四角之一
+  const cupDesk = fixed && prefs.cupCorner.includes('Right') ? surfaces.find((s) => s.id.includes('Return'))?.rect : null
   const cup: RectOnPlane = {
-    rect: cupCornerRect(prefs.cupCorner, x0, x1, z0, z1),
+    rect: cupDesk ? cupCornerRect(prefs.cupCorner, cupDesk.x0 + .02, cupDesk.x1 - .02, cupDesk.z0 + .02, cupDesk.z1 - .02) : cupCornerRect(prefs.cupCorner, x0, x1, z0, z1),
     y: deskY,
   }
 
@@ -122,7 +129,10 @@ export function computeOrganizationZones(
 
   // 书架收纳区：搁板上表面
   let shelf: OrganizationZones['shelf'] = null
-  if (room.shelf.enabled) {
+  if (fixed) {
+    const s = surfaces.find((s) => s.kind === 'shelf')!
+    shelf = { rect: s.rect, y: s.y, clearance: s.clearance }
+  } else if (room.shelf.enabled) {
     const sw = desk.width - 0.2
     const sx0 = -sw / 2 + 0.02
     const sx1 = sw / 2 - 0.02
@@ -139,14 +149,16 @@ export function computeOrganizationZones(
   // 桌下隐藏区：桌板下方、内收避开桌腿的地面区域
   const underDesk: OrganizationZones['underDesk'] = {
     rect: {
-      x0: -desk.width / 2 + 0.1,
-      x1: desk.width / 2 - 0.1,
-      z0: DESK_GAP + 0.1,
-      z1: DESK_GAP + desk.depth - 0.08,
+      x0: main ? main.rect.x0 + .02 : -desk.width / 2 + 0.1,
+      x1: main ? main.rect.x1 - .02 : desk.width / 2 - 0.1,
+      z0: main ? main.rect.z0 + .02 : DESK_GAP + 0.1,
+      z1: main ? main.rect.z1 - .02 : DESK_GAP + desk.depth - 0.08,
     },
     y: 0,
     clearance: Math.max(0, desk.height - desk.thickness - 0.02),
   }
 
-  return { deskSurface, deskBackBand, deskLeftBand, deskRightBand, typing, cup, shelf, underDesk }
+  return { deskSurface, deskBackBand, deskLeftBand, deskRightBand, typing, cup, shelf, underDesk,
+    ...(fixed ? { deskSurfaces: surfaces.filter((s) => s.kind === 'desk').map((s) => ({ ...s, rect: { x0: s.rect.x0 + .01, x1: s.rect.x1 - .01, z0: s.rect.z0 + .01, z1: s.rect.z1 - .01 } })), storageSurfaces: surfaces.filter((s) => s.kind !== 'desk') } : {}),
+  }
 }

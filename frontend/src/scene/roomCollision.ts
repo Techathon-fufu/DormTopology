@@ -1,7 +1,8 @@
 import type { RoomConfig, Vec3 } from '@/types/project'
+import { furnitureBoxes, hasFixedFurniture } from './fixedFurniture'
 
 /**
- * 场地固定实体的碰撞体积（桌面板 / 桌腿 / 搁板 / 书架侧板 / 立柱 / 桌下横梁）。
+ * 场地固定实体：版本化家具使用资产生成盒，历史房间使用参数化盒。
  *
  * 与 ParametricDesk 的渲染几何同源：同一组 RoomConfig 参数、同一组布局公式，避免
  * 「看得见的是 A、算碰撞的是 B」。GLB 桌体加载失败时渲染回退到参数化几何，本模块
@@ -18,7 +19,7 @@ import type { RoomConfig, Vec3 } from '@/types/project'
 export interface RoomSolid {
   id: string
   /** 语义分类：用于问题文案与按需豁免 */
-  kind: 'deskTop' | 'deskLeg' | 'beam' | 'shelfBoard' | 'shelfDivider' | 'post'
+  kind: 'deskTop' | 'deskLeg' | 'beam' | 'shelfBoard' | 'shelfDivider' | 'post' | 'furniture'
   label: string
   min: Vec3
   max: Vec3
@@ -69,10 +70,14 @@ function centeredBox(center: Vec3, size: Vec3): { min: Vec3; max: Vec3 } {
 /**
  * 场地全部固定碰撞实体。
  *
- * 只包含「物品会撞上」的实体：桌面、桌腿、桌下横梁、书架搁板与侧板、四根立柱。
- * 不包含床架、梯子、墙面、插座与出线孔（这些在首版是装饰或允许贴合，见注释）。
+ * 固定家具包含床体、梯子、柜体和抽屉壳；参数化分支保留历史实体集合。
  */
 export function roomSolids(room: RoomConfig): RoomSolid[] {
+  if (hasFixedFurniture(room)) return furnitureBoxes(room).map((p) => ({
+    id: p.name, kind: p.name.startsWith('Desk_Top_') ? 'deskTop' : 'furniture',
+    label: p.name.startsWith('Desk_Top_') ? '桌面板' : p.name.startsWith('Bookshelf') ? '书架' : p.name.startsWith('drawer_') || p.name.startsWith('Cabinet') ? '抽屉柜' : p.name.startsWith('Wardrobe') ? '衣柜' : p.name.startsWith('Ladder') ? '梯子' : '床架',
+    min: p.min, max: p.max,
+  }))
   const solids: RoomSolid[] = []
   const desk = room.desk
   const deskCZ = desk.depth / 2 + DESK_GAP
@@ -159,6 +164,7 @@ export function roomSolids(room: RoomConfig): RoomSolid[] {
 /** Room config fingerprint: only fields that change the fixed furniture solids. */
 function roomKey(room: RoomConfig): string {
   return JSON.stringify([
+    room.furnitureModel, room.cableHoles,
     room.desk.width,
     room.desk.depth,
     room.desk.thickness,

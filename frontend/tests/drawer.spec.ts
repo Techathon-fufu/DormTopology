@@ -13,6 +13,9 @@ const demoProjectId = 'demo-dorm-101'
  *   [-1.05, 1.35, 1.95] → 目标 [0.55, 0.6, 0.7]，从室内射向抽屉正面的视线首个命中
  *   即真实抽屉前板（不与不透明左墙 / 重叠演示物冲突，见 .work/merge-prefab/drawer-probe.log）；
  * - 鼠标坐标在 Node 侧用 three 按同一机位复算投影（fov 42 与 Viewport Canvas 一致）；
+ *   Canvas 视口宽高比会影响 CameraRig 的 distanceScale=zoomOut*Math.max(1,
+ *   1.1/(box.width/box.height))（zoomOut=1），据此把相机位置从预设位置沿 target→pos
+ *   方向放缩，复算出与生产一致的相机位置；
  * - 交互结果通过页面内动态导入 drawerStore 模块（Vite 已加载的同一实例）读取，
  *   与 workspace.spec.ts 的 jobsStore 口径一致。
  *
@@ -26,6 +29,8 @@ const LEFT_VIEW = {
   position: [-1.05, 1.35, 1.95] as const,
   target: [0.55, 0.6, 0.7] as const,
   fov: 42,
+  /** 与 CameraRig 一致：zoomOut 默认 1 */
+  zoomOut: 1,
 }
 
 /** 上层抽屉前板中心（归一化后 app 坐标）与全开行程（米） */
@@ -86,10 +91,27 @@ interface CanvasBox {
   height: number
 }
 
+/** CameraRig 有效机位：从预设 pos/target 按 distanceScale 沿 (pos - target) 缩放 */
+function effectiveCamera(box: CanvasBox) {
+  const distanceScale = LEFT_VIEW.zoomOut * Math.max(1, 1.1 / (box.width / Math.max(1, box.height)))
+  const tx = LEFT_VIEW.target[0]
+  const ty = LEFT_VIEW.target[1]
+  const tz = LEFT_VIEW.target[2]
+  return {
+    position: [
+      tx + (LEFT_VIEW.position[0] - LEFT_VIEW.target[0]) * distanceScale,
+      ty + (LEFT_VIEW.position[1] - LEFT_VIEW.target[1]) * distanceScale,
+      tz + (LEFT_VIEW.position[2] - LEFT_VIEW.target[2]) * distanceScale,
+    ] as const,
+    target: [tx, ty, tz] as const,
+  }
+}
+
 function projectPoint(box: CanvasBox, point: readonly [number, number, number]) {
   const camera = new THREE.PerspectiveCamera(LEFT_VIEW.fov, box.width / box.height, 0.1, 200)
-  camera.position.set(...LEFT_VIEW.position)
-  camera.lookAt(new THREE.Vector3(...LEFT_VIEW.target))
+  const view = effectiveCamera(box)
+  camera.position.set(view.position[0], view.position[1], view.position[2])
+  camera.lookAt(new THREE.Vector3(view.target[0], view.target[1], view.target[2]))
   camera.updateMatrixWorld()
   const projected = new THREE.Vector3(point[0], point[1], point[2]).project(camera)
   return {

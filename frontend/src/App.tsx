@@ -23,7 +23,7 @@ export default function App() {
 
   return (
     <>
-      {/* API 运行时：真实模式下做健康检查与长任务状态恢复查询（演示模式无网络调用） */}
+      {/* 后端健康检查与长任务状态恢复查询。 */}
       <ApiRuntime />
       <Routes>
         <Route element={<AppShell />}>

@@ -137,7 +137,12 @@ def _choose(
             choices.extend(_candidates(scene, original, region, placed))
     occupied = grid.occupied(placed)
     scored = []
+    seen = set()
     for candidate in choices:
+        pose_key = (tuple(candidate["position"]), candidate["rotation_y_rad"])
+        if pose_key in seen:
+            continue
+        seen.add(pose_key)
         free_cells = grid.largest_component(occupied | grid.item_mask(candidate))
         move = _move_cost(original, candidate)
         cost = (

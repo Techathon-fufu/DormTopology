@@ -21,14 +21,13 @@ import {
   CABLE_VISIBILITY_META,
   PORT_TYPE_LABELS,
 } from '@/types/project'
-import { cableDisplayPoints, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
+import { cableDisplayPoints, hasUsableCableRoute, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
 import { estimateCableLength } from '@/scene/cableRoute'
 import { PORT_TYPE_COLORS } from '@/scene/ports'
 import { useCableLink } from '@/lib/useCableLink'
 import { formatMm } from '@/lib/units'
 import { startCollectAnim } from '@/lib/collectAnim'
 import { useCableStore } from '@/state/cableStore'
-import { isMockMode } from '@/api'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
@@ -38,10 +37,12 @@ import { cn } from '@/lib/utils'
 
 /**
  * 走线模式·左侧面板：线缆列表（状态 / 长度不足提示）+ 设备与接口浏览（点击两个接口建立连接）。
- * 演示模式结果为「规则式演示」，真实模式为「后端算法路径」，界面就地标注数据来源。
+ * 规划调用后端算法，历史未验证路径按数据来源单独标记。
  */
 export function CableListPanel({
   project,
+  routingConfirmed,
+  onConfirmRouting,
   busy,
   onPlanCables,
   onFlash,
@@ -50,6 +51,8 @@ export function CableListPanel({
   onAfterSelect,
 }: {
   project: Project
+  routingConfirmed: boolean
+  onConfirmRouting: (confirmed: boolean) => void
   busy: boolean
   onPlanCables: (targetIds?: string[]) => void
   onFlash: (msg: string) => void
@@ -76,33 +79,37 @@ export function CableListPanel({
   const [devicesOpen, setDevicesOpen] = useState(true)
 
   const staleIds = useMemo(
-    () => cables.filter((c) => c.status === 'stale').map((c) => c.id),
+    () => cables.filter((c) => c.status === 'stale' || (c.planSource === 'demo-rule' && c.status !== 'conflict')).map((c) => c.id),
     [cables],
   )
   const conflictCount = cables.filter((c) => c.status === 'conflict').length
+  const unverifiedHistoryCount = cables.filter((c) => c.planSource === 'demo-rule').length
 
   /** 每条线缆的长度估算与「长度不足」提示（按当前对比视图的路径实时计算） */
   const rows = useMemo(
     () =>
       cables.map((cable) => {
         const points = cableDisplayPoints(cable, project.objects, routeView)
-        const est = estimateCableLength(points)
+        const est = routeView === 'suggested' && (cable.planSource === 'demo-rule' || cable.status === 'conflict' || points.length < 2) ? null
+          : routeView === 'suggested' && cable.route.pathLengthM !== undefined
+          ? cable.route.pathLengthM
+          : estimateCableLength(points, routeView === 'original' || cable.route.smooth !== false)
         const reserve = cable.reserveLengthM ?? 0
         const actual = cable.actualLengthM ?? 0
-        const required = est + reserve
+        const required = est === null ? null : est + reserve
         return {
           cable,
           est,
           required,
           actual,
-          shortage: actual > 0 && actual < required - 0.0005,
+          shortage: required !== null && actual > 0 && actual < required - 0.0005,
         }
       }),
     [cables, project.objects, routeView],
   )
 
-  const outdated = useMemo(
-    () => cables.filter((c) => c.status === 'planned' || c.status === 'adjusted').length,
+  const plannedCount = useMemo(
+    () => cables.filter(hasUsableCableRoute).length,
     [cables],
   )
 
@@ -166,6 +173,16 @@ export function CableListPanel({
 
         {/* 规划操作 */}
         <div className="space-y-1.5">
+          <label className="flex items-start gap-2 py-1 text-xs">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-[#0F9D8A]"
+              checked={routingConfirmed}
+              disabled={busy}
+              onChange={(event) => onConfirmRouting(event.target.checked)}
+            />
+            已核对尺寸、位置与接口
+          </label>
           <Button
             size="sm"
             className="w-full"
@@ -173,7 +190,7 @@ export function CableListPanel({
             onClick={() => onPlanCables()}
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-            {busy ? '规划走线中…' : `规划全部走线${isMockMode ? '（演示）' : '（真实后端）'}`}
+            {busy ? '规划走线中…' : '规划全部走线（真实后端）'}
           </Button>
           {staleIds.length > 0 ? (
             <Button
@@ -197,8 +214,8 @@ export function CableListPanel({
 
         {(staleIds.length > 0 || conflictCount > 0) && (
           <div className="space-y-1 rounded-md bg-warning/10 px-2 py-1.5 text-[11px] leading-relaxed text-warning">
-            {staleIds.length > 0 ? <p>⚠ {staleIds.length} 条走线因设备移动 / 接口变化需重新计算</p> : null}
-            {conflictCount > 0 ? <p>⚠ {conflictCount} 条走线存在障碍（见线缆属性面板）</p> : null}
+            {staleIds.length > 0 ? <p>{staleIds.length} 条走线需重新计算</p> : null}
+            {conflictCount > 0 ? <p>{conflictCount} 条走线未通过检查</p> : null}
           </div>
         )}
 
@@ -273,7 +290,7 @@ export function CableListPanel({
         {/* 线缆列表 */}
         <div className="space-y-1.5">
           {rows.map(({ cable, est, required, actual, shortage }) => {
-            const status = CABLE_STATUS_META[cable.status]
+            const status = CABLE_STATUS_META[cable.planSource === 'demo-rule' && cable.status !== 'conflict' ? 'stale' : cable.status]
             const selected = cable.id === selectedCableId
             return (
               <button
@@ -308,14 +325,14 @@ export function CableListPanel({
                     {CABLE_THICKNESS_META[resolveCableThickness(cable)].label}
                   </span>
                   <span>·</span>
-                  <span>估算 {formatMm(est)}</span>
+                  <span>估算 {est === null ? '未知' : formatMm(est)}</span>
                   {actual > 0 ? (
                     <>
                       <span>·</span>
                       <span>实际 {formatMm(actual)}</span>
                     </>
                   ) : null}
-                  {shortage ? (
+                  {shortage && required !== null ? (
                     <span className="font-medium text-danger">长度不足（差 {formatMm(required - actual)}）</span>
                   ) : null}
                 </div>
@@ -370,14 +387,10 @@ export function CableListPanel({
 
         <div className="space-y-1 text-[11px] leading-relaxed text-faint">
           <p className="flex items-center gap-1.5">
-            规划与路径检查为本地规则式演示
-            <DataBadge kind="computed" label="规则式演示" />
+            <DataBadge kind="real" label="后端算法" />
           </p>
-          <p>平滑曲线仅用于显示；障碍结论来自对平滑采样点的本地几何检查，不是真实寻路算法。</p>
-          <p>
-            线材类型默认按设备名称推断（显示器 / 台灯 → 隐藏线·背板后走线；手机 / 笔记本 → 可见线·出线槽走线），可在右侧逐条修改；线径分粗 / 细两档。
-          </p>
-          {outdated > 0 ? <p>已规划走线 {outdated} 条（设备移动后会自动标记「需重算」）。</p> : null}
+          {unverifiedHistoryCount > 0 ? <p className="text-warning">历史未验证路径 {unverifiedHistoryCount} 条，需重新规划。</p> : null}
+          {plannedCount > 0 ? <p>已规划走线 {plannedCount} 条（设备移动后会自动标记「需重算」）。</p> : null}
         </div>
       </div>
     </aside>

@@ -126,7 +126,7 @@ class SQLiteOrganizationRepository:
             envelope.update(
                 status="failed",
                 updated_at=timestamp(),
-                stage="Scene changed; submit a new organization task",
+                stage="Scene changed; submit a new planning task",
                 error={"code": "stale_scene", "message": "Scene revision changed"},
             )
             connection.execute(
@@ -223,7 +223,13 @@ class SQLiteOrganizationRepository:
                 return False
             envelope = json.loads(row["envelope"])
             envelope.update(
-                status="running", stage="Planning organization", updated_at=timestamp()
+                status="running",
+                stage=(
+                    "Planning cables"
+                    if envelope["kind"] == "cable"
+                    else "Planning organization"
+                ),
+                updated_at=timestamp(),
             )
             connection.execute(
                 "UPDATE jobs SET status = 'running', envelope = ? WHERE job_id = ?",
@@ -249,7 +255,11 @@ class SQLiteOrganizationRepository:
             envelope = json.loads(row["envelope"])
             envelope.update(
                 status="failed" if error else "succeeded",
-                stage="Failed" if error else "Organization plan ready",
+                stage="Failed" if error else (
+                    "Cable plan ready"
+                    if envelope["kind"] == "cable"
+                    else "Organization plan ready"
+                ),
                 updated_at=timestamp(),
                 result=result,
                 error=error,

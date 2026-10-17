@@ -8,8 +8,9 @@ import type {
 } from '@/types/project'
 import { CABLE_CHANNEL_LABELS, CABLE_KIND_META, CATEGORY_LABELS } from '@/types/project'
 import { resolveOrganizationPreferences } from '@/types/organization'
-import { cableDisplayPoints, endpointLabel, resolveEndpointPosition } from '@/scene/cables'
-import { checkCableRoute, estimateCableLength, sampleCurve } from '@/scene/cableRoute'
+import { cableDisplayPoints, endpointLabel, hasUsableCableRoute, resolveEndpointPosition } from '@/scene/cables'
+import { checkCableRoute } from '@/scene/cableRoute'
+import { cablePathLength, cablePathSamples, totalCablePathLength } from '@/scene/cableGeometry'
 import { computeCableAvoidZones, deskUnderY } from '@/scene/routeNodes'
 import { DESK_GAP, nearestSupport, validateScene } from '@/scene/sceneValidation'
 import { formatMeters, radToDeg } from '@/lib/units'
@@ -19,9 +20,9 @@ import { formatMeters, radToDeg } from '@/lib/units'
  *
  * 诚实标注：
  * - 所有步骤 / 数值均从「当前项目数据」实时推导，不写死演示步骤；
- * - 线长与配件数量为本地「计算值」（规则式估算），界面需就地标注；
- * - 问题清单来自本地几何检查（摆放校验 + 走线检查，见 @/scene/sceneValidation.ts 与
- *   @/scene/cableRoute.ts），不是真实算法 / 后端服务结论。
+ * - 真实曲线长度采用后端验证积分；演示路径和配件数量仍为本地估算；
+ * - 后端失败、过期及未规划线路进入问题清单，不生成可执行接线步骤；
+ *   有效演示路径另外做本地几何检查，真实路径保留后端验证结论与支撑状态。
  */
 
 // ───────────────────────────── 通用结构 ─────────────────────────────
@@ -67,10 +68,10 @@ export interface GuideStats {
   visibleObjectCount: number
   cableCount: number
   plannedCableCount: number
-  /** 当前路径长度合计（估算值，米） */
-  totalLengthM: number
+  /** 完整路径长度合计；任意线路无有效路径时未知。 */
+  totalLengthM: number | null
   /** 含用户填写预留的长度合计（米） */
-  requiredLengthM: number
+  requiredLengthM: number | null
   warningCount: number
   infoCount: number
 }
@@ -191,8 +192,8 @@ function cableDetail(project: Project, cable: CableConnection): string {
   const { objects } = project
   const from = endpointLabel(objects, cable.from)
   const to = endpointLabel(objects, cable.to)
-  const points = cableDisplayPoints(cable, objects, 'suggested')
-  const est = estimateCableLength(points)
+  const est = cablePathLength(cable, objects)
+  if (est === null) return '当前连接没有可执行的有效路径，请回工作台完成规划并解决失败原因后再接线。'
   const reserve = cable.reserveLengthM ?? 0
   const required = est + reserve
 
@@ -201,8 +202,8 @@ function cableDetail(project: Project, cable: CableConnection): string {
   parts.push(`通道：${channelsTextOf(cable)}`)
   parts.push(
     reserve > 0
-      ? `长度估算 ${formatMeters(est)}，加预留共约 ${formatMeters(required)}`
-      : `长度估算 ${formatMeters(est)}`,
+      ? `${cable.route.pathLengthM === undefined ? '长度估算' : '已验证路径长度'} ${formatMeters(est)}，加预留共 ${formatMeters(required)}`
+      : `${cable.route.pathLengthM === undefined ? '长度估算' : '已验证路径长度'} ${formatMeters(est)}`,
   )
   if (cable.actualLengthM !== undefined && cable.actualLengthM !== null) {
     if (cable.actualLengthM + 1e-6 < required) {
@@ -213,7 +214,7 @@ function cableDetail(project: Project, cable: CableConnection): string {
       parts.push(`手头线长 ${formatMeters(cable.actualLengthM)}，长度足够`)
     }
   } else {
-    parts.push('未填写实际线长，接线前请核对')
+    parts.push(`备线长度至少 ${formatMeters(required)}`)
   }
   if (cable.accessories.length > 0) {
     parts.push(
@@ -231,7 +232,7 @@ function cableDetail(project: Project, cable: CableConnection): string {
  */
 export function buildCableConnectionSteps(project: Project): GuideStep[] {
   const { objects, cables } = project
-  const sorted = [...cables].sort((a, b) => {
+  const sorted = cables.filter(hasUsableCableRoute).sort((a, b) => {
     const ya = Math.max(
       resolveEndpointPosition(objects, a.from)[1],
       resolveEndpointPosition(objects, a.to)[1],
@@ -261,6 +262,7 @@ export function buildCableConnectionSteps(project: Project): GuideStep[] {
 const GATHER_PHASES: Array<{ channel: CableChannel; title: string; hint: string }> = [
   { channel: 'deskEdge', title: '沿桌沿固定', hint: '线缆贴桌沿后缘顺直走，别绕到打字手位' },
   { channel: 'deskUnderside', title: '沿桌底走线面固定', hint: '贴桌板背面，与桌腿保持平行' },
+  { channel: 'backboard', title: '整理背板后的线路', hint: '沿当前有效路径整理，确认背板间隙与实际固定点' },
   { channel: 'post', title: '绑扎到桌腿 / 床架立柱', hint: '垂直段分段绑扎，避免下垂晃荡' },
   { channel: 'floor', title: '收拢地面段', hint: '沿墙脚 / 桌底走，给凳子留出活动余量' },
 ]
@@ -272,17 +274,17 @@ const GATHER_PHASES: Array<{ channel: CableChannel; title: string; hint: string 
 export function buildCableGatherSteps(project: Project): GuideStep[] {
   const steps: GuideStep[] = []
   const { objects, cables } = project
-  const planned = cables.filter((c) => c.route.channels.some((ch) => ch !== 'free'))
+  const planned = cables.filter(hasUsableCableRoute)
   const unplanned = cables.filter((c) => !planned.includes(c))
 
   if (unplanned.length > 0) {
     steps.push({
       id: 'gather:plan-first',
-      title: `先完成走线规划（${unplanned.length} 条仍是直连）`,
+      title: `先完成走线规划（${unplanned.length} 条尚无有效路径）`,
       detail: `${unplanned
         .slice(0, 4)
         .map((c) => cableBrief(c, objects))
-        .join('、')}${unplanned.length > 4 ? ` 等 ${unplanned.length} 条` : ''}还没有规划路径。请回到工作台「规划走线」生成路径后，再按下面次序固定。`,
+        .join('、')}${unplanned.length > 4 ? ` 等 ${unplanned.length} 条` : ''}尚未通过规划或已过期。请回到工作台重新规划并解决失败原因后，再固定这些线路。`,
       target: { type: 'cable', id: unplanned[0].id },
       tags: ['待规划'],
     })
@@ -320,8 +322,7 @@ interface RouteRuns {
 }
 
 /** 按平滑采样点把路径分类为 桌面 / 桌底 / 垂直 / 地面 段（本地几何规则） */
-function routeRuns(points: Vec3[], room: RoomConfig): RouteRuns {
-  const samples = sampleCurve(points)
+function routeRuns(samples: Vec3[], room: RoomConfig): RouteRuns {
   const desk = room.desk
   const g = DESK_GAP
   const deskZ0 = g - 0.03
@@ -360,7 +361,8 @@ function routeRuns(points: Vec3[], room: RoomConfig): RouteRuns {
  * - 理线槽：规划标注优先；否则线缆 ≥ 3 条时建议 1 条
  */
 export function buildAccessories(project: Project): GuideAccessory[] {
-  const { cables, objects } = project
+  const cables = project.cables.filter(hasUsableCableRoute)
+  const { objects } = project
   if (cables.length === 0) return []
 
   let clipPlan = 0
@@ -378,14 +380,14 @@ export function buildAccessories(project: Project): GuideAccessory[] {
   let postCross = 0
 
   for (const cable of cables) {
-    const runs = routeRuns(cableDisplayPoints(cable, objects, 'suggested'), project.room)
+    const runs = routeRuns(cablePathSamples(cable, objects), project.room)
     deskRun += runs.desk
     underRun += runs.under
     verticalRun += runs.vertical
     floorRun += runs.floor
 
     const channels = cable.route.channels
-    const planned = channels.some((ch) => ch !== 'free')
+    const planned = hasUsableCableRoute(cable)
     if (channels.includes('deskEdge')) edgeCross += 1
     if (channels.includes('post')) postCross += 1
 
@@ -517,24 +519,32 @@ export function collectGuideIssues(project: Project): GuideIssue[] {
   for (const cable of project.cables) {
     const names = cableBrief(cable, project.objects)
 
-    if (cable.status === 'stale') {
+    if (!hasUsableCableRoute(cable)) {
       issues.push({
-        id: `stale:${cable.id}`,
-        severity: 'info',
+        id: `unresolved:${cable.id}`,
+        severity: cable.status === 'conflict' ? 'warning' : 'info',
         kind: 'cable',
-        message: `「${names}」在方案修改后标记为「需重新计算」：请回工作台点击「更新走线」；当前检查基于旧路径。`,
+        message: `「${names}」没有当前有效路径：${cable.note ?? (cable.status === 'stale' ? '场景已变更，需要重新计算' : '尚未完成走线规划')}。请回工作台重新规划；当前长度未知，不能作为接线和固定依据。`,
         target: { type: 'cable', id: cable.id },
       })
+      continue
     }
 
     const points = cableDisplayPoints(cable, project.objects, 'suggested')
-    const check = checkCableRoute({
+    const pathLength = cablePathLength(cable, project.objects)
+    if (pathLength === null) continue
+    const check = cable.planSource === 'algorithm' && cable.route.verification?.status === 'valid'
+      ? { lengthM: pathLength, issues: [] } : checkCableRoute({
       points,
+      smooth: cable.route.smooth,
       from: cable.from,
       to: cable.to,
       objects: project.objects,
       room: project.room,
       avoidZones,
+      cables: project.cables,
+      cable,
+      selfCableId: cable.id,
     })
     for (const [i, issue] of check.issues.slice(0, 4).entries()) {
       issues.push({
@@ -556,16 +566,8 @@ export function collectGuideIssues(project: Project): GuideIssue[] {
     }
 
     const reserve = cable.reserveLengthM ?? 0
-    const required = check.lengthM + reserve
-    if (cable.actualLengthM === undefined || cable.actualLengthM === null) {
-      issues.push({
-        id: `length:${cable.id}`,
-        severity: 'info',
-        kind: 'length',
-        message: `「${names}」未填写实际线长：按当前路径需约 ${formatMeters(required)}（估算 ${formatMeters(check.lengthM)}${reserve > 0 ? ` + 预留 ${formatMeters(reserve)}` : ''}），接线前请核对线材。`,
-        target: { type: 'cable', id: cable.id },
-      })
-    } else if (cable.actualLengthM + 1e-6 < required) {
+    const required = pathLength + reserve
+    if (cable.actualLengthM !== undefined && cable.actualLengthM !== null && cable.actualLengthM + 1e-6 < required) {
       issues.push({
         id: `length:${cable.id}`,
         severity: 'warning',
@@ -574,13 +576,19 @@ export function collectGuideIssues(project: Project): GuideIssue[] {
         target: { type: 'cable', id: cable.id },
       })
     }
+    if (cable.route.verification?.supportStatus === 'not_evaluated') {
+      issues.push({ id: `support:${cable.id}`, severity: 'info', kind: 'cable',
+        message: `「${names}」尚未评估贴面与固定支撑，接线前需确认扎带、线夹或集线槽的实际安装条件。`,
+        target: { type: 'cable', id: cable.id } })
+    }
   }
 
   // 3) 供电需求未接线
   for (const object of project.objects) {
     if (!object.visible || !object.needsPower) continue
     const connected = project.cables.some(
-      (c) => c.from.objectId === object.id || c.to.objectId === object.id,
+      (c) => hasUsableCableRoute(c) && (c.kind === 'power' || c.kind === 'charging')
+        && (c.from.objectId === object.id || c.to.objectId === object.id),
     )
     if (connected) continue
     issues.push({
@@ -629,6 +637,8 @@ export function guideStampOf(project: Project): string {
         ports: o.ports.map((p) => ({
           id: p.id,
           type: p.type,
+          powered: p.powered,
+          confirmed: p.confirmed,
           offset: p.offset,
           direction: p.direction,
         })),
@@ -638,6 +648,8 @@ export function guideStampOf(project: Project): string {
       .map((c) => ({
         id: c.id,
         kind: c.kind,
+        thickness: c.thickness,
+        visibility: c.visibility,
         from: c.from,
         to: c.to,
         status: c.status,
@@ -647,6 +659,9 @@ export function guideStampOf(project: Project): string {
         channels: c.route.channels,
         points: c.route.points.map((p) => p.map(round3) as Vec3),
         nodeIds: c.route.nodeIds ?? null,
+        smooth: c.route.smooth,
+        pathLengthM: c.route.pathLengthM,
+        verification: c.route.verification,
       })),
   })
   let h = 5381
@@ -672,15 +687,10 @@ export function buildGuideBundle(project: Project): GuideBundle {
     })
   }
 
-  let totalLengthM = 0
-  let requiredLengthM = 0
-  let plannedCableCount = 0
-  for (const cable of project.cables) {
-    if (cable.route.channels.some((ch) => ch !== 'free')) plannedCableCount += 1
-    const est = estimateCableLength(cableDisplayPoints(cable, project.objects, 'suggested'))
-    totalLengthM += est
-    requiredLengthM += est + (cable.reserveLengthM ?? 0)
-  }
+  const totalLengthM = totalCablePathLength(project.cables, project.objects)
+  const requiredLengthM = totalLengthM === null ? null
+    : totalLengthM + project.cables.reduce((sum, cable) => sum + (cable.reserveLengthM ?? 0), 0)
+  const plannedCableCount = project.cables.filter(hasUsableCableRoute).length
 
   return {
     stamp: guideStampOf(project),

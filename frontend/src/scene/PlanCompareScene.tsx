@@ -1,11 +1,10 @@
 import { useEffect, useMemo } from 'react'
-import * as THREE from 'three'
 import type { CableConnection, SceneObject } from '@/types/project'
 import { CABLE_KIND_META, CABLE_THICKNESS_META } from '@/types/project'
 import type { ZoneKind } from '@/types/organization'
 import { ZONE_COLORS } from '@/types/organization'
-import { cableDisplayPoints, resolveCableThickness } from '@/scene/cables'
-import { sampleCurve } from '@/scene/cableRoute'
+import { hasUsableCableRoute, resolveCableThickness } from '@/scene/cables'
+import { cablePathSamples, createCableTube } from '@/scene/cableGeometry'
 import { CATEGORY_COLORS } from '@/scene/models'
 import { ObjectModel } from '@/scene/ObjectModel'
 import { basicMaterial, boxGeometry } from './resources'
@@ -13,7 +12,7 @@ import { basicMaterial, boxGeometry } from './resources'
 /**
  * 方案对比页的只读三维图层：
  * - 物品按快照渲染（可按分区着色；与其它方案不同的物品用琥珀色线框高亮）；
- * - 线缆按快照路径平滑渲染（不同线缆用琥珀色加粗高亮）；
+ * - 有效线缆按快照采样路径渲染（不同线缆用琥珀色加粗高亮）；
  * 不接入拖拽 / 选中 / 编辑交互，保证查看对比不修改任何方案数据。
  */
 
@@ -57,10 +56,7 @@ export function CompareObjectMesh({
 
 function useTubeGeometry(samples: [number, number, number][], radius: number) {
   const geometry = useMemo(() => {
-    if (samples.length < 2) return null
-    const curve = new THREE.CatmullRomCurve3(samples.map((p) => new THREE.Vector3(p[0], p[1], p[2])))
-    const tubular = Math.min(200, Math.max(24, samples.length * 2))
-    return new THREE.TubeGeometry(curve, tubular, radius, 6, false)
+    return createCableTube(samples, radius)
   }, [samples, radius])
   useEffect(() => () => geometry?.dispose(), [geometry])
   return geometry
@@ -75,10 +71,7 @@ function CompareCableMesh({
   objects: SceneObject[]
   diff: boolean
 }) {
-  const samples = useMemo(() => {
-    const points = cableDisplayPoints(cable, objects, 'suggested')
-    return points.length >= 2 ? sampleCurve(points, 64) : []
-  }, [cable, objects])
+  const samples = useMemo(() => cablePathSamples(cable, objects), [cable, objects])
 
   const thickness = CABLE_THICKNESS_META[resolveCableThickness(cable)]
   const radius = thickness.renderRadiusM * (diff ? 1.5 : 1)
@@ -115,7 +108,7 @@ export function CompareCables({
 }) {
   return (
     <>
-      {cables.map((cable) => (
+      {cables.filter(hasUsableCableRoute).map((cable) => (
         <CompareCableMesh
           key={cable.id}
           cable={cable}

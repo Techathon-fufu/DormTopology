@@ -22,7 +22,9 @@ from .db.sqlite import SQLiteOrganizationRepository
 from .db.sqlite_store import SQLiteSceneStore
 from .service.executor import LimitedExecutor
 from .service.organization import OrganizationService
+from .service.routing import RoutingService
 from .service.scenes import SceneService
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -111,11 +113,13 @@ def create_app(
         )
         executor = None
         scene_store = None
+        photo_store = None
         try:
             executor = LimitedExecutor(
                 max_workers=settings.max_workers, max_pending=settings.max_pending
             )
             await run_in_threadpool(repository.recover_incomplete_jobs)
+
             organization_service = OrganizationService(repository, executor)
 
             scene_store = await run_in_threadpool(SQLiteSceneStore, workflow_db)
@@ -126,6 +130,7 @@ def create_app(
             )
 
             app.state.organization_service = organization_service
+            app.state.routing_service = RoutingService(repository, executor)
             app.state.workflow_service = workflow_service
             app.state.workflow_photo_store = photo_store
             yield
@@ -160,13 +165,16 @@ def create_app(
     def get_service() -> OrganizationService:
         return app.state.organization_service
 
+    def get_routing_service() -> RoutingService:
+        return app.state.routing_service
+
     def get_workflow_service() -> SceneService:
         return app.state.workflow_service
 
     def get_workflow_photos() -> PhotoStore:
         return app.state.workflow_photo_store
 
-    app.include_router(create_router(get_service))
+    app.include_router(create_router(get_service, get_routing_service))
     app.include_router(build_workflow_router(get_workflow_service, get_workflow_photos))
 
     return app

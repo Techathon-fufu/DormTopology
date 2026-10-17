@@ -581,15 +581,17 @@ export function WorkflowPage(): React.ReactElement {
                       </select>
                     </label>)}
                     {([
-                      ['length_m', 'length', '实际线长（米）'],
+                      ['length_m', 'length', '实际线长（米，未知可留空）'],
                       ['slack_m', 'slack', '余量（米）'],
                       ['diameter_m', 'diameter', '线径（米）'],
                       ['min_bend_radius_m', 'bend', '最小弯曲半径（米）'],
                     ] as const).map(([key, id, label]) => <label key={key} className="min-w-0">
                       {label}<input type="number" step="0.001" min="0" disabled={busy}
-                        className="mt-1 w-full rounded border border-border bg-surface p-1" value={cable[key]}
+                        className="mt-1 w-full rounded border border-border bg-surface p-1" value={cable[key] ?? ''}
                         data-testid={`cable-${cable.id}-${id}`}
-                        onChange={e => updateCable(cable.id, { [key]: numOr(e.target.value, cable[key]) })} />
+                        onChange={e => updateCable(cable.id, key === 'length_m'
+                          ? { length_m: e.target.value === '' ? null : numOr(e.target.value, cable.length_m ?? 0) }
+                          : { [key]: numOr(e.target.value, cable[key]) })} />
                     </label>)}
                     <label>策略<select className="mt-1 w-full rounded border border-border bg-surface p-1" disabled={busy}
                       value={cable.mode} data-testid={`cable-${cable.id}-mode`}

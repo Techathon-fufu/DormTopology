@@ -15,7 +15,7 @@ export const ZONE_ORDER: ZoneKind[] = ['desk', 'shelf', 'underDesk']
 
 export const ZONE_LABELS: Record<ZoneKind, string> = {
   desk: '桌面常用区',
-  shelf: '书架收纳区',
+  shelf: '书架与抽屉收纳区',
   underDesk: '桌下隐藏区',
 }
 

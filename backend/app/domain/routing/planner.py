@@ -869,7 +869,8 @@ def _validate_curve(
     if radius + EPSILON < spec.min_bend_radius:
         return "no_path", 0.0
     path_length = beziers_arc_length(segments)
-    if path_length + spec.cable["slack_m"] > spec.cable["length_m"] + EPSILON:
+    available_length = spec.cable["length_m"]
+    if available_length is not None and path_length + spec.cable["slack_m"] > available_length + EPSILON:
         return "length_exceeded", path_length
     if support_context and not analyze_support(segments, support_context, spec.radius).valid:
         return "unsupported_span", path_length

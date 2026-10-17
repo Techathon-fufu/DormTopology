@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from ..service.errors import NotImplementedCapability
 from ..service.organization import ALGORITHM_VERSION, OrganizationService
+from ..service.routing import RoutingService
 
 
 class SceneSaveRequest(BaseModel):
@@ -22,16 +23,24 @@ class SceneRevisionRequest(BaseModel):
     scene_revision: Annotated[StrictInt, Field(ge=1)]
 
 
-def create_router(get_service: Callable[[], OrganizationService]) -> APIRouter:
+class CablePlanRequest(SceneRevisionRequest):
+    target_ids: list[Annotated[str, Field(min_length=1)]] | None = None
+
+
+def create_router(
+    get_service: Callable[[], OrganizationService],
+    get_routing_service: Callable[[], RoutingService],
+) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
     Service = Annotated[OrganizationService, Depends(get_service)]
+    Routing = Annotated[RoutingService, Depends(get_routing_service)]
 
     @router.get("/health")
     def health():
         return {
             "status": "ok",
             "version": ALGORITHM_VERSION,
-            "capabilities": ["organization"],
+            "capabilities": ["organization", "cable"],
         }
 
     @router.put("/projects/{project_id}/scene")
@@ -64,6 +73,10 @@ def create_router(get_service: Callable[[], OrganizationService]) -> APIRouter:
     def plan_organization(body: SceneRevisionRequest, service: Service):
         return service.submit(body.scene_id, body.scene_revision)
 
+    @router.post("/cables/plan", status_code=202)
+    def plan_cables(body: CablePlanRequest, service: Routing):
+        return service.submit(body.scene_id, body.scene_revision, body.target_ids)
+
     @router.get("/jobs/{job_id}")
     def get_job(job_id: str, service: Service):
         return service.get_job(job_id)
@@ -82,11 +95,10 @@ def create_router(get_service: Callable[[], OrganizationService]) -> APIRouter:
 
     @router.post("/recognition")
     @router.post("/models/generate")
-    @router.post("/cables/plan")
     @router.post("/layout/plan")
     def unsupported():
         raise NotImplementedCapability(
-            "This service currently implements organization only"
+            "This service currently implements organization and cable routing only"
         )
 
     return router

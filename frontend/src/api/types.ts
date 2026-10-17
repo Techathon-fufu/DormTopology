@@ -4,6 +4,7 @@ import type {
   ObjectCategory,
   ObjectDimensions,
   Port,
+  Project,
   RoomConfig,
   SceneObject,
 } from '@/types/project'
@@ -119,30 +120,35 @@ export interface LayoutPlanningService {
 // ── 走线规划 ─────────────────────────────────────────────────────────────
 
 export interface CablePlanningResult {
-  /** 规划后的线缆（仅包含本次目标线缆的更新） */
+  /** 真实规划返回全场景线缆；Mock 可只返回本次目标线缆的更新。 */
   cables: CableConnection[]
   plannedCount: number
   conflictCount: number
-  /** 是否经过真实算法验证（mock 恒为 false；real 仅在后端回报 verified=true 时为 true） */
+  /** 是否经过真实算法验证（Mock 恒为 false，real 校验正式版本及全部单线状态后为 true）。 */
   algorithmVerified: boolean
   notes: string[]
   /** 本地校验提示（不合格路径被丢弃的原因） */
   warnings?: string[]
+  sceneRef?: OrganizationSceneRef
 }
 
 /**
  * 走线规划服务：接口 → 场景路径节点（桌边 / 桌底 / 立柱 / 出线孔）→ 平滑曲线 → 障碍检查。
  *
- * - mock 实现：本地「规则式演示规划」（候选节点链 + 平滑采样障碍检查），可解释、演示用；
- * - real 实现：调用后端走线算法服务（jobId 长任务），结果经本地校验后采用。
+ * 产品固定调用后端走线算法服务（jobId 长任务），结果经本地校验后采用。
+ * 本地规划适配器仅保留用于历史测试，不注册到产品入口。
  */
 export interface CablePlanningService {
   planCables(input: {
     projectId: string
+    /** 真实走线必须提交完整当前场景；旧调用仅供 Mock 兼容。 */
+    project?: Project
+    baseline?: LayoutPlan
+    confirmed?: boolean
     objects: SceneObject[]
     room: RoomConfig
     cables: CableConnection[]
-    /** 仅规划这些线缆；缺省 = 全部 */
+    /** 优先更新的线缆；真实服务始终共同复查全部线缆，Mock 只更新目标。 */
     targetIds?: string[]
     preferences: OrganizationPreferences
     onProgress?: ServiceProgress
@@ -156,8 +162,8 @@ export interface CablePlanningService {
  * 空间整理服务：三区（桌面常用区 / 书架收纳区 / 桌下隐藏区）+ 偏好（打字活动区、
  * 水杯活动区、偏好收纳分区）→ 整理方案（含未放置物品与原因、指标、动画批次）。
  *
- * - mock 实现：本地「规则式演示方案」（可解释规则计算，演示用）
- * - real 实现：调用后端布局算法服务（jobId 长任务），结果经本地校验后采用
+ * 产品固定调用后端布局算法服务（jobId 长任务），结果经本地校验后采用。
+ * 本地规划适配器仅保留用于历史测试，不注册到产品入口。
  */
 export interface OrganizationPlanningService {
   planOrganization(input: {

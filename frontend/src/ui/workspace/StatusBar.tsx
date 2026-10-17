@@ -2,16 +2,13 @@ import { AlertTriangle } from 'lucide-react'
 import type { GenerationJob, Project } from '@/types/project'
 import { formatMeters } from '@/lib/units'
 import type { SceneIssue } from '@/scene/sceneValidation'
-import { cableDisplayPoints } from '@/scene/cables'
-import { estimateCableLength } from '@/scene/cableRoute'
-import { isMockMode, isOrganizationMockMode } from '@/api'
+import { totalCablePathLength } from '@/scene/cableGeometry'
 import { useProjectJobs } from '@/state/jobsStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { FastForwardToggle } from '@/ui/kit/fast-forward'
 import { ServiceStatusCluster } from '@/ui/service/ServiceStatusCluster'
-import { SwitchToDemoButton } from '@/ui/service/SwitchToDemoButton'
 
 /**
  * 底部任务状态区：模式提示 / 任务阶段 / 失败重试 / 模型状态汇总 / 位置校验警示 / 物品与线缆计数。
@@ -37,12 +34,9 @@ export function StatusBar({
   const active = jobs.filter((j) => ['queued', 'waiting', 'running', 'awaiting'].includes(j.status))
   const failed = jobs.filter((j) => j.status === 'failed' || j.status === 'partial')
   const awaitingCount = active.filter((j) => j.status === 'awaiting').length
-  // 线缆总长：按「端点到接口贴合后的平滑路径」实时估算（本地计算值）
-  const totalCable = project.cables.reduce(
-    (sum, c) => sum + estimateCableLength(cableDisplayPoints(c, project.objects, 'suggested')),
-    0,
-  )
-  const staleCableCount = project.cables.filter((c) => c.status === 'stale').length
+  // Prefer verified curve lengths; incomplete route totals remain unknown.
+  const totalCable = totalCablePathLength(project.cables, project.objects)
+  const staleCableCount = project.cables.filter((c) => c.status === 'stale' || (c.planSource === 'demo-rule' && c.status !== 'conflict')).length
   const conflictCableCount = project.cables.filter((c) => c.status === 'conflict').length
   const activeJobIsMock = active[0]?.mock ?? false
 
@@ -60,18 +54,18 @@ export function StatusBar({
         </span>
         <span className="hidden xl:inline">
           {mode === 'organize'
-            ? isOrganizationMockMode ? '规则式演示 · 本地保存' : '真实后端整理 · 本地保存'
-            : isMockMode ? '规则式演示 · 结果需核查' : '真实后端 · 结果需核查'}
+            ? '真实后端整理 · 本地保存'
+            : '真实后端走线'}
         </span>
       </span>
 
       {flash ? <span className="font-medium text-primary">{flash}</span> : null}
 
-      <span className="ml-auto inline-flex items-center gap-3">
+      <span className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 xl:ml-auto xl:w-auto">
         <ServiceStatusCluster placement="up" />
         {active.length > 0 ? (
-          <span className="inline-flex items-center gap-2">
-            <span className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+          <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+            <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
               {activeJobIsMock ? (
                 <span className="block h-full w-1/3 animate-pulse rounded-full bg-primary" />
               ) : (
@@ -91,8 +85,8 @@ export function StatusBar({
           </span>
         ) : null}
         {failed.length > 0 ? (
-          <span className="inline-flex items-center gap-2">
-            <span className="text-danger">{failed.length} 个任务未完成</span>
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span className="whitespace-nowrap text-danger">{failed.length} 个任务未完成</span>
             <Button
               variant="outline"
               size="sm"
@@ -101,7 +95,6 @@ export function StatusBar({
             >
               重试
             </Button>
-            <SwitchToDemoButton />
           </span>
         ) : null}
       </span>
@@ -130,9 +123,9 @@ export function StatusBar({
       <span className="tabular-nums">物品 {project.objects.length}</span>
       <span
         className="tabular-nums"
-        title="线缆总长为按当前路径（端点贴合接口后平滑采样）的实时估算，本地计算值"
+        title="后端路径采用已验证曲线长度；历史或手动路径采用本地采样估算。有失败或待重算路径时总长未知。"
       >
-        线缆 {project.cables.length} · 约 {formatMeters(totalCable)}
+        线缆 {project.cables.length} · {totalCable === null ? '总长未知' : `约 ${formatMeters(totalCable)}`}
         {staleCableCount > 0 ? (
           <span className="text-warning"> · 需重算 {staleCableCount}</span>
         ) : null}

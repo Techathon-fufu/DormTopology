@@ -12,7 +12,7 @@ import {
 } from '../src/scene/dormDeskDrawers'
 
 // 桌体分离件资产契约检查（Node 解析 GLB 的 JSON chunk，不依赖 three / 浏览器）：
-// - 桌体（无抽屉桌体 dorm_desk_body.glb）与三只抽屉分离件存在且为 glTF 2.0；
+// - 桌体（无抽屉桌体 dormdesk_parts/dormdesk_body.glb）与三只抽屉分离件存在且为 glTF 2.0；
 // - 桌体：抽屉 / 锁件必须已拆分（Prefabmodel 清单的 removed_parts 不得残留）、
 //   kept_parts 命名节点齐全；实测包围盒与摆放约定（米制、Y-up、背面 z 最小）；
 // - 抽屉：部件齐全（盒体 / 面板 / 拉手槽 / 滑轨，上层含锁件）、材质按节点名分配
@@ -20,9 +20,10 @@ import {
 // - 以与 deskModel 相同的匹配 / 对齐口径复算摆放结果；
 // - 行程 / 吸附 / 缓动纯函数边界断言（与 useDrawerInteraction / DormDeskModel 同口径）。
 //
-// 用途：资产更新（重新导出 / 重跑 sync-desk-parts.ts）后第一时间发现尺寸、命名、
-// 材质或单位变化；失效时更新 frontend/src/scene/deskModel.ts / dormDeskDrawers.ts
-// 的配置并同步 docs/desk-model.md、docs/drawer-interaction.md。
+// 运行时资产位于 public/models/dormdesk_parts/（canonical main paths）；清单仍源自
+// Prefabmodel/dormdesk_parts/。资产更新（重新导出 / 重跑 sync-desk-parts.ts）后第一
+// 时间发现尺寸、命名、材质或单位变化；失效时更新 frontend/src/scene/deskModel.ts /
+// dormDeskDrawers.ts 的配置并同步 docs/desk-model.md、docs/drawer-interaction.md。
 
 interface GlbChunks {
   json: any
@@ -79,7 +80,7 @@ const near = (a: number, b: number, tol = 0.01) => Math.abs(a - b) <= tol
 // ── 1. 桌体（无抽屉桌体）：拆分契约 + 命名节点 + 包围盒 ─────────────────────────
 const partsDir = new URL('../../Prefabmodel/dormdesk_parts/', import.meta.url)
 const bodyManifest = JSON.parse(readFileSync(new URL('dormdesk_body.manifest.json', partsDir), 'utf8'))
-const bodyJson = parseGlb(new URL('../public/models/dorm_desk_body.glb', import.meta.url)).json
+const bodyJson = parseGlb(new URL('../public/models/dormdesk_parts/dormdesk_body.glb', import.meta.url)).json
 
 const bodyNames: string[] = (bodyJson.nodes ?? []).map((n: any) => (n.name ?? '').trim())
 const bodyNameSet = new Set(bodyNames)
@@ -125,7 +126,7 @@ assert.equal(matches.cableHole.length, 0, '出线孔锚点不应误匹配（锁�
 
 // ── 3. 摆放复算（与 normalizeDeskModel 相同口径；当前配置：无缩放 / 无旋转） ─────
 const config = DORM_DESK_MODEL_CONFIG
-assert.equal(config.url, 'models/dorm_desk_body.glb', '桌体运行时路径应为无抽屉桌体')
+assert.equal(config.url, 'models/dormdesk_parts/dormdesk_body.glb', '桌体运行时路径应为无抽屉桌体')
 assert.equal(config.unitScale, 1, '单位换算应为 1（模型已是米制）')
 assert.equal(config.axisRotationY, 0, '不应有轴校正（已是 Y-up、正面朝 +z）')
 assert.equal(config.fitWidthM, null, '固定模型不做等比缩放')
@@ -162,9 +163,9 @@ assert.deepEqual(
 const CABINET_Z = { min: -0.78, max: -0.04 } // 柜体进深范围（原始坐标）
 const MATERIAL_NAMES = ['Mat_Pine_Natural', 'Mat_Warm_Oak', 'Mat_Dark_Wood', 'Mat_Metal_Hardware']
 const DRAWER_FILES: Array<{ id: string; file: string; extraParts: string[] }> = [
-  { id: 'drawer_bottom.glb', file: 'dorm_desk_drawer_bottom.glb', extraParts: [] },
-  { id: 'drawer_middle.glb', file: 'dorm_desk_drawer_middle.glb', extraParts: [] },
-  { id: 'drawer_top.glb', file: 'dorm_desk_drawer_top.glb', extraParts: ['lock_keyhole', 'lock_plate'] },
+  { id: 'drawer_bottom.glb', file: 'drawer_bottom.glb', extraParts: [] },
+  { id: 'drawer_middle.glb', file: 'drawer_middle.glb', extraParts: [] },
+  { id: 'drawer_top.glb', file: 'drawer_top.glb', extraParts: ['lock_keyhole', 'lock_plate'] },
 ]
 const EXPECTED_MATERIAL_BY_PART: Array<[RegExp, string]> = [
   [/^(floor|wall_)/, 'Mat_Pine_Natural'],
@@ -179,10 +180,10 @@ for (const spec of DORM_DESK_DRAWERS) {
   const entry = DRAWER_FILES.find((f) => f.id === `drawer_${spec.id === 'bot' ? 'bottom' : spec.id === 'mid' ? 'middle' : 'top'}.glb`)
   assert.ok(entry, `抽屉清单缺少对应文件：${spec.id}`)
   const file = entry!
-  assert.equal(spec.url, `models/${file.file}`, `运行时路径应为 models/${file.file}`)
+  assert.equal(spec.url, `models/dormdesk_parts/${file.file}`, `运行时路径应为 models/dormdesk_parts/${file.file}`)
   assert.equal(spec.travelM, 0.3, '行程应为 0.30m（见配置注释：盒体 0.304 − 面板 0.018 − 2cm 余量）')
 
-  const json = parseGlb(new URL(`../public/models/${file.file}`, import.meta.url)).json
+  const json = parseGlb(new URL(`../public/models/dormdesk_parts/${file.file}`, import.meta.url)).json
   const names: string[] = (json.nodes ?? []).map((n: any) => (n.name ?? '').trim())
   const requiredParts = ['floor', 'wall_x0', 'wall_x1', 'wall_z0', 'wall_z1', 'front', 'pull', 'rail_l', 'rail_r', ...file.extraParts]
   assert.deepEqual([...names].sort(), [...requiredParts].sort(), `${file.file} 部件命名应为盒体 / 面板 / 拉手槽 / 滑轨${file.extraParts.length ? ' + 锁件' : ''}`)

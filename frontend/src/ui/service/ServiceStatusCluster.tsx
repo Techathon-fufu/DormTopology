@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { ListChecks, RefreshCw, RotateCcw } from 'lucide-react'
+import { ListChecks, RefreshCw } from 'lucide-react'
 import {
   REMOTE_CAPABILITY_LABELS,
   cancelRemoteJob,
-  isDemoFallbackMode,
   isMockMode,
-  isOrganizationMockMode,
-  hasRealServices,
   refreshRemoteJob,
-  setApiModeOverride,
 } from '@/api'
 import {
   API_HEALTH_LABELS,
@@ -25,12 +21,10 @@ import {
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
 import { cn, formatDateTime } from '@/lib/utils'
-import { SwitchToDemoButton } from './SwitchToDemoButton'
 
 /**
- * 服务状态集群：运行模式（演示 / 真实后端）、后端连接状态（健康检查）、
- * 长任务列表（jobId / 状态 / 算法版本 / 创建时间 / 请求参数摘要；可重查、取消、移除），
- * 以及后端不可用时的「切换到演示模式」入口。工作台底栏与普通页头共用。
+ * 服务状态集群：后端连接状态与长任务列表（可重查、取消、移除）。
+ * 供应商模拟能力单独标记，整理与理线始终使用后端。
  */
 
 const HEALTH_DOT: Record<ApiHealthStatus, string> = {
@@ -95,7 +89,6 @@ export function ServiceStatusCluster({
 
   const active = records.filter((r) => REMOTE_JOB_ACTIVE.includes(r.status))
   const failed = records.filter((r) => r.status === 'failed')
-  const modeLabel = isMockMode ? '真实整理 / 其余演示' : isOrganizationMockMode ? '整理演示 / 其余真实' : '真实后端'
 
   const handleRefresh = (id: string) => {
     setActionError(null)
@@ -112,41 +105,33 @@ export function ServiceStatusCluster({
   }
 
   return (
-    <div ref={rootRef} className={cn('relative flex items-center gap-2', className)}>
-      {!hasRealServices ? (
-        <DataBadge kind="mock" label={isDemoFallbackMode ? '演示模式（已切换）' : '演示模式'} />
-      ) : (
-        <>
-          <DataBadge kind="real" label={modeLabel} />
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            title={
-              health.detail
-                ? `${API_HEALTH_LABELS[health.status]}：${health.detail}`
-                : '后端连接状态（点击重新检测）'
-            }
-            onClick={() => void runHealthCheck()}
-          >
-            <span className={cn('h-1.5 w-1.5 rounded-full', HEALTH_DOT[health.status])} />
-            {API_HEALTH_LABELS[health.status]}
-          </button>
-        </>
-      )}
-
-      {hasRealServices || records.length > 0 ? (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          title="后端服务任务（jobId 长任务状态；刷新页面后继续查询）"
-          onClick={() => setOpen((v) => !v)}
-        >
-          <ListChecks className="h-3.5 w-3.5" />
-          任务 {records.length}
-          {active.length > 0 ? <span className="text-info"> · 进行中 {active.length}</span> : null}
-          {failed.length > 0 ? <span className="text-danger"> · 失败 {failed.length}</span> : null}
-        </button>
-      ) : null}
+    <div ref={rootRef} className={cn('relative flex max-w-full flex-wrap items-center gap-2', className)}>
+      <DataBadge kind="real" label="后端整理 / 理线" />
+      {isMockMode ? <DataBadge kind="mock" label="识别 / 模型模拟" /> : null}
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground hover:text-foreground"
+        title={
+          health.detail
+            ? `${API_HEALTH_LABELS[health.status]}：${health.detail}`
+            : '后端连接状态（点击重新检测）'
+        }
+        onClick={() => void runHealthCheck()}
+      >
+        <span className={cn('h-1.5 w-1.5 rounded-full', HEALTH_DOT[health.status])} />
+        {API_HEALTH_LABELS[health.status]}
+      </button>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground hover:text-foreground"
+        title="后端服务任务（jobId 长任务状态；刷新页面后继续查询）"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ListChecks className="h-3.5 w-3.5" />
+        任务 {records.length}
+        {active.length > 0 ? <span className="text-info"> · 进行中 {active.length}</span> : null}
+        {failed.length > 0 ? <span className="text-danger"> · 失败 {failed.length}</span> : null}
+      </button>
 
       {open ? (
         <div
@@ -157,59 +142,35 @@ export function ServiceStatusCluster({
         >
           <div className="flex items-center justify-between px-1 pb-1.5">
             <span className="font-medium text-foreground">服务状态</span>
-            {hasRealServices ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-[11px]"
-                onClick={() => void runHealthCheck()}
-              >
-                <RefreshCw className="h-3 w-3" />
-                重新检测
-              </Button>
-            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => void runHealthCheck()}
+            >
+              <RefreshCw className="h-3 w-3" />
+              重新检测
+            </Button>
           </div>
 
-          {hasRealServices ? (
-            <div className="space-y-1 rounded-md border border-border p-2">
-              <div className="flex items-center gap-1.5">
-                <span className={cn('h-1.5 w-1.5 rounded-full', HEALTH_DOT[health.status])} />
-                <span className="font-medium">{API_HEALTH_LABELS[health.status]}</span>
-                {health.backendVersion ? (
-                  <span className="text-faint">版本 {health.backendVersion}</span>
-                ) : null}
-                {health.checkedAt ? (
-                  <span className="ml-auto text-faint">{formatDateTime(health.checkedAt)}</span>
-                ) : null}
-              </div>
-              {health.detail ? <p className="text-[11px] text-muted-foreground">{health.detail}</p> : null}
-              {health.status === 'down' ? (
-                <p className="text-[11px] text-muted-foreground">
-                  后端不可用时不会自动降级：请切换到演示模式继续体验，或检查后端部署与 VITE_API_BASE_URL。
-                </p>
+          <div className="space-y-1 rounded-md border border-border p-2">
+            <div className="flex items-center gap-1.5">
+              <span className={cn('h-1.5 w-1.5 rounded-full', HEALTH_DOT[health.status])} />
+              <span className="font-medium">{API_HEALTH_LABELS[health.status]}</span>
+              {health.backendVersion ? (
+                <span className="text-faint">版本 {health.backendVersion}</span>
+              ) : null}
+              {health.checkedAt ? (
+                <span className="ml-auto text-faint">{formatDateTime(health.checkedAt)}</span>
               ) : null}
             </div>
-          ) : null}
-
-          {isDemoFallbackMode ? (
-            <div className="mt-2 flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 p-2">
-              <span className="flex-1 text-[11px]">
-                当前为「演示模式」（由真实模式手动切换）。后端恢复后可回到真实模式。
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-[11px]"
-                onClick={() => {
-                  setApiModeOverride(null)
-                  if (typeof window !== 'undefined') window.location.reload()
-                }}
-              >
-                <RotateCcw className="h-3 w-3" />
-                恢复真实模式
-              </Button>
-            </div>
-          ) : null}
+            {health.detail ? <p className="text-[11px] text-muted-foreground">{health.detail}</p> : null}
+            {health.status === 'down' ? (
+              <p className="text-[11px] text-muted-foreground">
+                后端不可用，请检查服务部署与连接地址后重试。
+              </p>
+            ) : null}
+          </div>
 
           {actionError ? (
             <p className="mt-2 rounded-md border border-danger/40 bg-danger/10 p-2 text-[11px] text-danger">
@@ -220,9 +181,7 @@ export function ServiceStatusCluster({
           <ul className="mt-2 space-y-1.5">
             {records.length === 0 ? (
               <li className="px-1 py-2 text-[11px] text-faint">
-                {!hasRealServices
-                  ? '演示模式下不产生后端任务。'
-                  : '暂无后端任务。'}
+                暂无后端任务。
               </li>
             ) : (
               records.map((r) => (
@@ -254,7 +213,7 @@ export function ServiceStatusCluster({
                     </p>
                   ) : null}
                   <div className="flex items-center gap-1 pt-0.5">
-                    {hasRealServices && (REMOTE_JOB_ACTIVE.includes(r.status) || r.lastQueryError) ? (
+                    {REMOTE_JOB_ACTIVE.includes(r.status) || r.lastQueryError ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -264,7 +223,7 @@ export function ServiceStatusCluster({
                         重查
                       </Button>
                     ) : null}
-                    {hasRealServices && REMOTE_JOB_ACTIVE.includes(r.status) ? (
+                    {REMOTE_JOB_ACTIVE.includes(r.status) ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -298,13 +257,8 @@ export function ServiceStatusCluster({
               >
                 清除已结束
               </Button>
-              <SwitchToDemoButton />
             </div>
-          ) : (
-            <div className="mt-2 flex justify-end">
-              <SwitchToDemoButton />
-            </div>
-          )}
+          ) : null}
         </div>
       ) : null}
     </div>

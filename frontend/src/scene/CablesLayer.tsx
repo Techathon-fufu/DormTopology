@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { Html } from '@react-three/drei'
+import { Html, Line } from '@react-three/drei'
 import type { CableConnection, Project, Vec3 } from '@/types/project'
 import { CABLE_KIND_META, CABLE_THICKNESS_META } from '@/types/project'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { cableDisplayPoints, endpointLabel, resolveCableThickness } from '@/scene/cables'
 import { checkCableRoute, sampleCurve } from '@/scene/cableRoute'
+import { createCableTube } from '@/scene/cableGeometry'
 import { computeCableAvoidZones, computeRouteNodes } from '@/scene/routeNodes'
 import { useCableStore, cableAnimEase } from '@/state/cableStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
@@ -13,20 +14,26 @@ import { basicMaterial, sphereGeometry } from './resources'
 
 /**
  * 线缆层（走线模式）：
- * - 折线控制点 → Catmull-Rom 平滑采样 → TubeGeometry 渲染（平滑仅用于显示）；
+ * - 演示控制点使用与校验同源的平滑采样；真实路径保留后端已验证的采样点；
  * - 端点由接口世界坐标实时推导（设备移动 / 旋转后自动同步）；
  * - 「原始走线 / 建议走线」对比、路径节点拖拽编辑、障碍标记与收拢动画。
  */
-
-const SMOOTH_DIVISIONS = 64
 
 function snap10(v: number): number {
   return Math.round(v * 100) / 100
 }
 
-function resampleForAnim(points: Vec3[]): Vec3[] {
-  const samples = sampleCurve(points, 48)
-  return samples
+function resampleForAnim(points: Vec3[], smooth = true): Vec3[] {
+  if (smooth) return sampleCurve(points, 48)
+  return polyline(points).getSpacedPoints(48).map((point) => point.toArray() as Vec3)
+}
+
+function polyline(points: Vec3[]): THREE.CurvePath<THREE.Vector3> {
+  const curve = new THREE.CurvePath<THREE.Vector3>()
+  for (let index = 1; index < points.length; index += 1) {
+    curve.add(new THREE.LineCurve3(new THREE.Vector3(...points[index - 1]), new THREE.Vector3(...points[index])))
+  }
+  return curve
 }
 
 function lerpSamples(a: Vec3[], b: Vec3[], t: number): Vec3[] {
@@ -45,11 +52,7 @@ function lerpSamples(a: Vec3[], b: Vec3[], t: number): Vec3[] {
 function useTubeGeometry(samples: Vec3[], radius: number) {
   const geometry = useMemo(() => {
     if (samples.length < 2) return null
-    const curve = new THREE.CatmullRomCurve3(
-      samples.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
-    )
-    const tubular = Math.min(220, Math.max(24, samples.length * 2))
-    return new THREE.TubeGeometry(curve, tubular, radius, 6, false)
+    return createCableTube(samples, radius)
   }, [samples, radius])
   useEffect(() => {
     return () => {
@@ -84,30 +87,34 @@ function CableMesh({ cable, project }: { cable: CableConnection; project: Projec
   }, [cable, project.objects, showOriginal, drag])
 
   const samples = useMemo(() => {
-    const target = sampleCurve(displayPoints, SMOOTH_DIVISIONS)
+    const smooth = showOriginal || cable.route.smooth !== false
+    const target = smooth ? sampleCurve(displayPoints) : displayPoints
     if ((animStatus === 'playing' || animStatus === 'paused') && animFrom) {
       const from = animFrom
-      const to = resampleForAnim(displayPoints)
+      const to = resampleForAnim(displayPoints, smooth)
       return lerpSamples(from, to, cableAnimEase(animT))
     }
     return target
-  }, [displayPoints, animStatus, animFrom, animT])
+  }, [displayPoints, animStatus, animFrom, animT, showOriginal, cable.route.smooth])
 
   const stale = cable.status === 'stale'
   const conflicted = cable.status === 'conflict'
+  const invalidSuggested = !showOriginal && (stale || conflicted)
   const color = CABLE_KIND_META[cable.kind].color
   const opacity = showOriginal ? 0.5 : stale ? 0.45 : selected ? 1 : hovered ? 1 : 0.92
   // 按线径真实渲染：渲染半径来自线径档位（约按真实半径 1.7 倍放大以便观察）；选中时略微加粗
   const thicknessMeta = CABLE_THICKNESS_META[resolveCableThickness(cable)]
   const radius = selected || hovered ? thicknessMeta.renderRadiusM * 1.45 : thicknessMeta.renderRadiusM
 
-  const geometry = useTubeGeometry(samples, radius)
+  const geometry = useTubeGeometry(invalidSuggested ? [] : samples, radius)
 
-  if (!geometry) return null
+  if (samples.length < 2 || (!geometry && !invalidSuggested) || (invalidSuggested && !selected)) return null
 
   return (
     <group>
-      <mesh
+      {invalidSuggested ? (
+        <Line points={samples} color={conflicted ? '#DC2626' : '#737373'} lineWidth={2} dashed dashSize={0.025} gapSize={0.015} />
+      ) : geometry ? <mesh
         geometry={geometry}
         onPointerOver={(e) => {
           e.stopPropagation()
@@ -134,7 +141,7 @@ function CableMesh({ cable, project }: { cable: CableConnection; project: Projec
           emissiveIntensity={selected ? 0.45 : hovered ? 0.25 : 0}
           depthWrite={opacity >= 1}
         />
-      </mesh>
+      </mesh> : null}
 
       {hovered ? (
         <CableHoverLabel cable={cable} project={project} samples={samples} />
@@ -164,7 +171,7 @@ function CableHoverLabel({
   const from = endpointLabel(project.objects, cable.from)
   const to = endpointLabel(project.objects, cable.to)
   return (
-    <Html position={[mid[0], mid[1] + 0.05, mid[2]]} center distanceFactor={7} zIndexRange={[20, 0]}>
+    <Html position={[mid[0], mid[1] + 0.05, mid[2]]} center zIndexRange={[20, 0]}>
       <div className="pointer-events-none whitespace-nowrap rounded-md border border-border bg-surface/95 px-2 py-1 text-[11px] leading-tight shadow-sm">
         <span className="font-medium" style={{ color: CABLE_KIND_META[cable.kind].color }}>
           {CABLE_KIND_META[cable.kind].label}
@@ -192,6 +199,7 @@ function CableIssueMarkers({ cable, project }: { cable: CableConnection; project
       objects: project.objects,
       room: project.room,
       avoidZones,
+      smooth: cable.route.smooth !== false,
     })
     return result.issues
   }, [cable, project.objects, project.room, avoidZones])
@@ -291,9 +299,10 @@ function CableNodeHandles({
           : undefined
         return {
           ...c,
-          route: { ...c.route, points, nodeIds },
-          status: 'adjusted',
-          note: '已手动调整路径节点：平滑路径会重新做本地障碍检查（非真实算法验证）',
+          route: { ...c.route, points, nodeIds, verification: undefined, pathLengthM: undefined },
+          status: 'stale',
+          planSource: 'manual',
+          note: '路径已修改，请重新规划以验证',
           updatedAt: Date.now(),
         }
       },
@@ -335,7 +344,6 @@ function CableNodeHandles({
         <Html
           position={[drag.position[0], drag.position[1] + 0.06, drag.position[2]]}
           center
-          distanceFactor={8}
           zIndexRange={[20, 0]}
         >
           <div className="pointer-events-none whitespace-nowrap rounded-md border border-border bg-surface/95 px-2 py-0.5 text-[11px] shadow-sm">

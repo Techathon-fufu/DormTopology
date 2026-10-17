@@ -78,7 +78,7 @@ export function ZoneOverlay({
   return (
     <group>
       {/* 桌面常用区：整个桌面淡底 + 打字 / 水杯活动区 */}
-      <ZonePlane rect={zones.deskSurface.rect} y={zones.deskSurface.y + 0.002} color={deskColor} opacity={0.05} />
+      {(zones.deskSurfaces ?? [zones.deskSurface]).map((s, i) => <ZonePlane key={i} rect={s.rect} y={s.y + .002} color={deskColor} opacity={.05} />)}
       <ZonePlane rect={zones.typing.rect} y={zones.deskSurface.y + 0.003} color={deskColor} opacity={0.16} />
       <ZoneLabel
         x={(zones.typing.rect.x0 + zones.typing.rect.x1) / 2}
@@ -97,23 +97,23 @@ export function ZoneOverlay({
       />
 
       {/* 书架收纳区 */}
-      {zones.shelf ? (
-        <>
+      {(zones.storageSurfaces ?? (zones.shelf ? [zones.shelf] : [])).map((s, index) => (
+        <group key={index}>
           <ZonePlane
-            rect={zones.shelf.rect}
-            y={zones.shelf.y + 0.002}
+            rect={s.rect}
+            y={s.y + 0.002}
             color={ZONE_COLORS.shelf}
             opacity={0.14}
           />
           <ZoneLabel
-            x={(zones.shelf.rect.x0 + zones.shelf.rect.x1) / 2}
-            y={zones.shelf.y + 0.05}
-            z={(zones.shelf.rect.z0 + zones.shelf.rect.z1) / 2}
-            text="书架收纳区"
+            x={(s.rect.x0 + s.rect.x1) / 2}
+            y={s.y + 0.05}
+            z={(s.rect.z0 + s.rect.z1) / 2}
+            text={'label' in s ? String(s.label) : '书架收纳区'}
             color={ZONE_COLORS.shelf}
           />
-        </>
-      ) : null}
+        </group>
+      ))}
 
       {/* 桌下隐藏区 */}
       <ZonePlane rect={zones.underDesk.rect} y={0.002} color={ZONE_COLORS.underDesk} opacity={0.12} />

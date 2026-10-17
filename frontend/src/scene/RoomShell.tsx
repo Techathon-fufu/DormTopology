@@ -1,5 +1,6 @@
 import { Grid } from '@react-three/drei'
 import type { RoomConfig } from '@/types/project'
+import { hasFixedFurniture } from './fixedFurniture'
 import { ParametricDesk } from './ParametricDesk'
 import { boxGeometry, standardMaterial, torusGeometry } from './resources'
 
@@ -84,7 +85,7 @@ export function RoomShell({
       />
 
       {/* 桌体（参数化简化几何）：工作台由 DormDeskModel 接管；桌面 / 桌腿 / 书架 / 立柱 / 出线孔见 ParametricDesk */}
-      {deskMode === 'parametric' ? <ParametricDesk room={room} /> : null}
+      {deskMode === 'parametric' ? <ParametricDesk room={room} hideBedParts={!showBed} /> : null}
 
       {/* 逻辑出线孔标记（工作台 GLB 模式叠加；参数化模式见 ParametricDesk） */}
       {showCableHoles
@@ -99,7 +100,7 @@ export function RoomShell({
           ))
         : null}
 
-      <group visible={showBed}>
+      <group visible={showBed && !hasFixedFurniture(room)}>
         {/* 床架横梁（位于床板下方，跨度随立柱位置自适应） */}
         {[bedZ0 + 0.02, bedZ1 - 0.02].map((z) => (
           <mesh

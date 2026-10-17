@@ -45,14 +45,14 @@ export const DEMO_TOUR_STEPS: DemoTourStep[] = [
   {
     id: 'organize',
     title: '自动整理',
-    hint: '幕二 · 归位动画：点「生成整理方案」→ 播放整理动画 / 对比前后 →「接受方案」完成归位。',
+    hint: '核对尺寸与整理前位置 → 点「生成整理方案」请求后端 → 预览后「接受方案」完成归位。',
     path: 'workspace',
     view: 'desk',
   },
   {
     id: 'cables',
     title: '规划走线',
-    hint: '切换到「规划走线」模式 → 点顶部「规划走线」按钮：全部线缆按路径节点重算（规则式演示）。',
+    hint: '切换到「规划走线」→ 核对尺寸、位置和接口 →「规划全部走线」生成路径与所需线长。',
     path: 'workspace',
     view: 'desk',
   },

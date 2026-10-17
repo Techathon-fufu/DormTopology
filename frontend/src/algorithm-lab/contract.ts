@@ -98,7 +98,7 @@ export interface Cable {
   end_port_id: string;
   cable_type: 'power' | 'usb' | 'network' | 'hdmi';
   thickness: 'thick' | 'thin';
-  length_m: number;
+  length_m: number | null;
   diameter_m: number;
   min_bend_radius_m: number;
   slack_m: number;
@@ -546,7 +546,8 @@ function parseScene(value: unknown, path: string): Scene {
     choice(cable.cable_type, ['power', 'usb', 'network', 'hdmi'], `${entryPath}.cable_type`);
     choice(cable.thickness, ['thick', 'thin'], `${entryPath}.thickness`);
     choice(cable.mode, MODES, `${entryPath}.mode`);
-    ['length_m', 'diameter_m', 'min_bend_radius_m'].forEach((key) => number(cable[key], `${entryPath}.${key}`, 0, true));
+    if (cable.length_m !== null) number(cable.length_m, `${entryPath}.length_m`, 0, true);
+    ['diameter_m', 'min_bend_radius_m'].forEach((key) => number(cable[key], `${entryPath}.${key}`, 0, true));
     number(cable.slack_m, `${entryPath}.slack_m`, 0);
     if (cable.baseline_path_points !== undefined) {
       const points = array(cable.baseline_path_points, `${entryPath}.baseline_path_points`);
@@ -710,7 +711,7 @@ function parseRouting(value: unknown, scene: Scene): RoutingResult {
     if (points.length < 2 || segments.length === 0) invalid(path, 'valid routes need at least two samples and one curve segment');
     if (route.reason_code !== null) invalid(path, 'valid routes cannot have a reason_code');
     const length = number(route.path_length_m, `${path}.path_length_m`, 0, true);
-    if (length + source.slack_m > source.length_m + EPSILON) invalid(path, 'valid route exceeds the source cable length');
+    if (source.length_m !== null && length + source.slack_m > source.length_m + EPSILON) invalid(path, 'valid route exceeds the source cable length');
     const start = positions.get(source.start_port_id)!;
     const end = positions.get(source.end_port_id)!;
     requireSameVector(points[0], start, `${path}.path_points[0]`);

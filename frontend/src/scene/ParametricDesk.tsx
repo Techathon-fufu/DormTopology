@@ -1,4 +1,5 @@
 import type { RoomConfig } from '@/types/project'
+import { furnitureBoxes, hasFixedFurniture } from './fixedFurniture'
 import { DeskShelf } from './DeskShelf'
 import { boxGeometry, standardMaterial, torusGeometry } from './resources'
 import {
@@ -22,7 +23,13 @@ const POST_H = 1.68
  * - 工作台中由 DormDeskModel 决策渲染 GLB 还是本回退几何；GLB 加载成功时本几何不渲染；
  * - 同时用于空间配置预览（SpacePreview3D）与交付页三维视图（DeliverViewport）的完整房间渲染。
  */
-export function ParametricDesk({ room }: { room: RoomConfig }) {
+export function ParametricDesk({ room, hideBedParts = false, desktopOnly = false }: { room: RoomConfig; hideBedParts?: boolean; desktopOnly?: boolean }) {
+  if (hasFixedFurniture(room)) return <group>{furnitureBoxes(room)
+    .filter((p) => (!desktopOnly || p.name.startsWith('Desk_Top_')) && (!hideBedParts || !/^(Bed_|Guardrail_|Ladder_)/.test(p.name)))
+    .map((p) => <mesh key={p.name} castShadow receiveShadow
+      position={p.min.map((v, i) => (v + p.max[i]) / 2) as [number, number, number]}
+      geometry={boxGeometry(p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2])}
+      material={standardMaterial(/^(Bed_|Guardrail_|Ladder_|Pillar_)/.test(p.name) ? METAL : WOOD, { roughness: .65 })} />)}</group>
   const desk = room.desk
   const deskCZ = desk.depth / 2 + DESK_GAP
 
