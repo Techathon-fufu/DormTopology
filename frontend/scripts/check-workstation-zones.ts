@@ -8,12 +8,21 @@ import { organizationClearanceIssues, organizationReservedZones } from '../src/s
 import { objectRoomHits } from '../src/scene/collisionGeometry'
 import { prefabModelRef, PREFAB_ITEMS } from '../src/scene/prefabItems'
 import { isDailyMiscellaneous } from '../src/scene/organizationPolicy'
+import { DESKTOP_BINDINGS, desktopMovementRange, initialDesktopPose } from '../src/scene/desktopBindings'
 import { knownSceneForBaseline, rememberOrganizationScene, remoteOrganizationProjectId } from '../src/api/core/organizationScenes'
 import { createHttpServices } from '../src/api/http'
 import { requestJson } from '../src/api/core/client'
 import { planFromProject } from '../src/lib/plans'
 
 const project = createDemoProject()
+assert.deepEqual(project.objects.find((o) => o.id === 'demo-monitor')!.transform.position, DESKTOP_BINDINGS.monitor.position)
+assert.deepEqual(project.objects.find((o) => o.id === 'demo-keyboard')!.transform.position, DESKTOP_BINDINGS.keyboard.position)
+assert.deepEqual(project.objects.find((o) => o.id === 'demo-mouse')!.transform.position, [.485, .75, .46])
+const padPrototype = { ...project.objects.find((o) => o.id === 'demo-cup')!, id: 'pad', model: prefabModelRef('mousepad', 'genericBox'), dimensions: { width: .3, height: .001, depth: .3 }, transform: { position: [...DESKTOP_BINDINGS.mousepad.position] as [number, number, number], rotationY: 0 } }
+const tissuePrototype = { ...project.objects.find((o) => o.id === 'demo-cup')!, id: 'tissue', model: prefabModelRef('tissue_box', 'genericBox'), dimensions: { width: .15, height: .07, depth: .1 }, transform: { position: [...DESKTOP_BINDINGS.tissue_box.position] as [number, number, number], rotationY: 0 } }
+assert.ok(initialDesktopPose(padPrototype, project.room, project.objects).position.every((v, i) => Math.abs(v - DESKTOP_BINDINGS.mousepad.position[i]) < 1e-6))
+assert.ok(initialDesktopPose(tissuePrototype, project.room, project.objects).position.every((v, i) => Math.abs(v - DESKTOP_BINDINGS.tissue_box.position[i]) < 1e-6))
+assert.ok((desktopMovementRange(padPrototype, project.room, project.objects)!.x1 - desktopMovementRange(padPrototype, project.room, project.objects)!.x0) > .009)
 const input = { projectId: project.id, objects: project.objects, room: project.room, preferences: resolveOrganizationPreferences(project), confirmed: true }
 const scene = { ...toPackingScene(input), baseline_id: 'workstation-test' }
 const find = (id: string) => scene.items.find((item) => item.id === id)!
@@ -39,7 +48,10 @@ const wrongShelf = { ...extras[2], fixed: true, transform: { position: [.07, 1.4
 const wrongMisc = { ...extras[2], fixed: true, transform: { position: [.8, .75, .75] as [number, number, number], rotationY: 0 } }
 for (const object of [wrongShelf, wrongMisc]) assert.ok(organizationClearanceIssues([object], project.room).some((issue) => issue.code === 'target_region'), 'fixed unknown objects must not bypass exclusive storage zones')
 const [padWidth, padHeight, padDepth] = PREFAB_ITEMS.mousepad.size
-assert.throws(() => toPackingScene({ ...input, objects: [{ ...cup, model: prefabModelRef('mousepad', 'genericBox'), dimensions: { width: padWidth, height: padHeight, depth: padDepth } }] }), /超出鼠标区 25×20 cm/, 'oversized pads must fail with a specific dimensional explanation')
+const padScene = toPackingScene({ ...input, objects: [...input.objects, { ...cup, id: 'check-pad', model: prefabModelRef('mousepad', 'genericBox'), dimensions: { width: padWidth, height: padHeight, depth: padDepth }, transform: { position: [.485, .75, .46], rotationY: 0 } }] })
+assert.deepEqual(padScene.items.find((o) => o.id === 'check-pad')!.allowed_region_ids, ['mouse'])
+assert.equal(padScene.items.find((o) => o.id === 'demo-mouse')!.allowed_region_ids[0], 'mouse-on-check-pad')
+assert.ok(padScene.regions.find((r) => r.id === 'mouse')!.bounds_xz_m[1] - padScene.regions.find((r) => r.id === 'mouse')!.bounds_xz_m[0] > .30)
 const run = spawnSync(process.env.PYTHON ?? 'python3', ['-B', '-c', 'import json,sys; from backend.app.domain.packing import plan_packing; print(json.dumps(plan_packing(json.load(sys.stdin))))'], {
   cwd: resolve(process.cwd(), '..'), input: JSON.stringify(scene), encoding: 'utf8', timeout: 120_000,
 })

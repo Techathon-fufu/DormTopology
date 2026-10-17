@@ -1,3 +1,4 @@
+import { DESKTOP_REGIONS, DESKTOP_CENTER_X } from './desktopBindings'
 import type { RoomConfig } from '@/types/project'
 import { furnitureSurfaces, hasFixedFurniture, type FurnitureSurface } from './fixedFurniture'
 import { DESK_GAP, shelfTopY } from '@/scene/sceneValidation'
@@ -142,12 +143,12 @@ export function computeOrganizationZones(
   // The return begins at x=.59; only its part beyond the main front edge is for daily items.
   const plane = (x0: number, x1: number, z0: number, z1: number): RectOnPlane => ({ rect: { x0, x1, z0, z1 }, y: deskY })
   const workstation: OrganizationZones['workstation'] = fixed ? {
-    slotCenterX: .145,
-    monitor: plane(-.155, .445, .085, .285),
+    slotCenterX: DESKTOP_CENTER_X,
+    monitor: { rect: DESKTOP_REGIONS.monitor, y: deskY },
     laptop: { ...plane(.47, .98, .10, .59), rotationY: -Math.PI / 9 },
-    keyboard: plane(-.025, .315, .335, .49),
-    mouse: plane(.335, .585, .39, .59),
-    miscellaneous: plane(.61, .98, .63, .88),
+    keyboard: { rect: DESKTOP_REGIONS.keyboard, y: deskY },
+    mouse: { rect: DESKTOP_REGIONS.mouse, y: deskY },
+    miscellaneous: { rect: DESKTOP_REGIONS.miscellaneous, y: deskY },
     operation: plane(-.025, .315, .51, .59),
     seated: { ...plane(-.155, .445, .61, 1.11), y: 0 },
     study: surfaces.find((s) => s.id === 'support-shelf-2')!,

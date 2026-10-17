@@ -1,3 +1,4 @@
+import { constrainDesktopPose, initialDesktopPose, followMousepad } from '@/scene/desktopBindings'
 import { create } from 'zustand'
 import type {
   CableConnection,
@@ -285,7 +286,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
       const { transform: tPatch, dimensions: dPatch, model: mPatch, ...rest } = patch
-      const next = project.objects.map((o) => {
+      let next = project.objects.map((o) => {
         if (o.id !== objectId) return o
         const dimensions = dPatch ? { ...o.dimensions, ...dPatch } : o.dimensions
         const dimensionsChanged = JSON.stringify(dimensions) !== JSON.stringify(o.dimensions)
@@ -309,6 +310,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           model: mPatch ? { ...o.model, ...mPatch } : o.model,
         }
       })
+      try {
+        if (tPatch || dPatch || mPatch) next = next.map((o) => o.id === objectId
+          ? { ...o, transform: constrainDesktopPose(o, project.room, next) } : o)
+        next = followMousepad(project.objects, next, project.room)
+      } catch (error) { set({ notice: (error as Error).message }); return false }
       if (dPatch) {
         const changed = next.find((o) => o.id === objectId)
         if (changed) {
@@ -330,21 +336,29 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     addObject(projectId, object) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
-      const placed = object.model.shape === 'laptop' ? { ...object, transform: { ...object.transform, rotationY: laptopViewingAngle(object.transform.position, project.room) } } : object
-      commit(projectId, { objects: [...project.objects, placed] }, true)
+      let placed = object.model.shape === 'laptop' ? { ...object, transform: { ...object.transform, rotationY: laptopViewingAngle(object.transform.position, project.room) } } : object
+      try { placed = { ...placed, transform: initialDesktopPose(placed, project.room, project.objects) } }
+      catch (error) { set({ notice: (error as Error).message }); return }
+      let objects: SceneObject[]
+      try { objects = followMousepad(project.objects, [...project.objects, placed], project.room) }
+      catch (error) { set({ notice: (error as Error).message }); return }
+      commit(projectId, { objects }, true)
       set({ selectedId: object.id })
     },
 
     removeObject(projectId, objectId) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
+      let objects: SceneObject[]
+      try { objects = followMousepad(project.objects, project.objects.filter((o) => o.id !== objectId), project.room) }
+      catch (error) { set({ notice: (error as Error).message }); return }
       const affected = project.cables.filter(
         (c) => c.from.objectId === objectId || c.to.objectId === objectId,
       )
       commit(
         projectId,
         {
-          objects: project.objects.filter((o) => o.id !== objectId),
+          objects,
           cables: project.cables.filter(
             (c) => c.from.objectId !== objectId && c.to.objectId !== objectId,
           ),

@@ -1,3 +1,4 @@
+import { constrainDesktopPose, desktopPlacementIssue } from './desktopBindings'
 import type { ObjectDimensions, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import { worldCollision } from './collisionGeometry'
 import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
@@ -33,12 +34,16 @@ export function snapPlacement(object: SceneObject, hit: SupportHit, room: RoomCo
     const nearest = targets.sort((a, b) => Math.abs(a - value) - Math.abs(b - value))[0]
     return nearest !== undefined && Math.abs(nearest - value) <= SNAP_DISTANCE ? nearest : Math.round(value * 100) / 100
   }
-  return [snap(hit.x, anchors.x), hit.y, snap(hit.z, anchors.z)]
+  const position: Vec3 = [snap(hit.x, anchors.x), hit.y, snap(hit.z, anchors.z)]
+  try { return constrainDesktopPose({ ...object, transform: { ...object.transform, position } }, room, others).position }
+  catch { return object.transform.position }
 }
 
 export function resizeIssue(object: SceneObject, dimensions: ObjectDimensions, room: RoomConfig, objects: SceneObject[]): string | null {
   if (Object.values(dimensions).some((n) => !Number.isFinite(n) || n <= 0 || n > 5)) return '尺寸必须大于 0 且不超过 5 米'
   const candidate = { ...object, dimensions }
+  const bindingIssue = desktopPlacementIssue(candidate, room, objects)
+  if (bindingIssue) return bindingIssue
   const issues = placementIssues(candidate, candidate.transform.position, objects, room)
   const conflict = issues.find((issue) => ['overlap', 'roomCollision', 'outOfBounds'].includes(issue.type))
   return conflict ? `尺寸未改变：${conflict.message}` : null

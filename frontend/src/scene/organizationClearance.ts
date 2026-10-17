@@ -1,3 +1,4 @@
+import { desktopPlacementIssue } from './desktopBindings'
 import type { OrganizationIssue } from '@/types/organization'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import { objectRoomHits } from './collisionGeometry'
@@ -39,6 +40,10 @@ export function organizationReservedZones(room: RoomConfig): OrganizationReserve
 export function organizationClearanceIssues(objects: SceneObject[], room: RoomConfig, minimumGap = DEFAULT_MIN_ITEM_GAP_M,
   reservedZones = organizationReservedZones(room)): OrganizationIssue[] {
   const issues: OrganizationIssue[] = []
+  for (const object of objects) {
+    const message = desktopPlacementIssue(object, room, objects)
+    if (message) issues.push({ entity_id: object.id, code: 'target_region', message })
+  }
   for (const object of objects) for (const hit of objectRoomHits(object, object.transform.position, reservedZones)) {
     issues.push({ entity_id: object.id, code: 'reserved_zone', message: `${object.name}占用了${hit.label}（${hit.id}）` })
   }

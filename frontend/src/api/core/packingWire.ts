@@ -1,3 +1,4 @@
+import { desktopBinding, desktopPlacementIssue, desktopMovementRange, mouseSupportPad } from '@/scene/desktopBindings'
 import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 import type { LayoutPlan, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, OrganizationSceneRef, PlanAssignment, ZoneKind } from '@/types/organization'
@@ -164,6 +165,28 @@ export function toPackingScene(input: {
     const view = monitorViewRegion(object, zones)
     if (view) addRegion(`monitor-view-${object.id}`, view.rect, view.y, ceiling - view.y)
   }
+  if (workstation) {
+    // A pad is retained by this planning request, so its support face cannot go stale.
+    for (const pad of input.objects.filter((o) => o.visible && o.model.prefabId === 'mousepad')) {
+      const issue = desktopPlacementIssue(pad, room, input.objects)
+      if (issue) throw new ApiError(issue, { kind: 'input' })
+    }
+    for (const mouse of input.objects.filter((o) => o.model.prefabId === 'mouse')) {
+      const pad = mouseSupportPad(mouse, input.objects)
+      if (!pad) continue
+      const b = worldCollision(pad).bounds
+      addRegion(`mouse-on-${pad.id}`, { x0: b.min[0], x1: b.max[0], z0: b.min[2], z1: b.max[2] }, b.max[1], ceiling - b.max[1])
+    }
+    // Keyboard candidates share the same exact centreline as the screen.
+    const keyboard = input.objects.find((o) => o.model.prefabId === 'keyboard')
+    if (keyboard) {
+      const range = desktopMovementRange(keyboard, room, input.objects)!
+      const local = worldCollision({ ...keyboard, transform: { position: [0, 0, 0], rotationY: 0 } }).bounds
+      const region = regions.find((r) => r.id === 'keyboard')!
+      region.bounds_xz_m[0] = toPackingPosition([range.x0 + local.min[0] - 1e-7, 0, 0], room)[0]
+      region.bounds_xz_m[1] = toPackingPosition([range.x1 + local.max[0] + 1e-7, 0, 0], room)[0]
+    }
+  }
   const items = input.objects.map((object): PackingItem => {
     const shape = object.model.shape
     if (workstation && object.model.prefabId === 'mousepad') {
@@ -210,6 +233,8 @@ export function toPackingScene(input: {
       preferred = object.frequent || preferences.preferredStorageZone === 'desk' ? clearIds
         : preferences.preferredStorageZone === 'underDesk' && allowsFloorPlacement(object, preferences) ? ['under-desk'] : storageIds
     } else allowed = [...clearIds, ...(!object.frequent ? storageIds : [])]
+    const pad = workstation ? mouseSupportPad(object, input.objects) : undefined
+    if (pad) allowed = [`mouse-on-${pad.id}`]
     const allowedRegions = allowed.filter((id) => regions.some((r) => r.id === id))
     const source = object.recognition?.dimensionSource === 'user' || object.source === 'manual'
       ? 'user' : object.source === 'demo' ? 'template' : 'estimated'
@@ -230,11 +255,11 @@ export function toPackingScene(input: {
       size_m: [object.dimensions.width, object.dimensions.height, object.dimensions.depth],
       position: toPackingPosition(object.transform.position, room), rotation_y_rad: object.transform.rotationY,
       dimensions_source: source, dimensions_confirmed: input.confirmed,
-      fixed: object.fixed || object.locked, usage_frequency: object.frequent ? 'high' : 'medium',
+      fixed: object.fixed || object.locked || !!(workstation && object.model.prefabId === 'mousepad'), usage_frequency: object.frequent ? 'high' : 'medium',
       placement_priority: shape === 'monitor' ? 100 : workstation && shape === 'laptop' ? 95 : shape === 'printer' ? 90 : workstation && shape === 'lamp' ? 80 : object.frequent ? 60 : 20,
       allowed_region_ids: allowedRegions, preferred_region_ids: preferred.filter((id) => allowedRegions.includes(id)),
       allowed_rotations_y_rad: workstation && shape === 'laptop' ? [workstation.laptop.rotationY]
-        : shape === 'monitor' || shape === 'printer' || (workstation && (shape === 'keyboard' || shape === 'mouse')) ? [0] : [0, Math.PI / 2],
+        : shape === 'monitor' || shape === 'printer' || desktopBinding(object, room) || (workstation && (shape === 'keyboard' || shape === 'mouse')) ? [0] : [0, Math.PI / 2],
       collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ?? null,
       generation: { task_id: null, status: 'not_requested', source: object.model.assetUrl ? object.model.source === 'generated' ? 'live' : 'cache' : 'placeholder', error: null },
       ...(object.powerStrip ? { socket_count: object.powerStrip.socketCount } : {}),
@@ -345,9 +370,10 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     if ((object.fixed || object.locked || placement !== 'placed' || status === 'infeasible') && !samePose(position, rotation, object)) fail(`${object.name}：固定、未移动或不可行结果不得修改变换`)
     if (item.target_region_id !== null && (typeof item.target_region_id !== 'string' || !ctx.scene.regions.some((r) => r.id === item.target_region_id))) fail(`${object.name}：目标支撑区域未知`)
     const original = ctx.scene.items.find((i) => i.id === object.id)!
+    if (original.fixed && !samePose(position, rotation, object)) fail(`${object.name}：后端修改了本次规划保留的支撑物品`)
     if (placement === 'placed' && (!original.allowed_region_ids.includes(String(item.target_region_id)) || !original.allowed_rotations_y_rad.some((r) => Math.abs(r - rotation) < 1e-7))) fail(`${object.name}：目标区域或朝向不符合输入约束`)
     let reason = issues.filter((i) => i.entity_id === object.id).map((i) => i.message).join('；') || (typeof item.reason === 'string' ? item.reason : typeof item.reason_code === 'string' ? item.reason_code : '后端已复核的目标位置')
-    const zone: ZoneKind = /^support-(drawer|cabinet)/.test(String(item.target_region_id)) ? 'shelf' : Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
+    const zone: ZoneKind = String(item.target_region_id).startsWith('mouse-on-') ? 'desk' : /^support-(drawer|cabinet)/.test(String(item.target_region_id)) ? 'shelf' : Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
     const target = { ...object, visible: true, transform: { position, rotationY: rotation } }
     if (object.model.shape === 'printer' && !object.fixed && !object.locked) {
       reason = placement === 'unplaced' ? `打印机未找到合法侧部设备位，保留原位；${reason}`
