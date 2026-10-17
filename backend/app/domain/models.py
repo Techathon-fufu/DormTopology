@@ -37,6 +37,7 @@ class Item(TypedDict):
     fixed: bool
     usage_frequency: str
     allowed_region_ids: list[str]
+    preferred_region_ids: NotRequired[list[str]]
     allowed_rotations_y_rad: list[float]
     collision: dict
     ports: list[Port]

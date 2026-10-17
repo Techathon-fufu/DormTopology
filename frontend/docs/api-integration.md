@@ -78,6 +78,8 @@ Vite 将 `/api/v1` 代理到 `http://127.0.0.1:8000`；端口被占用时前端�
 
 - 前端原点在桌面中心后墙线，契约原点在桌面左后角地面投影；去程平移 `[desk.width/2, 0, -0.05]`，结果反向平移。局部端口与碰撞部件不平移。
 - 导出当前实际桌面、搁板、横梁、地面支撑，及桌体实体障碍。区域按常用区、杯区、收纳偏好限制允许摆放，大型显示器与打印机优先级高于普通物品。
+- 主机允许桌下地面；非高频收纳容器须显式选择桌下收纳才允许落地。普通物品、书本及插排不使用裸地面作为收纳兜底，插排可放横梁或桌面；固定和未安放物品仍按真实原支撑复查。本地演示复用同一落地资格判断。
+- 收纳偏好以 `preferred_region_ids` 无序组提交，后端 `packing-1.1` 在几何可行时优先满足，再优化桌面面积；偏好不可行时只在允许区域内回退。保存、响应中断恢复与版本核对均包含该字段。
 - 所有项目物品均保留，隐藏状态不免除碰撞检查。使用实际凸体部件，保留复合物体的空隙；算法不依赖展示模型就绪。
 - 用户勾选确认绑定当前尺寸、位姿和原始快照，修改后需重新确认。`estimated` 的来源保留，不因确认改写为 `user`。
 - 本次为布局场景：`cables`、`exposure_zones` 和走线网络为空，端口保持未确认；插排补未确认的总线输入结构。不据此声称接线或三线走线已验收。
@@ -115,6 +117,9 @@ npm run build
 node /tmp/check-organization-backend.mjs
 ./node_modules/.bin/esbuild scripts/check-organization-playback.ts --bundle --platform=node --format=cjs --outfile=/tmp/check-organization-playback.cjs
 node /tmp/check-organization-playback.cjs
+./node_modules/.bin/esbuild scripts/check-floor-placement.ts --bundle --platform=node --format=cjs --outfile=/tmp/check-floor-placement.cjs
+node /tmp/check-floor-placement.cjs
+node /tmp/check-organization-backend.mjs --plan-demo
 ```
 
 后端启动后，另跑真实 HTTP、同步/应用响应中断恢复与完整 17 件样例：
@@ -132,4 +137,8 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_REAL_ORGANIZATION=1 npm run
 
 真实专项使用独立测试项目，验证 Python 整理、原布局保留、正式版本应用、固定物品保持与过期结果拒绝。普通 `test:e2e` 默认跳过依赖真实后端的专项；独立 `/algorithm-lab` 继续读取离线领域结果，不用它替代产品 API 验收。
 
+落地策略专项包含完整 17 件演示项目的真实 Python 预览与原子应用，检查普通物品不落地及默认收纳盒归入书架；`--plan-demo` 另核对显式桌下收纳及最终几何。`check-floor-placement` 验证本地演示的所有偏好、无书架满桌、主机与容器资格、插排支撑、真实容器内收纳、固定和未安放残留物品。
+
 2026-10-17 验证：领域 144 项、整理 service/API 22 项、旧入口兼容 1 项通过；构建、5 个前端转换/状态脚本及新增后端 Ruff 通过。浏览器分轮通过算法工作台 76 项、工作台与真实整理专项 8 项，已复核桌面和模拟手机截图及非空 Canvas。真实 HTTP 故障注入通过 16 个场景同步恢复/拒绝案例，并保留应用响应中断恢复检查。未执行实体手机、真实走线及 Rodin 的完整流程验收。
+
+同日落地策略修复：后端 174 项通过，含新增区域偏好 8 项；完整 17 件 Python 样例在书架与桌下收纳两种偏好下均成功且最终几何有效。转换、落地专项、播放回归、构建通过；真实 HTTP 同步恢复/拒绝增至 17 案例，完整演示应用成功。浏览器专项共 10 项，其中 8 项首轮通过，2 项因同时执行大型场景而排队超过测试时限，待任务结束后串行复测通过；已复核桌面及模拟手机的完整演示应用截图。

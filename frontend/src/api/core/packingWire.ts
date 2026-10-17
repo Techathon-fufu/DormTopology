@@ -3,6 +3,7 @@ import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, Orga
 import { exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
 import { roomSolids } from '@/scene/roomCollision'
 import { BED_UNDERSIDE_Y, computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
+import { allowsFloorPlacement } from '@/scene/organizationPolicy'
 import { DESK_GAP, placementIssues } from '@/scene/sceneValidation'
 import { localDirVec, resolvePortOffset } from '@/scene/ports'
 import { estimateDeskFreeArea } from '@/scene/ruleLayout'
@@ -29,6 +30,7 @@ interface PackingItem {
   usage_frequency: 'high' | 'medium'
   placement_priority: number
   allowed_region_ids: string[]
+  preferred_region_ids: string[]
   allowed_rotations_y_rad: number[]
   collision: CompoundCollision
   ports: Array<{ id: string; type: string; local_position: Vec3; local_direction: Vec3; capacity: number; confirmed: boolean }>
@@ -112,16 +114,26 @@ export function toPackingScene(input: {
   const items = input.objects.map((object): PackingItem => {
     const shape = object.model.shape
     let allowed: string[]
+    let preferred: string[] = []
     if (shape === 'keyboard' || shape === 'mouse') allowed = ['typing']
     else if (shape === 'cup' || shape === 'thermos') allowed = ['cup', ...clearIds]
     else if (shape === 'monitor' || shape === 'printer') allowed = clearIds
-    else if (shape === 'powerStrip') allowed = ['support-beam', 'under-desk', ...clearIds]
-    else if (shape === 'computerTower') allowed = ['under-desk', ...clearIds]
-    else if (object.category === 'storage' || shape === 'book' || shape === 'books') {
-      allowed = preferences.preferredStorageZone === 'shelf' ? [...shelfIds, ...clearIds, 'under-desk']
-        : preferences.preferredStorageZone === 'underDesk' ? ['under-desk', ...shelfIds, ...clearIds]
-          : [...clearIds, ...shelfIds, 'under-desk']
-    } else allowed = [...clearIds, ...(!object.frequent ? shelfIds : []), 'under-desk']
+    else if (shape === 'laptop' || shape === 'lamp') allowed = clearIds
+    else if (object.powerStrip || shape === 'powerStrip') {
+      allowed = ['support-beam', ...clearIds]
+      preferred = ['support-beam']
+    } else if (shape === 'computerTower') {
+      allowed = ['under-desk', ...clearIds]
+      preferred = ['under-desk']
+    } else if (shape === 'book' || shape === 'books') {
+      allowed = [...shelfIds, ...clearIds]
+      preferred = preferences.preferredStorageZone === 'desk' || object.frequent ? clearIds : shelfIds
+    } else if (object.category === 'storage' || shape === 'storageBox') {
+      allowed = [...shelfIds, ...clearIds, ...(allowsFloorPlacement(object, preferences) ? ['under-desk'] : [])]
+      preferred = object.frequent || preferences.preferredStorageZone === 'desk' ? clearIds
+        : preferences.preferredStorageZone === 'underDesk' && allowsFloorPlacement(object, preferences) ? ['under-desk'] : shelfIds
+    } else allowed = [...clearIds, ...(!object.frequent ? shelfIds : [])]
+    const allowedRegions = allowed.filter((id) => regions.some((r) => r.id === id))
     const source = object.recognition?.dimensionSource === 'user' || object.source === 'manual'
       ? 'user' : object.source === 'demo' ? 'template' : 'estimated'
     const ports = object.ports.filter((p) => p.type !== 'audio' && p.type !== 'wireless').map((p) => ({
@@ -143,7 +155,8 @@ export function toPackingScene(input: {
       dimensions_source: source, dimensions_confirmed: input.confirmed,
       fixed: object.fixed || object.locked, usage_frequency: object.frequent ? 'high' : 'medium',
       placement_priority: shape === 'monitor' || shape === 'printer' ? 100 : object.frequent ? 60 : 20,
-      allowed_region_ids: allowed.filter((id) => regions.some((r) => r.id === id)), allowed_rotations_y_rad: [0, Math.PI / 2],
+      allowed_region_ids: allowedRegions, preferred_region_ids: preferred.filter((id) => allowedRegions.includes(id)),
+      allowed_rotations_y_rad: [0, Math.PI / 2],
       collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ?? null,
       generation: { task_id: null, status: 'not_requested', source: object.model.assetUrl ? object.model.source === 'generated' ? 'live' : 'cache' : 'placeholder', error: null },
       ...(object.powerStrip ? { socket_count: object.powerStrip.socketCount } : {}),
@@ -197,7 +210,7 @@ export function canonicalScene(raw: unknown, expected?: PackingScene, expectedRe
       if (typeof item.id !== 'string' || !expectedIds.delete(item.id) || !vector(item.position) || typeof item.rotation_y_rad !== 'number' || !Number.isFinite(item.rotation_y_rad)) fail('后端正式场景物品引用或位姿错误')
       const original = expected.items.find((i) => i.id === item.id)!
       if (!vector(item.size_m) || !item.size_m.every((v, i) => Math.abs(v - original.size_m[i]) < 1e-7) || !item.position.every((v, i) => Math.abs(v - original.position[i]) < 1e-7) || Math.abs(item.rotation_y_rad - original.rotation_y_rad) > 1e-7) fail('后端正式场景意外修改了提交的物品尺寸或位姿')
-      for (const key of ['name', 'category', 'fixed', 'dimensions_source', 'dimensions_confirmed', 'collision', 'ports', 'allowed_region_ids', 'allowed_rotations_y_rad', 'placement_priority', 'socket_count', 'usage_frequency', 'image_url'] as const) {
+      for (const key of ['name', 'category', 'fixed', 'dimensions_source', 'dimensions_confirmed', 'collision', 'ports', 'allowed_region_ids', 'preferred_region_ids', 'allowed_rotations_y_rad', 'placement_priority', 'socket_count', 'usage_frequency', 'image_url'] as const) {
         if (!sameStructure(item[key], original[key])) fail('后端正式场景意外修改了提交的物品约束')
       }
     }

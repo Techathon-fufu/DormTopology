@@ -1,5 +1,6 @@
 import { describePrimitive } from './primitiveGeometry'
 import { objectExtent, objectFootprint, objectToWorld } from './collisionGeometry'
+import { allowsFloorPlacement } from './organizationPolicy'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import {
   DESK_BEAM_DEPTH,
@@ -35,7 +36,7 @@ import {
  *   2. 常用物品放在容易取用的位置（桌面常用区前排与两侧）
  *   3. 书本优先归入书架收纳区
  *   4. 小件物品优先放入尺寸适配的收纳容器内部（按盒内剩余宽度顺序尝试）
- *   5. 排插优先放在桌面下方横梁，其次已配置且高度可容纳的桌下隐藏区
+ *   5. 排插使用桌下横梁或桌面；主机及明确选择桌下的非常用收纳容器可放地面
  *   6. 全部落位按物品包围盒检查分区分界、房间边界与明显相交（尺寸不合 / 空间不足 → 列入未放置并给出原因）
  *
  * 这是「规则式演示方案」而非真实搬运 / 碰撞规划：结果用于展示整理思路，动画不代表真实搬运路径。
@@ -78,6 +79,7 @@ interface PlacedPose {
 
 interface Ctx {
   room: RoomConfig
+  preferences: OrganizationPreferences
   zones: OrganizationZones
   placed: PlacedPose[]
   /** 各放置带的一次性游标（米）：左→右为「下一个空闲 x 起点」，右→左为「下一个空闲 x 终点」 */
@@ -238,7 +240,7 @@ function placeInBand(
   return null
 }
 
-/** 尝试按偏好分区放置收纳容器 / 书本（shelf → desk → underDesk 回退链） */
+/** Try storage surfaces; floor targets require an explicit item and preference policy. */
 function tryStorageZone(
   ctx: Ctx,
   obj: SceneObject,
@@ -270,11 +272,11 @@ function tryStorageZone(
     })
     if (b) return b
   }
-  if (zone === 'underDesk' && ext.height <= z.underDesk.clearance) {
+  if (zone === 'underDesk' && allowsFloorPlacement(obj, ctx.preferences) && ext.height <= z.underDesk.clearance) {
     const a = placeInBand(ctx, obj, z.underDesk, 'under:left', {
       z: 'back',
       zone: 'underDesk',
-      reason: `${reasonBase}：桌下隐藏区（离地靠后墙）`,
+      reason: `${reasonBase}：桌下地面（靠后墙）`,
     })
     if (a) return a
   }
@@ -369,6 +371,7 @@ export function computeRuleBasedPlan(input: {
   const zones = computeOrganizationZones(room, preferences)
   const ctx: Ctx = {
     room,
+    preferences,
     zones,
     placed: [],
     cursors: new Map(),
@@ -478,7 +481,9 @@ export function computeRuleBasedPlan(input: {
       if (a) break
     }
     if (!place('storage', c, a)) {
-      reject(c, '书架收纳区、桌面后带与桌下隐藏区均无足够空间安放收纳容器')
+      reject(c, allowsFloorPlacement(c, preferences)
+        ? '书架、桌面与允许使用的桌下地面均无足够空间安放收纳容器'
+        : '书架与桌面无足够空间安放收纳容器；地面未获允许或物品标为常用，保留原位')
     }
   }
 
@@ -673,21 +678,23 @@ export function computeRuleBasedPlan(input: {
       place('desk', obj, a)
       continue
     }
-    // 兜底：桌下隐藏区（真实高度允许时）
+    // Only explicitly eligible items can fall back to the floor.
     let fallback: PlanAssignment | null = null
-    if (objectExtent(obj).height <= zones.underDesk.clearance) {
+    if (allowsFloorPlacement(obj, preferences) && objectExtent(obj).height <= zones.underDesk.clearance) {
       fallback = placeInBand(ctx, obj, zones.underDesk, 'under:left', {
         z: 'back',
         zone: 'underDesk',
-        reason: '桌面无空位：收纳进桌下隐藏区（靠后墙）',
+        reason: '桌面无空位：放在允许使用的桌下地面（靠后墙）',
       })
     }
     if (!place('desk', obj, fallback)) {
-      reject(obj, '桌面常用区与桌下隐藏区均无足够空间（可减少物品或调整分区）')
+      reject(obj, allowsFloorPlacement(obj, preferences)
+        ? '桌面与允许使用的桌下地面均无足够空间，保留原位'
+        : '桌面没有合适空位；此物品不适合放地面，保留原位')
     }
   }
 
-  // ── 阶段 5：排插进桌下（规则 5：优先桌面下方横梁，其次桌下隐藏区） ──────
+  // ── 阶段 5：排插使用横梁或桌面，不直接放在裸地面 ──────────────────
   for (const st of byRole('powerStrip')) {
     let a: PlanAssignment | null = null
     // 桌下横梁：排插「优先放在桌面下方横梁」（高度 / 深度合适时，沿横梁从中心向左避让）
@@ -713,21 +720,21 @@ export function computeRuleBasedPlan(input: {
         reason: '排插优先放在桌面下方横梁（走线 / 插拔方便）',
       })
     }
-    if (!a && stripExt.height <= zones.underDesk.clearance) {
+    if (!a && allowsFloorPlacement(st, preferences) && stripExt.height <= zones.underDesk.clearance) {
       a = placeInBand(ctx, st, zones.underDesk, 'under:left', {
         z: 'back',
         zone: 'underDesk',
-        reason: '桌下隐藏区（离地靠后墙，便于插拔）',
+        reason: '允许使用的桌下地面（靠后墙）',
       })
     }
     if (!a) {
       a = placeInBand(ctx, st, zones.deskBackBand, 'desk:back', {
         zone: 'desk',
-        reason: '桌下横梁与隐藏区不可用：排插暂放桌面后带',
+        reason: '桌下横梁不可用：排插暂放桌面后带',
       })
     }
     if (!place('under', st, a)) {
-      reject(st, '桌下横梁 / 隐藏区高度或空间不足，且桌面后带没有空位')
+      reject(st, '桌下横梁与桌面均无合适空位；插排不直接放裸地面，保留原位')
     }
   }
 
@@ -793,7 +800,7 @@ export function computeRuleBasedPlan(input: {
     `常用物品：标记「常用」的 ${frequentCount} 件物品优先放在桌面常用区前排与两侧的易取位置`,
     shelfOn ? '书本优先：书本优先归入书架收纳区左侧' : '书本优先：未启用书架，书本退而放在桌面后带',
     '小件入盒：小件物品（最长边 ≤ 160mm）优先放入尺寸适配的收纳容器内部',
-    '排插归位：排插优先放入已配置且高度足够的桌下隐藏区，靠后墙放置便于插拔',
+    '桌下归位：插排使用横梁或桌面；主机及明确选择桌下的非常用收纳容器可使用地面，其它物品保留在桌面或书架',
     '包围盒检查：全部落位按物品包围盒（宽 × 高 × 深）检查分区分界、房间边界与明显相交；高件（显示器等）避让书架搁板投影',
     '场地穿模检查：落位按真实碰撞实体检查桌面 / 桌腿 / 桌下横梁 / 书架搁板与侧板 / 立柱，超过 1mm 相交即判为不可放置',
   ]

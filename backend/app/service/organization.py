@@ -15,7 +15,7 @@ from ..domain.rules import validate_scene
 from .errors import Conflict, InvalidInput, NotFound
 from .ports import JobExecutor, OrganizationRepository, SceneRecord
 
-ALGORITHM_VERSION = "packing-1.0"
+ALGORITHM_VERSION = "packing-1.1"
 logger = logging.getLogger(__name__)
 
 

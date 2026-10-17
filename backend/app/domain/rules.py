@@ -177,6 +177,18 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _string(region_id, path + ".allowed_region_ids")
             if region_id not in regions:
                 _fail(path + ".allowed_region_ids", f"unknown region {region_id}")
+        if "preferred_region_ids" in item:
+            preferred = _array(item["preferred_region_ids"], path + ".preferred_region_ids")
+            seen_preferred = set()
+            for region_id in preferred:
+                _string(region_id, path + ".preferred_region_ids")
+                if region_id not in regions:
+                    _fail(path + ".preferred_region_ids", f"unknown region {region_id}")
+                if region_id not in allowed:
+                    _fail(path + ".preferred_region_ids", "must be a subset of allowed_region_ids")
+                if region_id in seen_preferred:
+                    _fail(path + ".preferred_region_ids", f"duplicate region {region_id}")
+                seen_preferred.add(region_id)
         rotations = _array(
             item["allowed_rotations_y_rad"], path + ".allowed_rotations_y_rad"
         )

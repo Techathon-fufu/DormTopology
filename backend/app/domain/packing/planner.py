@@ -124,6 +124,8 @@ def _choose(
 ) -> dict | None:
     choices = []
     allowed = set(original["allowed_region_ids"])
+    preferred = set(original.get("preferred_region_ids", []))
+    preferred_regions = [region for region in scene["regions"] if region["id"] in preferred]
     if (
         any(r["id"] in allowed and fits_region(original, r) for r in scene["regions"])
         and not item_geometry_issues(scene, original)
@@ -146,6 +148,9 @@ def _choose(
         scored.append(
             (
                 (
+                    int(bool(preferred_regions) and not any(
+                        fits_region(candidate, region) for region in preferred_regions
+                    )),
                     -free_cells,
                     cost,
                     move,
