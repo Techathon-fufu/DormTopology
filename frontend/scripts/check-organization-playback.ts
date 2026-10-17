@@ -3,6 +3,7 @@ import { createDemoProject } from '../src/data/demoProject'
 import { computeRuleBasedPlan } from '../src/scene/ruleLayout'
 import { resolveOrganizationPreferences } from '../src/types/organization'
 import { compileOrganizationCommands } from '../src/lib/organizationCommands'
+import { organizationSource, canApplyOrganization } from '../src/lib/organizationSession'
 import { useOrganizeStore } from '../src/state/organizeStore'
 const p = createDemoProject()
 const original = JSON.stringify(p)
@@ -55,6 +56,43 @@ store().startPlayback();store().tick(600)
 assert.ok(Math.abs(store().overrides[first.id].rotationY-first.transform.rotationY+0.05)<1e-8)
 store().closePanel()
 assert.equal(store().commands.length,0)
+// Session visibility must not discard a paused preview or invalidate its source.
+store().openPanel()
+const token = store().sessionToken
+const signature = organizationSource(p)
+store().setPlan(plan, p.objects, signature)
+store().startPlayback(); store().tick(600); store().pausePlayback()
+store().setShowZones(false)
+const retained = JSON.stringify(store().overrides)
+store().hidePanel()
+assert.equal(store().panelVisible, false)
+assert.equal(store().plan?.id, plan.id)
+assert.equal(store().sessionToken, token)
+store().openPanel()
+assert.equal(store().panelVisible, true)
+assert.equal(store().status, 'paused')
+assert.equal(store().showZones, false)
+assert.equal(JSON.stringify(store().overrides), retained)
+assert.ok(canApplyOrganization(store().sourceSignature, p))
+const changedRoom = structuredClone(p)
+changedRoom.room.desk.width += 0.1
+assert.equal(canApplyOrganization(signature, changedRoom), false)
+const changedItem = structuredClone(p)
+changedItem.objects[0].transform.position[0] += 0.1
+assert.equal(canApplyOrganization(signature, changedItem), false)
+store().setCompare('before'); store().resumePlayback()
+assert.equal(store().compare, 'after')
+store().closePanel()
+assert.ok(store().sessionToken > token, 'discard invalidates in-flight request token')
+assert.equal(store().sourceSignature, null)
+store().openPanel(); store().setStatus('planning')
+assert.ok(store().isPreviewBlocking(), 'generation also protects editing')
+store().hidePanel()
+assert.equal(store().status, 'planning')
+assert.equal(store().open, true)
+store().closePanel(); store().openPanel(); store().hidePanel()
+assert.equal(store().open, false, 'closing empty config returns to editing')
+console.log('Preview session checks passed: hide/reopen, source invalidation, cancellation token, planning lock, config dismissal.')
 Object.assign(globalThis,{window:{matchMedia:()=>({matches:true})}})
 store().setPlan(plan,p.objects);store().startPlayback()
 assert.equal(store().status,'finished')

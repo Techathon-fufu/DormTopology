@@ -103,6 +103,10 @@ def footprint(item: dict) -> Footprint:
 
 
 def aabb_from_item(item: dict) -> AABB:
+    if item.get("collision", {}).get("type") == "compound":
+        from .convex import world_parts, bounds
+        minimum, maximum = bounds(tuple(v for p in world_parts(item) for v in p[0]))
+        return AABB(minimum, maximum)
     corners = footprint(item)
     return AABB(
         (min(p[0] for p in corners), item["position"][1], min(p[1] for p in corners)),
@@ -161,6 +165,9 @@ def footprints_overlap(a: Footprint, b: Footprint) -> bool:
 
 
 def items_overlap(a: dict, b: dict) -> bool:
+    if any(i.get("collision", {}).get("type") == "compound" for i in (a, b)):
+        from .convex import items_overlap as compound_overlap
+        return compound_overlap(a, b)
     ay, by = a["position"][1], b["position"][1]
     if min(ay + a["size_m"][1], by + b["size_m"][1]) - max(ay, by) <= NUMERIC_EPSILON:
         return False
@@ -168,6 +175,11 @@ def items_overlap(a: dict, b: dict) -> bool:
 
 
 def item_intersects_box(item: dict, box: AABB) -> bool:
+    if item.get("collision", {}).get("type") == "compound":
+        from .convex import world_parts, overlap
+        vertices = tuple((x,y,z) for x in (box.minimum[0],box.maximum[0]) for y in (box.minimum[1],box.maximum[1]) for z in (box.minimum[2],box.maximum[2]))
+        axes = ((1,0,0),(0,1,0),(0,0,1))
+        return any(overlap(p,(vertices,axes,axes)) for p in world_parts(item))
     y = item["position"][1]
     if (
         min(y + item["size_m"][1], box.maximum[1]) - max(y, box.minimum[1])

@@ -22,6 +22,9 @@ export interface PoseOverride {
 
 interface OrganizeState {
   open: boolean
+  panelVisible: boolean
+  sessionToken: number
+  sourceSignature: string | null
   status: OrganizeStatus
   plan: OrganizationPlan | null
   commands: ReturnType<typeof compileOrganizationCommands>
@@ -37,10 +40,11 @@ interface OrganizeState {
   /** 生成方案时的原布局快照（动画起点） */
   originals: Record<string, PoseOverride>
   openPanel: () => void
+  hidePanel: () => void
   closePanel: () => void
   setStatus: (status: OrganizeStatus) => void
   setError: (message: string | null) => void
-  setPlan: (plan: OrganizationPlan, objects: SceneObject[]) => void
+  setPlan: (plan: OrganizationPlan, objects: SceneObject[], sourceSignature?: string) => void
   setCompare: (compare: 'before' | 'after') => void
   setShowZones: (show: boolean) => void
   startPlayback: () => void
@@ -72,6 +76,9 @@ function lerpPose(from: PoseOverride, to: PoseOverride, t: number): PoseOverride
 
 export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   commands: [],
+  panelVisible: false,
+  sessionToken: 0,
+  sourceSignature: null,
   open: false,
   status: 'config',
   plan: null,
@@ -86,16 +93,23 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   openPanel() {
     const s = get()
     if (s.open) {
-      // 已打开：仅确保分区参考线可见，不覆盖进行中的预览
-      if (!s.showZones) set({ showZones: true })
+      set({ panelVisible: true })
       return
     }
-    set({ open: true, status: 'config', error: null, showZones: true })
+    set({ open: true, panelVisible: true, sessionToken: s.sessionToken + 1, status: 'config', error: null, showZones: true })
+  },
+
+  hidePanel() {
+    if (!get().plan && get().status !== 'planning') { get().closePanel(); return }
+    set({ panelVisible: false })
   },
 
   closePanel() {
     set({
       commands: [],
+      panelVisible: false,
+      sourceSignature: null,
+      sessionToken: get().sessionToken + 1,
       open: false,
       status: 'config',
       plan: null,
@@ -112,7 +126,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
 
-  setPlan(plan, objects) {
+  setPlan(plan, objects, sourceSignature) {
     const commands = compileOrganizationCommands(plan, objects)
     const originals: Record<string, PoseOverride> = {}
     for (const o of objects) {
@@ -127,6 +141,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
     }
     set({
       plan,
+      sourceSignature: sourceSignature ?? null,
       commands,
       originals,
       overrides,
@@ -233,8 +248,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   isPreviewBlocking() {
     const s = get()
     return (
-      s.plan !== null &&
-      (s.status === 'preview' || s.status === 'playing' || s.status === 'paused' || s.status === 'finished')
+      s.status === 'planning' || s.plan !== null
     )
   },
 }))

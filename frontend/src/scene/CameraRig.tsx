@@ -10,7 +10,7 @@ const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [numb
   top: { pos: [0, 2.7, 0.46], target: [0, 0.75, 0.45] },
   left: { pos: [-2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
   right: { pos: [2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
-  desk: { pos: [0.55, 1.5, 1.35], target: [0, 0.8, 0.35] },
+  desk: { pos: [0.75, 1.9, 2.0], target: [0, 0.85, 0.45] },
 }
 
 /**

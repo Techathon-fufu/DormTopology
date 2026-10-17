@@ -34,7 +34,7 @@ export function SceneObjectMesh({
     s.drag && s.drag.objectId === object.id ? s.drag : null,
   )
   const organizePose = useOrganizeStore((s) =>
-    s.compare === 'after' ? s.overrides[object.id] : undefined,
+    s.plan ? s.compare === 'before' ? s.originals[object.id] : s.overrides[object.id] ?? s.originals[object.id] : undefined,
   )
   const activeOperation = useOrganizeStore((s) =>
     s.compare === 'after' && (s.status === 'playing' || s.status === 'paused') &&

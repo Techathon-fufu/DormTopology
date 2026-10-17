@@ -35,6 +35,7 @@ import { useProjectsStore } from '@/state/projectsStore'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { cn, formatDateTime } from '@/lib/utils'
+import { organizationSource, canApplyOrganization } from '@/lib/organizationSession'
 import { usePrefersReducedMotion } from '@/lib/motion'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
@@ -113,6 +114,8 @@ export function OrganizePanel({
   const showZones = useOrganizeStore((s) => s.showZones)
   const batchIndex = useOrganizeStore((s) => s.batchIndex)
   const batchProgress = useOrganizeStore((s) => s.batchProgress)
+  const sourceSignature = useOrganizeStore((s) => s.sourceSignature)
+  const hidePanel = useOrganizeStore((s) => s.hidePanel)
   const closePanel = useOrganizeStore((s) => s.closePanel)
   const setCompare = useOrganizeStore((s) => s.setCompare)
   const setShowZones = useOrganizeStore((s) => s.setShowZones)
@@ -139,6 +142,7 @@ export function OrganizePanel({
   const visibleObjects = project.objects.filter((o) => o.visible)
 
   const setPreferences = (patch: Partial<OrganizationPreferences>) => {
+    if (useOrganizeStore.getState().isPreviewBlocking()) return
     useProjectsStore.getState().update(project.id, (p) => ({
       ...p,
       organization: { ...resolveOrganizationPreferences(p), ...patch },
@@ -146,9 +150,11 @@ export function OrganizePanel({
   }
 
   const toggleFrequent = (o: SceneObject) => {
+    if (useOrganizeStore.getState().isPreviewBlocking()) return
     updateObject(project.id, o.id, { frequent: !o.frequent }, false)
   }
   const toggleFixed = (o: SceneObject) => {
+    if (useOrganizeStore.getState().isPreviewBlocking()) return
     updateObject(project.id, o.id, { fixed: !o.fixed }, false)
   }
 
@@ -157,7 +163,9 @@ export function OrganizePanel({
 
   const generate = async () => {
     const p = useProjectsStore.getState().projects[project.id]
-    if (!p) return
+    if (!p || useOrganizeStore.getState().status === 'planning') return
+    const sessionToken = useOrganizeStore.getState().sessionToken
+    const source = organizationSource(p)
     const job = createJob({
       projectId: p.id,
       type: 'layout',
@@ -179,12 +187,18 @@ export function OrganizePanel({
           if (stageLabel) setStage(stageLabel)
         },
       })
-      if (!useOrganizeStore.getState().open || useProjectsStore.getState().projects[p.id] !== p) {
+      const session = useOrganizeStore.getState()
+      if (!session.open || session.sessionToken !== sessionToken) {
+        updateJob(job.id, { status: 'canceled', resultNote: '预览已取消，本次结果未应用' })
+        return
+      }
+      const current = useProjectsStore.getState().projects[p.id]
+      if (!current || organizationSource(current) !== source || result.projectId !== p.id) {
         updateJob(job.id, { status: 'failed', error: '场景已变更，请重新生成方案' })
         if (useOrganizeStore.getState().open) { setStatus('config'); setError('场景已变更，请重新生成方案') }
         return
       }
-      setPlan(result, p.objects)
+      setPlan(result, p.objects, source)
       setShowZones(false)
       useWorkspaceStore.getState().setViewPreset('desk')
       startPlayback()
@@ -202,14 +216,21 @@ export function OrganizePanel({
       )
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      setStatus('config')
-      setError(msg)
-      updateJob(job.id, { status: 'failed', error: msg })
+      if (useOrganizeStore.getState().sessionToken === sessionToken) {
+        setStatus('config')
+        setError(msg)
+      }
+      updateJob(job.id, useOrganizeStore.getState().sessionToken === sessionToken ? { status: 'failed', error: msg } : { status: 'canceled', resultNote: '已取消本次预览' })
     }
   }
 
   const accept = () => {
-    if (!plan) return
+    const current = useProjectsStore.getState().projects[project.id]
+    if (!plan || commands.length === 0 || status !== 'finished' || compare !== 'after') return
+    if (!current || !canApplyOrganization(sourceSignature, current)) {
+      setError('场景已变更，此方案不能再应用。请取消预览后重新生成。')
+      return
+    }
     applyAssignments(
       project.id,
       plan.assignments.map((a) => ({
@@ -233,6 +254,7 @@ export function OrganizePanel({
 
   const planning = status === 'planning'
   const hasPlan = plan !== null
+  const stale = hasPlan && !canApplyOrganization(sourceSignature, project)
   const batches = commands
   const currentBatch = batches.length > 0 ? batches[Math.min(batchIndex, batches.length - 1)] : null
   const progressPct = Math.round(
@@ -261,8 +283,8 @@ export function OrganizePanel({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              title="关闭（未应用的方案将被丢弃）"
-              onClick={discard}
+              title="收起整理面板（保留当前预览）"
+              onClick={hidePanel}
             >
               <X className="h-3.5 w-3.5" />
             </Button>
@@ -271,6 +293,8 @@ export function OrganizePanel({
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
+        {hasPlan ? <p className="rounded-lg border border-primary/20 bg-primary-soft px-3 py-2 text-xs leading-6 text-primary">方案仅在预览中。关闭面板会保留进度；接受后才写入项目。</p> : null}
+        {hasPlan && (error || stale) ? <p role="alert" className="rounded-lg bg-warning/10 px-3 py-2 text-xs leading-6 text-warning">{error ?? '场景已变更，请取消预览后重新生成。'}</p> : null}
         {/* 分区说明 */}
         <section className="space-y-2 rounded-lg border border-border p-3">
           <h3 className="text-[13px] font-semibold">三个分区</h3>
@@ -300,6 +324,7 @@ export function OrganizePanel({
         {!hasPlan ? (
           <>
             {/* 可调整项 */}
+            <fieldset disabled={planning} className="space-y-3 disabled:opacity-60">
             <section className="space-y-3 rounded-lg border border-border p-3">
               <h3 className="text-[13px] font-semibold">整理偏好（可调整）</h3>
 
@@ -399,6 +424,7 @@ export function OrganizePanel({
             </section>
 
             {/* 整理前状态快照：接受方案后可一键恢复（“再恢复整理前状态”流程） */}
+            </fieldset>
             <section className="space-y-2 rounded-lg border border-border p-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-[13px] font-semibold">整理前状态（快照）</h3>
@@ -416,6 +442,7 @@ export function OrganizePanel({
                       size="sm"
                       variant="outline"
                       className="flex-1"
+                      disabled={planning}
                       onClick={() => {
                         resetToBaseline(project.id)
                         useTourStore.getState().signal(project.id, 'compare')
@@ -428,6 +455,7 @@ export function OrganizePanel({
                     <Button
                       size="sm"
                       variant="ghost"
+                      disabled={planning}
                       title="把当前布局记录为新的「整理前状态」快照（演示可重新开始对比）"
                       onClick={() => {
                         if (!window.confirm('将当前布局记录为新的「整理前状态」快照？')) return
@@ -458,6 +486,7 @@ export function OrganizePanel({
               {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {planning ? `生成中 · ${stage || '准备中'}` : '生成整理方案'}
             </Button>
+            {planning ? <Button variant="ghost" size="sm" className="w-full" onClick={discard}>取消本次预览</Button> : null}
             <p className="text-xs leading-relaxed text-muted-foreground">
               {isMockMode
                 ? '演示算法为可解释的规则式布局（本地计算，标注「规则式演示方案」）；真实布局 / 搬运优化算法入口已接入服务层（VITE_API_MODE=real 时调用后端）。'
@@ -672,13 +701,13 @@ export function OrganizePanel({
           <Separator />
           <div className="space-y-1.5 p-3">
             <div className="flex gap-2">
-              <Button className="flex-1" size="sm" disabled={status !== 'finished'} onClick={accept}>
+              <Button className="flex-1" size="sm" disabled={status !== 'finished' || compare !== 'after' || stale || commands.length === 0} onClick={accept}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                接受方案
+                {commands.length === 0 ? '无需应用变更' : '接受方案'}
               </Button>
               <Button className="flex-1" size="sm" variant="outline" onClick={discard}>
                 <RotateCcw className="h-3.5 w-3.5" />
-                恢复原布局
+                取消预览
               </Button>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">

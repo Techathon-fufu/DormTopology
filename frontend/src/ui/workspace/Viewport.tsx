@@ -70,6 +70,8 @@ function DragIndicator() {
 }
 
 function OperationPlayback() {
+  const compare = useOrganizeStore((s) => s.compare)
+  const setCompare = useOrganizeStore((s) => s.setCompare)
   const status = useOrganizeStore((s) => s.status)
   const commands = useOrganizeStore((s) => s.commands)
   const index = useOrganizeStore((s) => s.batchIndex)
@@ -87,11 +89,15 @@ function OperationPlayback() {
       <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Play className="h-4 w-4" /></span>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold">{finished ? '演示完成' : status === 'paused' ? '演示已暂停' : '正在整理'}<span className="ml-2 font-normal tabular-nums text-muted-foreground">{finished ? commands.length : Math.min(index + 1, commands.length)} / {commands.length}</span></p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{finished ? problems > 0 ? `最终布局 · ${problems} 项问题待处理` : '最终布局 · 接受方案后保存' : commands[index]?.label ?? '物品无需移动'}</p>
+          <p className="text-xs font-semibold">{compare === 'before' ? '正在查看原布局' : finished ? '演示完成' : status === 'paused' ? '演示已暂停' : '正在整理'}<span className="ml-2 font-normal tabular-nums text-muted-foreground">{finished ? commands.length : Math.min(index + 1, commands.length)} / {commands.length}</span></p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{compare === 'before' ? '原始快照 · 方案尚未应用' : finished ? problems > 0 ? `最终布局 · ${problems} 项问题待处理` : '最终布局 · 接受方案后保存' : commands[index]?.label ?? '物品无需移动'}</p>
         </div>
         <Button size="icon" variant="ghost" aria-label={status === 'playing' ? '暂停演示' : status === 'paused' ? '继续播放' : '重新播放'} title={status === 'playing' ? '暂停' : status === 'paused' ? '继续播放' : '重新播放'} onClick={status === 'playing' ? pause : status === 'paused' ? resume : replay}>{status === 'playing' ? <Pause className="h-4 w-4" /> : finished ? <RotateCcw className="h-4 w-4" /> : <Play className="h-4 w-4" />}</Button>
         <Button size="icon" variant="ghost" aria-label="查看最终效果" title="查看最终效果" onClick={finish}><SkipForward className="h-4 w-4" /></Button>
+      </div>
+      <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2 sm:px-4">
+        <span className="text-[11px] text-muted-foreground">同视角对比</span>
+        <div className="flex gap-1"><Button size="sm" className="h-7 px-2 text-xs" variant={compare === 'before' ? 'secondary' : 'ghost'} aria-pressed={compare === 'before'} onClick={() => setCompare('before')}>整理前</Button><Button size="sm" className="h-7 px-2 text-xs" variant={compare === 'after' && finished ? 'secondary' : 'ghost'} aria-pressed={compare === 'after' && finished} onClick={finish}>最终方案</Button></div>
       </div>
       <progress aria-label="整理演示进度" className="playback-progress block h-1 w-full" max={Math.max(1, commands.length)} value={finished ? Math.max(1, commands.length) : index + progress} />
     </section>

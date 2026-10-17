@@ -210,7 +210,7 @@ export function SpaceSetupPage() {
         <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary-soft/60 px-3 py-2 text-[13px] leading-relaxed">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
-            当前是示例项目：保存会覆盖其空间配置，可随时点击「使用示例空间」恢复默认示例（桌面 1200 × 600 ×
+            当前是示例项目：保存会覆盖其空间配置，可随时点击「使用示例空间」恢复默认示例（桌面 1600 × 800 ×
             750 mm 等，均为可修改的示例值）。
           </p>
         </div>
@@ -521,7 +521,7 @@ export function SpaceSetupPage() {
             </Button>
             <Button variant="outline" onClick={useDemoSpace}>
               <Sparkles className="h-4 w-4" />
-              使用示例空间（1200 × 600 × 750 mm）
+              使用示例空间（1600 × 800 × 750 mm）
             </Button>
             <Button variant="ghost" onClick={revert} disabled={!dirty}>
               <RotateCcw className="h-4 w-4" />

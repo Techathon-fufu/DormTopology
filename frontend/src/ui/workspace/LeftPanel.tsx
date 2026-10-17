@@ -20,6 +20,7 @@ import type { SceneIssue } from '@/scene/sceneValidation'
 import { createDemoSceneObjects } from '@/data/demoProject'
 import { initialDeskPlacement } from '@/scene/geometry'
 import { cn, uid } from '@/lib/utils'
+import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { EmptyState } from '@/ui/kit/empty-state'
@@ -47,6 +48,7 @@ function ItemRow({
   issues?: SceneIssue[]
   onAfterSelect?: () => void
 }) {
+  const previewBlocking = useOrganizeStore((s) => s.isPreviewBlocking())
   const selectedId = useWorkspaceStore((s) => s.selectedId)
   const select = useWorkspaceStore((s) => s.select)
   const updateObject = useWorkspaceStore((s) => s.updateObject)
@@ -118,6 +120,7 @@ function ItemRow({
       <span className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-surface opacity-0 shadow-xs transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         <button
           type="button"
+          disabled={previewBlocking}
           title={object.visible ? '隐藏物品（保留在列表中）' : '恢复显示'}
           className={cn(
             'rounded p-0.5 hover:bg-muted hover:text-foreground',
@@ -134,6 +137,7 @@ function ItemRow({
         </button>
         <button
           type="button"
+          disabled={previewBlocking}
           title={object.locked ? '解锁位置（解锁后可拖拽 / 旋转）' : '锁定位置（禁止拖拽 / 旋转）'}
           className={cn(
             'rounded p-0.5 hover:bg-muted hover:text-foreground',
@@ -176,6 +180,7 @@ export function LeftPanel({
   onClose?: () => void
   onAfterSelect?: () => void
 }) {
+  const previewBlocking = useOrganizeStore((s) => s.isPreviewBlocking())
   const navigate = useNavigate()
   const replaceObjects = useWorkspaceStore((s) => s.replaceObjects)
   const addObject = useWorkspaceStore((s) => s.addObject)
@@ -194,6 +199,7 @@ export function LeftPanel({
   )
 
   const loadDemoObjects = () => {
+    if (useOrganizeStore.getState().isPreviewBlocking()) return
     const existingNames = new Set(project.objects.map((o) => o.name))
     const fresh = createDemoSceneObjects(project.id).filter((o) => !existingNames.has(o.name))
     if (fresh.length === 0) return
@@ -201,6 +207,7 @@ export function LeftPanel({
   }
 
   const addCustomObject = () => {
+    if (useOrganizeStore.getState().isPreviewBlocking()) return
     const n = project.objects.filter((o) => o.name.startsWith('自定义物品')).length + 1
     addObject(project.id, {
       id: uid('obj'),
@@ -225,6 +232,7 @@ export function LeftPanel({
   }
 
   const restoreAll = () => {
+    if (useOrganizeStore.getState().isPreviewBlocking()) return
     for (const o of project.objects) {
       if (!o.visible) updateObject(project.id, o.id, { visible: true }, false)
     }
@@ -251,11 +259,11 @@ export function LeftPanel({
       </div>
 
       <div className="flex gap-1.5 px-3 pb-2">
-        <Button variant="outline" size="sm" className="flex-1" onClick={loadDemoObjects}>
+        <Button variant="outline" size="sm" className="flex-1" disabled={previewBlocking} onClick={loadDemoObjects}>
           <Upload className="h-3.5 w-3.5" />
           载入示例物品库
         </Button>
-        <Button variant="ghost" size="icon" title="添加自定义物品" onClick={addCustomObject}>
+        <Button variant="ghost" size="icon" title="添加自定义物品" disabled={previewBlocking} onClick={addCustomObject}>
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -293,7 +301,7 @@ export function LeftPanel({
       {hiddenCount > 0 || lockedCount > 0 ? (
         <div className="flex items-center gap-3 px-3 pb-2 text-[11px]">
           {hiddenCount > 0 ? (
-            <button type="button" onClick={restoreAll} className="text-primary hover:underline">
+            <button type="button" disabled={previewBlocking} onClick={restoreAll} className="text-primary hover:underline">
               恢复全部显示（{hiddenCount}）
             </button>
           ) : null}

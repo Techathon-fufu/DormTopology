@@ -1,3 +1,4 @@
+import { segmentHitsObject } from './collisionGeometry'
 import * as THREE from 'three'
 import type {
   CableChannel,
@@ -20,7 +21,6 @@ import {
   resolveEndpointDirection,
   resolveEndpointPosition,
 } from '@/scene/cables'
-import { rotateLocalVecY } from '@/scene/ports'
 import { DESK_GAP } from '@/scene/sceneValidation'
 import { polylineLength } from '@/scene/geometry'
 
@@ -110,15 +110,7 @@ function pointHitsZone(p: Vec3, zone: CableAvoidZone): boolean {
 }
 
 function pointHitsObject(p: Vec3, o: SceneObject): boolean {
-  const y0 = o.transform.position[1]
-  if (p[1] < y0 - 0.005 || p[1] > y0 + o.dimensions.height + 0.012) return false
-  const dx = p[0] - o.transform.position[0]
-  const dz = p[2] - o.transform.position[2]
-  const local = rotateLocalVecY([dx, 0, dz], -o.transform.rotationY)
-  return (
-    Math.abs(local[0]) <= o.dimensions.width / 2 + 0.012 &&
-    Math.abs(local[2]) <= o.dimensions.depth / 2 + 0.012
-  )
+  return segmentHitsObject(p,p,o,.012)
 }
 
 function dist3(a: Vec3, b: Vec3): number {

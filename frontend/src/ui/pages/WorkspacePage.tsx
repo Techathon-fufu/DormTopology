@@ -18,6 +18,7 @@ import { Toolbar } from '@/ui/workspace/Toolbar'
 import { LeftPanel } from '@/ui/workspace/LeftPanel'
 import { CableListPanel } from '@/ui/workspace/CableListPanel'
 import { CablePanel } from '@/ui/workspace/CablePanel'
+import { WorkspaceOverview } from '@/ui/workspace/WorkspaceOverview'
 import { OrganizePanel } from '@/ui/workspace/OrganizePanel'
 import { RightPanel } from '@/ui/workspace/RightPanel'
 import { StatusBar } from '@/ui/workspace/StatusBar'
@@ -69,6 +70,8 @@ export function WorkspacePage() {
   const mode = useWorkspaceStore((s) => s.mode)
   const createJob = useJobsStore((s) => s.create)
   const updateJob = useJobsStore((s) => s.update)
+  const panelVisible = useOrganizeStore((s) => s.panelVisible)
+  const selectedId = useWorkspaceStore((s) => s.selectedId)
   const organizeOpen = useOrganizeStore((s) => s.open)
   const organizeStatus = useOrganizeStore((s) => s.status)
   const selectedCableId = useCableStore((s) => s.selectedCableId)
@@ -122,6 +125,7 @@ export function WorkspacePage() {
     resetHistory()
     const p = useProjectsStore.getState().projects[projectId]
     if (p) captureBaseline(p)
+    return () => useOrganizeStore.getState().closePanel()
   }, [projectId, resetHistory, captureBaseline])
 
   // 快捷键：Ctrl+Z 撤销 / Ctrl+Shift+Z 重做 / F 重置视角 / Q·E 旋转 / 方向键微调 / Delete 删除 / Esc 取消选中
@@ -134,6 +138,7 @@ export function WorkspacePage() {
       const store = useWorkspaceStore.getState()
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()
+        if (useOrganizeStore.getState().isPreviewBlocking()) return
         if (e.shiftKey) store.redo(projectId)
         else store.undo(projectId)
         return
@@ -216,6 +221,7 @@ export function WorkspacePage() {
   }, [cableAnimStatus])
 
   const handleOpenOrganize = () => {
+    useWorkspaceStore.getState().setMode('organize')
     useOrganizeStore.getState().openPanel()
     // 宽屏为右侧停靠面板；窄屏同步打开右侧抽屉展示整理面板
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
@@ -225,7 +231,7 @@ export function WorkspacePage() {
 
   const runPlanCables = async (targetIds?: string[]) => {
     const p = useProjectsStore.getState().projects[projectId ?? '']
-    if (!p) return
+    if (!p || useOrganizeStore.getState().isPreviewBlocking()) return
     const job = createJob({
       projectId: p.id,
       type: 'cable',
@@ -409,7 +415,7 @@ export function WorkspacePage() {
           <div className="pointer-events-none absolute left-4 top-3 flex items-center gap-2">
             {project.isDemo ? <DataBadge kind="demo" label="示例项目" /> : null}
             <span className="rounded-full border border-border bg-surface/90 px-2.5 py-1 text-xs font-medium shadow-xs">
-              {mode === 'organize' ? '整理模式' : '走线模式'}
+              {organizeOpen ? organizeStatus === 'planning' ? '生成中 · 原布局保留' : organizeStatus === 'config' ? '设置整理偏好' : '方案预览 · 尚未应用' : mode === 'organize' ? '编辑原布局' : '确认连接与走线'}
             </span>
           </div>
 
@@ -434,11 +440,12 @@ export function WorkspacePage() {
           </p>
         </div>
 
-        {organizeOpen ? (
+        {organizeOpen && panelVisible ? (
           <OrganizePanel
             project={project}
             onFlash={showFlash}
             onPreviewReady={() => setRightOpen(false)}
+            onClose={() => useOrganizeStore.getState().hidePanel()}
             className="hidden w-72 shrink-0 border-l xl:flex"
           />
         ) : mode === 'cable' && selectedCableId ? (
@@ -447,6 +454,15 @@ export function WorkspacePage() {
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
+            className="hidden w-72 shrink-0 border-l xl:flex"
+          />
+        ) : organizeOpen || !selectedId ? (
+          <WorkspaceOverview
+            project={project}
+            onOrganize={handleOpenOrganize}
+            onCables={() => { useWorkspaceStore.getState().setMode('cable'); setRightOpen(false) }}
+            onGuide={() => navigate(`/projects/${project.id}/guide`)}
+            onImport={() => navigate(`/projects/${project.id}/import`)}
             className="hidden w-72 shrink-0 border-l xl:flex"
           />
         ) : (
@@ -499,14 +515,14 @@ export function WorkspacePage() {
         onClose={() => setRightOpen(false)}
         className="w-80 max-w-[85vw]"
       >
-        {organizeOpen ? (
+        {organizeOpen && panelVisible ? (
           <OrganizePanel
             project={project}
             onFlash={showFlash}
             onPreviewReady={() => setRightOpen(false)}
             className="h-full w-full border-l"
             onClose={() => {
-              useOrganizeStore.getState().closePanel()
+              useOrganizeStore.getState().hidePanel()
               setRightOpen(false)
             }}
           />
@@ -518,6 +534,16 @@ export function WorkspacePage() {
             onFlash={showFlash}
             className="h-full w-full border-l"
             onClose={() => useCableStore.getState().selectCable(null)}
+          />
+        ) : organizeOpen || !selectedId ? (
+          <WorkspaceOverview
+            project={project}
+            onOrganize={handleOpenOrganize}
+            onCables={() => { useWorkspaceStore.getState().setMode('cable'); setRightOpen(false) }}
+            onGuide={() => navigate(`/projects/${project.id}/guide`)}
+            onImport={() => navigate(`/projects/${project.id}/import`)}
+            className="h-full w-full border-l"
+            onClose={() => setRightOpen(false)}
           />
         ) : (
           <RightPanel

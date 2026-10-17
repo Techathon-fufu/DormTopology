@@ -62,7 +62,7 @@ export function NewProjectPage() {
         <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] leading-relaxed text-warning">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            将先填充示例空间（桌面 <span className="font-semibold">1200 × 600 × 750 mm</span>
+            将先填充示例空间（桌面 <span className="font-semibold">1600 × 800 × 750 mm</span>
             ，仅为演示默认值），可在下一步「空间配置」中按实际测量修改并实时预览。
           </p>
         </div>
