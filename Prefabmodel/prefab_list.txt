@@ -4,7 +4,7 @@ tissue_box
 cup
 stainless bottle
 phone
-mouse_pad
+mousepad
 charger
 monitor
 laptop_fold
