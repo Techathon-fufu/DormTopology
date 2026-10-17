@@ -18,10 +18,13 @@ const METAL = '#3A3F45'
 export function RoomShell({
   room,
   deskMode = 'parametric',
+  showBed = true,
 }: {
   room: RoomConfig
   /** 'parametric' 渲染参数化桌体（默认）；'none' 不渲染桌体（由 DormDeskModel 接管） */
   deskMode?: 'parametric' | 'none'
+  /** Display-only cutaway; collision geometry is unchanged. */
+  showBed?: boolean
 }) {
   const L = room.length
   const D = room.width
@@ -77,73 +80,74 @@ export function RoomShell({
       {/* 桌体（参数化简化几何）：工作台由 DormDeskModel 接管；桌面 / 桌腿 / 书架 / 立柱 / 出线孔见 ParametricDesk */}
       {deskMode === 'parametric' ? <ParametricDesk room={room} /> : null}
 
-      {/* 床架横梁（位于床板下方，跨度随立柱位置自适应） */}
-      {[bedZ0 + 0.02, bedZ1 - 0.02].map((z) => (
-        <mesh
-          key={`beam-${z}`}
-          castShadow
-          position={[0, 1.62 - 0.037, z]}
-          geometry={boxGeometry(bedHalfX * 2, 0.07, 0.05)}
-          material={standardMaterial(METAL, { metalness: 0.55, roughness: 0.4 })}
-        />
-      ))}
-      {[-bedHalfX, bedHalfX].map((x) => (
-        <mesh
-          key={`rail-${x}`}
-          castShadow
-          position={[x, 1.62 - 0.037, bedZX]}
-          geometry={boxGeometry(0.05, 0.07, bedD)}
-          material={standardMaterial(METAL, { metalness: 0.55, roughness: 0.4 })}
-        />
-      ))}
+      <group visible={showBed}>
+        {/* 床架横梁（位于床板下方，跨度随立柱位置自适应） */}
+        {[bedZ0 + 0.02, bedZ1 - 0.02].map((z) => (
+          <mesh
+            key={`beam-${z}`}
+            castShadow
+            position={[0, 1.62 - 0.037, z]}
+            geometry={boxGeometry(bedHalfX * 2, 0.07, 0.05)}
+            material={standardMaterial(METAL, { metalness: 0.55, roughness: 0.4 })}
+          />
+        ))}
+        {[-bedHalfX, bedHalfX].map((x) => (
+          <mesh
+            key={`rail-${x}`}
+            castShadow
+            position={[x, 1.62 - 0.037, bedZX]}
+            geometry={boxGeometry(0.05, 0.07, bedD)}
+            material={standardMaterial(METAL, { metalness: 0.55, roughness: 0.4 })}
+          />
+        ))}
 
-      {/* 床板 / 床垫 / 被子 / 护栏（随床架自适应） */}
-      <mesh
-        castShadow
-        receiveShadow
-        position={[0, 1.62, bedZX]}
-        geometry={boxGeometry(bedHalfX * 2, 0.045, bedD)}
-        material={standardMaterial('#C9A06A', { roughness: 0.7 })}
-      />
-      <mesh
-        castShadow
-        position={[0, 1.72, bedZX]}
-        geometry={boxGeometry(Math.max(0.6, bedHalfX * 2 - 0.06), 0.14, Math.max(0.5, bedD - 0.06))}
-        material={standardMaterial('#EDE8DC', { roughness: 0.9 })}
-      />
-      <mesh
-        castShadow
-        position={[bedHalfX * 0.35, 1.78, bedZX]}
-        geometry={boxGeometry(Math.max(0.5, bedHalfX - 0.05), 0.08, Math.max(0.4, bedD - 0.1))}
-        material={standardMaterial('#C9DED8', { roughness: 0.95 })}
-      />
-      <mesh
-        castShadow
-        position={[0, 1.88, bedZ1 - 0.015]}
-        geometry={boxGeometry(bedHalfX * 2, 0.2, 0.025)}
-        material={standardMaterial(METAL, { metalness: 0.5, roughness: 0.45 })}
-      />
-
-      {/* 梯子（挂在床架外侧） */}
-      {[bedZX - 0.12, bedZX + 0.12].map((z) => (
+        {/* 床板 / 床垫 / 被子 / 护栏（随床架自适应） */}
         <mesh
-          key={`ladder-${z}`}
           castShadow
-          position={[bedHalfX + 0.09, postH / 2, z]}
-          geometry={boxGeometry(0.025, postH, 0.025)}
-          material={frameMat}
+          receiveShadow
+          position={[0, 1.62, bedZX]}
+          geometry={boxGeometry(bedHalfX * 2, 0.045, bedD)}
+          material={standardMaterial('#C9A06A', { roughness: 0.7 })}
         />
-      ))}
-      {[0.35, 0.75, 1.15, 1.55].map((y) => (
         <mesh
-          key={`rung-${y}`}
           castShadow
-          position={[bedHalfX + 0.09, y, bedZX]}
-          geometry={boxGeometry(0.03, 0.03, 0.26)}
-          material={frameMat}
+          position={[0, 1.72, bedZX]}
+          geometry={boxGeometry(Math.max(0.6, bedHalfX * 2 - 0.06), 0.14, Math.max(0.5, bedD - 0.06))}
+          material={standardMaterial('#EDE8DC', { roughness: 0.9 })}
         />
-      ))}
+        <mesh
+          castShadow
+          position={[bedHalfX * 0.35, 1.78, bedZX]}
+          geometry={boxGeometry(Math.max(0.5, bedHalfX - 0.05), 0.08, Math.max(0.4, bedD - 0.1))}
+          material={standardMaterial('#C9DED8', { roughness: 0.95 })}
+        />
+        <mesh
+          castShadow
+          position={[0, 1.88, bedZ1 - 0.015]}
+          geometry={boxGeometry(bedHalfX * 2, 0.2, 0.025)}
+          material={standardMaterial(METAL, { metalness: 0.5, roughness: 0.45 })}
+        />
 
+        {/* 梯子（挂在床架外侧） */}
+        {[bedZX - 0.12, bedZX + 0.12].map((z) => (
+          <mesh
+            key={`ladder-${z}`}
+            castShadow
+            position={[bedHalfX + 0.09, postH / 2, z]}
+            geometry={boxGeometry(0.025, postH, 0.025)}
+            material={frameMat}
+          />
+        ))}
+        {[0.35, 0.75, 1.15, 1.55].map((y) => (
+          <mesh
+            key={`rung-${y}`}
+            castShadow
+            position={[bedHalfX + 0.09, y, bedZX]}
+            geometry={boxGeometry(0.03, 0.03, 0.26)}
+            material={frameMat}
+          />
+        ))}
+      </group>
 
       {/* 墙面插座面板（固定模型）：一块 86 面板，含 slots 个双插孔插座（各 2 个插孔） */}
       {room.outlets.map((outlet) => {

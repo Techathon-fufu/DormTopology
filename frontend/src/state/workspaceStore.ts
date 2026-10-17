@@ -10,9 +10,11 @@ import type {
 import { ensureDefaultPorts as defaultPortsForObject } from '@/scene/ports'
 import { computePowerStripSpecChange, stripLengthFor } from '@/scene/powerStrip'
 import { clonePlanData } from '@/lib/plans'
+import { assertScenePlacement, objectsWithAssignments } from '@/lib/organizationValidation'
 import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
+import { useOrganizeStore } from './organizeStore'
 
 export type WorkspaceMode = 'organize' | 'cable'
 export type ViewPreset = 'persp' | 'front' | 'top' | 'left' | 'right' | 'desk'
@@ -175,6 +177,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     patch: { objects?: SceneObject[]; cables?: CableConnection[] },
     record: boolean,
   ) {
+    if (useOrganizeStore.getState().applying) throw new Error('整理方案正在应用，请稍后再修改场景')
     const project = useProjectsStore.getState().projects[projectId]
     if (!project) return
     set((s) => ({
@@ -207,6 +210,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     setLastScore: (lastScore) => set({ lastScore }),
 
     undo(projectId) {
+      if (useOrganizeStore.getState().applying) return
       const state = get()
       const prev = state.past[state.past.length - 1]
       const project = useProjectsStore.getState().projects[projectId]
@@ -226,6 +230,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     redo(projectId) {
+      if (useOrganizeStore.getState().applying) return
       const state = get()
       const next = state.future[0]
       const project = useProjectsStore.getState().projects[projectId]
@@ -365,6 +370,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     applyPlanSnapshot(projectId, plan) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return null
+      if (plan.projectId !== projectId) throw new Error('该方案属于其他项目，不能应用')
       const now = Date.now()
       const finish = (summary: PlanApplySummary): PlanApplySummary => {
         useProjectsStore.getState().update(projectId, (p) => ({
@@ -384,7 +390,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             position: [...a.position] as Vec3,
             rotationY: a.rotationY,
           }))
-        get().applyAssignments(projectId, assignments, true)
+        const nextObjects = objectsWithAssignments(project.objects, assignments)
+        assertScenePlacement(nextObjects, project.room, project.objects)
+        commit(projectId, { objects: nextObjects, cables: markStaleCables(project.cables, assignments.map((assignment) => assignment.objectId)) }, true)
         return finish({
           objects: assignments.length,
           cables: 0,
@@ -422,6 +430,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           ports: snap.ports ? clonePlanData(snap.ports) : o.ports,
         }
       })
+      assertScenePlacement(nextObjects, project.room, project.objects)
 
       const portIdsByObject = new Map(nextObjects.map((o) => [o.id, new Set(o.ports.map((p) => p.id))]))
       const endpointOk = (end: CableConnection['from']): boolean => {
@@ -465,17 +474,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     resetToBaseline(projectId) {
+      const project = useProjectsStore.getState().projects[projectId]
       const baseline = usePlansStore.getState().baselines[projectId]
-      if (!baseline) return
-      get().applyAssignments(
-        projectId,
-        baseline.assignments.map((a) => ({
-          objectId: a.objectId,
-          position: a.position,
-          rotationY: a.rotationY,
-        })),
-        true,
-      )
+      if (!project || !baseline) return
+      if (baseline.projectId !== projectId) throw new Error('整理前快照属于其他项目')
+      const existing = new Set(project.objects.map((object) => object.id))
+      const assignments = baseline.assignments.filter((assignment) => existing.has(assignment.objectId))
+      const objects = objectsWithAssignments(project.objects, assignments)
+      assertScenePlacement(objects, project.room, project.objects)
+      commit(projectId, { objects, cables: markStaleCables(project.cables, assignments.map((assignment) => assignment.objectId)) }, true)
     },
 
     ensureDefaultPorts(projectId) {

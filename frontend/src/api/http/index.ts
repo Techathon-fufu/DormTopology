@@ -1,7 +1,11 @@
 import { getFile } from '@/state/storage/idb'
 import type { AppServices } from '../types'
-import { ApiError } from '../core/errors'
+import { ApiError, isApiError } from '../core/errors'
 import { runRemoteJob } from '../core/jobs'
+import { requestJson } from '../core/client'
+import { canonicalScene, organizationInputSignature, packingBaseline, sceneRef, toPackingScene, type PackingScene } from '../core/packingWire'
+import { knownOrganizationScene, rememberOrganizationScene, withOrganizationSceneLock, type StoredOrganizationScene } from '../core/organizationScenes'
+import { placementIssues } from '@/scene/sceneValidation'
 import {
   mapCablePlanResult,
   mapLayoutPlanResult,
@@ -34,6 +38,19 @@ function photoExt(blob: Blob): string {
   if (type.includes('webp')) return 'webp'
   if (type.includes('heic') || type.includes('heif')) return 'heic'
   return 'jpg'
+}
+
+function synchronizedScene(raw: unknown, expected: PackingScene, known: StoredOrganizationScene | null, baselineSourceId: string): PackingScene {
+  const canonical = canonicalScene(raw, expected)
+  const ref = sceneRef(canonical)
+  const sameBaseline = known?.baselineSourceId === baselineSourceId
+  const valid = known
+    ? ref.sceneId === known.sceneId && (sameBaseline
+      ? [known.sceneRevision, known.sceneRevision + 1].includes(ref.sceneRevision) && ref.baselineId === known.baselineId
+      : ref.sceneRevision === known.sceneRevision + 1 && ref.baselineId !== known.baselineId)
+    : ref.sceneRevision === 1
+  if (!valid) throw new ApiError('后端同步返回了不匹配的场景标识或版本', { kind: 'malformed' })
+  return canonical
 }
 
 export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
@@ -143,20 +160,80 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
     },
 
     organizationPlanning: {
-      async planOrganization({ projectId, objects, room, preferences, onProgress, signal }) {
-        return runRemoteJob({
-          capability: 'organization',
-          projectId,
-          label: '生成整理方案（真实后端）',
-          body: {
-            project_id: projectId,
-            scene: toWireScenePayload({ projectId, objects, room, cables: [] }),
-            preferences: toWirePreferences(preferences),
-          },
-          requestSummary: { objects: objects.length, preferences },
-          onProgress,
-          signal,
-          mapResult: (wire) => mapOrganizationResult(wire, { projectId, objects, room, preferences }),
+      async planOrganization({ projectId, objects, room, preferences, baseline, confirmed, onProgress, signal }) {
+        if (!confirmed) throw new ApiError('请先核对并确认物品尺寸及整理前位置', { kind: 'input' })
+        return withOrganizationSceneLock(projectId, async () => {
+          const known = knownOrganizationScene(projectId)
+          const input = { projectId, objects, room, preferences, confirmed, ref: known }
+          const scene = toPackingScene(input)
+          const baselineScene = packingBaseline(baseline, input)
+          let canonical: PackingScene
+          try {
+            const raw = await requestJson<PackingScene>(`/projects/${encodeURIComponent(projectId)}/scene`, {
+              method: 'PUT', signal,
+              body: { scene, expected_revision: known?.sceneRevision ?? null, baseline_source_id: baseline.id,
+                ...(!known || known.baselineSourceId !== baseline.id ? { baseline: baselineScene } : {}) },
+            })
+            canonical = synchronizedScene(raw, scene, known, baseline.id)
+          } catch (error) {
+            if (signal?.aborted || !isApiError(error) || !(error.kind === 'network' || error.kind === 'timeout' || error.status === 409)) throw error
+            try {
+              // Recover only an exact committed draft with its original baseline source.
+              const saved = await requestJson<{ scene: unknown; baseline_source_id: unknown }>(`/projects/${encodeURIComponent(projectId)}/scene-state`, { signal })
+              if (signal?.aborted || saved.baseline_source_id !== baseline.id) throw error
+              canonical = synchronizedScene(saved.scene, scene, known, baseline.id)
+            } catch { throw error }
+          }
+          const ref = sceneRef(canonical)
+          rememberOrganizationScene(projectId, { ...ref, baselineSourceId: baseline.id })
+          let jobId = ''
+          return runRemoteJob({
+            capability: 'organization',
+            projectId,
+            label: '生成整理方案（真实后端）',
+            body: { scene_id: ref.sceneId, scene_revision: ref.sceneRevision },
+            requestSummary: { objects: objects.length, preferences },
+            onProgress,
+            signal,
+            onAccepted: (id) => { jobId = id },
+            mapResult: (wire) => mapOrganizationResult(wire, { projectId, objects, room, preferences, scene: canonical, jobId }),
+          })
+        })
+      },
+      async applyOrganization({ projectId, plan, objects, room, preferences }) {
+        return withOrganizationSceneLock(projectId, async () => {
+          const known = knownOrganizationScene(projectId)
+          const meta = plan.serviceMeta
+          if (plan.projectId !== projectId || !meta || !meta.applicable || meta.status === 'infeasible' || !meta.jobId || !known || known.sceneId !== meta.sceneId || known.sceneRevision !== meta.sceneRevision || organizationInputSignature({ objects, room, preferences }) !== meta.inputSignature) throw new ApiError('整理结果已失效或不可应用，请重新生成', { kind: 'input' })
+          const assignments = new Map(plan.assignments.map((a) => [a.objectId, a]))
+          if (assignments.size !== objects.length || plan.assignments.length !== objects.length) throw new ApiError('整理结果物品不完整', { kind: 'input' })
+          const targets = objects.map((object) => {
+            const target = assignments.get(object.id)
+            if (!target) throw new ApiError('整理结果引用错误', { kind: 'input' })
+            return { ...object, visible: true, transform: { position: target.position, rotationY: target.rotationY } }
+          })
+          if (targets.some((object) => placementIssues(object, object.transform.position, targets, room).length > 0)) throw new ApiError('当前目标布局复查未通过，不能应用', { kind: 'input' })
+          const expected = toPackingScene({ projectId, objects: targets, room, preferences, confirmed: true, ref: known })
+          const nextRef = { ...known, sceneRevision: known.sceneRevision + 1 }
+          let canonical: PackingScene
+          try {
+            const raw = await requestJson<PackingScene>(`/jobs/${encodeURIComponent(meta.jobId)}/apply`, {
+              method: 'POST', body: { scene_id: known.sceneId, scene_revision: known.sceneRevision },
+            })
+            canonical = canonicalScene(raw, expected, nextRef)
+          } catch (error) {
+            if (!isApiError(error) || !(error.kind === 'network' || error.kind === 'timeout' || error.status === 409)) throw error
+            try {
+              // A committed transaction can outlive a lost response. Recover only this consumed job.
+              const job = await requestJson<Record<string, unknown>>(`/jobs/${encodeURIComponent(meta.jobId)}`)
+              if (job.job_id !== meta.jobId || job.status !== 'succeeded' || job.applied !== true || job.scene_id !== known.sceneId || job.scene_revision !== known.sceneRevision || job.applied_scene_revision !== nextRef.sceneRevision) throw error
+              const saved = await requestJson<PackingScene>(`/projects/${encodeURIComponent(projectId)}/scene`)
+              canonical = canonicalScene(saved, expected, nextRef)
+            } catch { throw error }
+          }
+          const ref = sceneRef(canonical)
+          rememberOrganizationScene(projectId, { ...ref, baselineSourceId: known.baselineSourceId })
+          return ref
         })
       },
     },

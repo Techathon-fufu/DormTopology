@@ -6,20 +6,23 @@
 
 ## 当前状态
 
-前端已有可运行的演示应用（`frontend/`，React + R3F，本地 Mock 与规则式演示，尚未与后端和算法联调），已覆盖「空间配置 → 照片与物品 → 三维工作台 → 方案交付（执行指南）」的完整演示流程，并提供首页「一键演示」6 步导览（可重置重播、可跳过模拟等待、遵循系统减少动态效果偏好；三个重点画面——杂乱桌面的三维还原、物品归位动画、线缆收拢前后对比——串为一段可重复操作的完整流程）；演示脚本、验收结论与能力边界见 [frontend/docs/demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)。
+前端已有可运行的应用（`frontend/`，React + R3F），默认保留本地 Mock 演示。产品工作台的物品整理新增真实后端通道：确认尺寸与整理前位置后同步完整布局场景，调用 Python 布局算法，预览后由后端复查并原子应用。可单独启用真实整理，其余识别、Rodin、走线及指南仍为演示能力。首页「一键演示」6 步导览与原有流程继续可用；历史演示记录见 [frontend/docs/demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)，真实整理接口见[接入说明](frontend/docs/api-integration.md)。
 
-物品布局与走线核心现统一位于 `backend/app/domain/`，包含共享几何、多平面贪心摆放、布局复查、连续可用面积、双策略走线搜索与曲线验证；已有算法回归和仅加载领域目录的隔离测试。`algorithm/cable_routing/` 保留兼容导入。后端 FastAPI 服务、真实场景通道、完整前后端联调与 Rodin 接入尚未完成，前端演示不代表这些集成验收已通过；各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+物品布局与走线核心统一位于 `backend/app/domain/`，包含共享几何、多平面贪心摆放、布局复查、连续可用面积、双策略走线搜索与曲线验证；已有算法回归和仅加载领域目录的隔离测试。`algorithm/cable_routing/` 保留兼容导入。新增 FastAPI、SQLite、受限后台整理任务、不可变基线与版本条件更新；领域算法仍不依赖 Web 或存储。真实识别、Rodin、走线服务及完整首版流程尚未完成，各交付轮次见 [CHANGELOG.md](CHANGELOG.md)。
+
+新增独立[算法可视化验证工作台](docs/algorithm_visual_testing.md)：前端 `/algorithm-lab` 直接查看 14 组 Python 真实算法 JSON，支持整理前后、几何图层、有效路径、失败原因和导入导出，并提供桌面/手机 Chromium 的 Playwright 检查。包含桌沿/孔边/柜侧固定、桌下扎带、连续集线托盘、无支撑失败，以及先逐线规划再推荐集线槽的三线案例；候选槽与已安装支撑分开。新增[综合桌面样例](docs/integrated_desk_scenario.md)，包含高优先级显示器和打印机、直插插排的适配器，以及应用整理后重新生成的三根线。开启支撑策略时复查最终曲线的最大悬空跨距，历史场景明确标记支撑未评估。无需先准备精细模型；该入口与产品 Mock 流程独立，不计为 FastAPI、真实资产或完整流程验收。
 
 | 现有文件 | 状态与用途 |
 | --- | --- |
 | `frontend/` | 前端演示应用（成员 A）：空间配置、照片导入与物品确认、三维工作台、整理预览、走线规划（规则式演示）与方案交付（执行指南，含配件参数预览与导出）；提供「一键演示」6 步导览（三个重点画面——杂乱还原 / 归位动画 / 收拢对比——串为可重复流程）与验收说明（[demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)），运行方式与已知差异见 [frontend/README.md](frontend/README.md) |
+| `Prefabmodel/` | **模型资产统一目录**：全部 19 个 GLB 与 prefab 清单集中于此。低模 prefab（12 个，按 `PREFAB_KEYWORDS` 路由）与 Rodin 真实资产（`charger_detail.glb` / `mousepad_detail.glb` 高模，以及 `power_strip` / `tablet` / `tape_measure` / `tissue_pack` 回退资产）同处一个平面目录；同名不同保真度的资产以 `_detail` 后缀区分。布局与路由约定见 [tests/README.md](tests/README.md) 与 [tests/test_rodin_pipeline/test_prefab_routing.py](tests/test_rodin_pipeline/test_prefab_routing.py) |
 | `objects/dorm_desk.blend` | 桌体 Blender 源文件；尺寸、原点、轴向与网格仍需核验 |
 | `objects/tissue_box.obj` | 纸巾盒 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `objects/杯子.obj` | 杯子 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `algorithm/cable_routing/` | 旧走线模块的兼容导出，不再承载业务实现 |
 | `backend/app/domain/` | C/D 的纯 Python 布局与走线算法、共享几何、输入校验及领域类型；调用与证据见[布局算法交接](docs/packing_algorithm.md)和[走线算法说明](docs/routing_algorithm_plan.md) |
 
-仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dorm_desk_assembled.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
+`objects/` 现仅保留 Blender 与 OBJ 源文件（`.blend` / `.obj`），**不再存放 GLB**；全部 GLB 资产已统一到 `Prefabmodel/` 下。仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dorm_desk_assembled.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
 
 ## 首版目标
 
@@ -47,6 +50,8 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 | [项目实施方案](docs/implementation_roadmap.md) | 首版范围、技术架构、算法选择、工期与模块职责 |
 | [走线算法规划](docs/routing_algorithm_plan.md) | 走线输入、A* 搜索、双策略、曲线复查、多线汇聚与输出约定 |
 | [布局算法交接](docs/packing_algorithm.md) | 已实现的布局函数、共享几何、运行命令、样例及算法验收证据 |
+| [算法可视化验证](docs/algorithm_visual_testing.md) | 真实算法 JSON 工作台、14 类样例、支撑与集线槽建议、导入版本规则和浏览器测试命令 |
+| [综合桌面样例](docs/integrated_desk_scenario.md) | 显示器、打印机等 8 件物品的摆放优先级、直插适配器与整理后走线设计 |
 | [用户体验设计](docs/ux_design.md) | 用户流程、交互方式、加载状态与错误反馈 |
 | [数据契约](docs/data_contract.md) | 坐标、单位、资产规范、场景与模块 JSON 协议 |
 | [研发任务与验收](docs/project_tasks.md) | 任务负责人、依赖、验收条件与集成检查 |
@@ -58,10 +63,10 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 
 ## 开发入口
 
-当前可复用的算法入口包括 `backend.app.domain.packing` 的 `plan_packing(scene)`、`validate_layout(scene)`、`measure_free_area(scene)`，以及 `backend.app.domain.routing.plan_routing(scene)`（保留同一函数的 `plan_routes` 别名和旧包入口）。调用、测试和四类 JSON 样例生成命令见[布局交接说明](docs/packing_algorithm.md)，走线参数见[走线算法说明](docs/routing_algorithm_plan.md)。下一步需实现后端编排和前端接入，再用 8 件待整理物品及 3 根线完成集成验收；具体任务见[任务清单](docs/project_tasks.md)。
+可复用的算法入口包括 `backend.app.domain.packing` 的 `plan_packing(scene)`、`validate_layout(scene)`、`measure_free_area(scene)`，以及 `backend.app.domain.routing.plan_routing(scene)`（保留同一函数的 `plan_routes` 别名和旧包入口）。调用、测试和四类 JSON 样例生成命令见[布局交接说明](docs/packing_algorithm.md)，走线参数见[走线算法说明](docs/routing_algorithm_plan.md)。整理已通过 service 接入产品，后续仍需接入走线及供应商，再用 8 件待整理物品及 3 根线完成集成验收；具体见[任务清单](docs/project_tasks.md)。
 
 算法分为两个独立任务：[C：物品布局算法](docs/project_tasks.md#4-成员-c物品布局算法)与[D：走线算法](docs/project_tasks.md#5-成员-d走线算法)。两人使用共同场景样例并行实现，分别交付整理与走线结果；集成时走线使用已应用布局后的当前场景。
 
 新增后端时按[分层架构与依赖方向](docs/implementation_roadmap.md#分层与依赖方向)组织工程：`domain` 承载规则与算法，`service` 编排用例，`api` 处理 HTTP，`db` 与外部适配器实现存储及供应商能力。当前走线模块已保持纯函数和无外部 I/O；后续由统一装配入口接入 service，不能把 Web、数据库或凭证依赖放回算法模块。
 
-前端应用的安装、启动与环境变量说明见 [frontend/README.md](frontend/README.md)。默认为本地 Mock 演示模式（`VITE_API_MODE=mock`）；服务适配层已实现（0.6.0，`VITE_API_MODE=real` 调用应用后端，契约见 [frontend/docs/api-integration.md](frontend/docs/api-integration.md)），但后端 FastAPI 服务尚未实现、暂无法真实联调。后端 FastAPI 服务的启动命令、环境变量和依赖安装说明将在实现后补充。
+前端安装、启动与环境变量见 [frontend/README.md](frontend/README.md)，后端见 [backend/README.md](backend/README.md)。本地启动后端，再以 `VITE_ORGANIZATION_API_MODE=real npm run dev` 启动前端即可单独验证真实整理；Vite 默认将 `/api/v1` 代理到 `http://127.0.0.1:8000`。全局 `VITE_API_MODE=real` 会请求尚未实现的其它服务并如实失败，不会自动回退到演示结果。

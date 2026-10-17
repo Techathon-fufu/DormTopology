@@ -36,11 +36,14 @@ const override = readOverride()
 /** 实际生效模式：运行时切换优先，否则取环境变量 */
 export const resolvedApiMode: ApiMode = override ?? envApiMode
 
+const organizationEnvMode = import.meta.env.VITE_ORGANIZATION_API_MODE as string | undefined
+export const organizationApiMode: ApiMode = override ?? (organizationEnvMode === 'real' || organizationEnvMode === 'mock' ? organizationEnvMode : resolvedApiMode)
+
 /**
  * 是否处于「真实模式被手动切换到演示模式」状态。
- * 用于界面提示与「恢复真实模式」入口；环境变量本身是 mock 时不显示。
+ * 用于界面提示与「恢复真实模式」入口；全局或整理能力原本启用 real 时显示。
  */
-export const isDemoFallbackMode: boolean = envApiMode === 'real' && resolvedApiMode === 'mock'
+export const isDemoFallbackMode: boolean = (envApiMode === 'real' || organizationEnvMode === 'real') && resolvedApiMode === 'mock' && organizationApiMode === 'mock'
 
 /**
  * 写入运行时模式偏好（刷新后仍生效）。

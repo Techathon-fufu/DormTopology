@@ -10,6 +10,7 @@ from ..geometry import (
     items_overlap,
 )
 from ..models import Issue, LayoutCheck, Scene
+from ..plug_mounts import plug_mount_geometry_issues
 from ..rules import validate_scene
 
 WALL_CATEGORIES = {"wall_socket", "wall_network"}
@@ -46,6 +47,8 @@ def item_geometry_issues(scene: Scene, item: dict) -> list[Issue]:
                     "Wall panel violates its fixed wall bounds or pose",
                 )
             )
+    elif "plug_mount" in item:
+        problems.extend(plug_mount_geometry_issues(scene, item))
     elif not legal_regions(scene, item):
         problems.append(
             issue(

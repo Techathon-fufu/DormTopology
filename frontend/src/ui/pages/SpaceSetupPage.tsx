@@ -9,6 +9,7 @@ import {
   Sparkles,
   XCircle,
 } from 'lucide-react'
+import { PageIntro } from '@/ui/layout/PageIntro'
 import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { SpacePreview3D } from '@/ui/setup/SpacePreview3D'
 import { Button } from '@/ui/kit/button'
@@ -60,7 +61,7 @@ function MmField({
         disabled={disabled}
         onChange={(m) => onChangeMm(Math.round(mToMm(m)))}
       />
-      {hint ? <p className="text-[11px] text-faint">{hint}</p> : null}
+      {hint ? <p className="text-xs text-faint">{hint}</p> : null}
     </div>
   )
 }
@@ -75,7 +76,7 @@ function SectionCard({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">
+    <section className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         {extra}
@@ -180,15 +181,13 @@ export function SpaceSetupPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">空间配置</h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            床桌 / 房间 / 立柱为预设固定模型（尺寸不可编辑）；这里只调整书架、出线孔与插座的左右位置。保存后进入照片导入（表单单位：毫米）。
-          </p>
-        </div>
-        <ProjectSteps projectId={project.id} current="setup" className="hidden md:flex" />
-      </div>
+      <PageIntro
+        step="01 / 确认空间"
+        title="为你的书桌，建立空间"
+        description="床桌与房间为固定模型、无需填写尺寸；调整书架、出线孔与插座位置，右侧预览会同步变化。所有输入均以毫米（mm）为单位。"
+      >
+        <ProjectSteps projectId={project.id} current="setup" className="flex-wrap" />
+      </PageIntro>
 
       {project.isDemo ? (
         <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary-soft/60 px-3 py-2 text-[13px] leading-relaxed">
@@ -199,7 +198,7 @@ export function SpaceSetupPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* ── 表单 ─────────────────────────────────────────────── */}
         <div className="space-y-4">
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
@@ -251,7 +250,7 @@ export function SpaceSetupPage() {
                 onChangeMm={(v) => patch({ shelfDepth: v })}
               />
             </div>
-            <p className="text-[11px] text-faint">
+            <p className="text-xs text-faint">
               校验参考示例床架下沿约 1580 mm：桌面高度 + 离桌高度 + 250 mm 取物空间不可超过该值。
             </p>
           </SectionCard>
@@ -282,7 +281,7 @@ export function SpaceSetupPage() {
                       <span className="pb-2 text-[11px] text-faint">高度固定 {OUTLET_FIXED_Y_MM} mm（不可竖直移动）</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="shrink-0 text-[11px] text-faint">左右滑块</span>
+                      <span className="shrink-0 text-xs text-faint">左右滑块</span>
                       <input
                         type="range"
                         min={-xMax}
@@ -293,11 +292,11 @@ export function SpaceSetupPage() {
                         className="h-1.5 min-w-36 flex-1 cursor-pointer accent-[#0F9D8A]"
                         onChange={(e) => updateOutletX(Number(e.target.value))}
                       />
-                      <span className="w-40 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                      <span className="w-40 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                         当前位置：{o.x} mm（{o.x === 0 ? '居中' : o.x > 0 ? '中心右侧' : '中心左侧'}）
                       </span>
                     </div>
-                    <p className="text-[11px] leading-relaxed text-faint">
+                    <p className="text-xs leading-relaxed text-faint">
                       仅可沿后墙左右移动（距墙面左右边缘 ≥ {OUTLET_EDGE_MARGIN_MM} mm）；高度固定 {OUTLET_FIXED_Y_MM} mm
                       （插座为一块「两个双插孔」面板）。
                     </p>
@@ -320,16 +319,16 @@ export function SpaceSetupPage() {
         </div>
 
         {/* ── 预览 / 校验 / 操作 ───────────────────────────────── */}
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <div className="rounded-lg border border-border bg-surface p-3 shadow-sm">
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
             <h2 className="mb-2 text-sm font-semibold">简化三维预览</h2>
             <SpacePreview3D room={previewRoom} />
-            <p className="mt-2 text-[11px] leading-relaxed text-faint">
+            <p className="mt-2 text-xs leading-relaxed text-faint">
               预览为简化示意：床桌 / 房间 / 立柱按固定标准款生成；书架 / 出线孔 / 插座随当前表单实时更新。
             </p>
           </div>
 
-          <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+          <div className="rounded-xl border border-border bg-surface p-5 shadow-xs">
             <h2 className="mb-2 text-sm font-semibold">当前空间摘要</h2>
             <dl className="space-y-1 text-[13px] text-muted-foreground">
               <div className="flex justify-between gap-3">

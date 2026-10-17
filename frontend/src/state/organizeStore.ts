@@ -1,12 +1,14 @@
 import { create } from 'zustand'
-import type { SceneObject, Vec3 } from '@/types/project'
+import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationPlan } from '@/types/organization'
+import { compileOrganizationCommands } from '@/lib/organizationCommands'
 import { prefersReducedMotion } from '@/lib/motion'
+import { organizationPlanFailure } from '@/lib/organizationValidation'
 
 /**
  * 空间整理模式会话状态（不持久化）：
  * - 方案生成 → 目标布局预览（compare: before/after 一键切换，镜头不变）
- * - 整理动画：按物品组分批插值移动（overrides 仅存在于会话内，不写项目存储）
+ * - 整理动画：按模型操作指令逐条插值移动（overrides 仅存在于会话内，不写项目存储）
  * - 接受方案才写入项目（一次可撤销记录）；「恢复原布局」= 丢弃预览
  *
  * 说明：动画只用于方案展示，不代表真实搬运路径已经过碰撞验证。
@@ -21,8 +23,13 @@ export interface PoseOverride {
 
 interface OrganizeState {
   open: boolean
+  panelVisible: boolean
+  sessionToken: number
+  sourceSignature: string | null
+  applying: boolean
   status: OrganizeStatus
   plan: OrganizationPlan | null
+  commands: ReturnType<typeof compileOrganizationCommands>
   error: string | null
   /** 对比：before = 显示整理前（项目实际数据）；after = 显示整理后（预览 / 动画位置） */
   compare: 'before' | 'after'
@@ -35,10 +42,12 @@ interface OrganizeState {
   /** 生成方案时的原布局快照（动画起点） */
   originals: Record<string, PoseOverride>
   openPanel: () => void
+  hidePanel: () => void
   closePanel: () => void
   setStatus: (status: OrganizeStatus) => void
   setError: (message: string | null) => void
-  setPlan: (plan: OrganizationPlan, objects: SceneObject[]) => void
+  setApplying: (applying: boolean) => void
+  setPlan: (plan: OrganizationPlan, objects: SceneObject[], sourceSignature?: string, room?: RoomConfig) => void
   setCompare: (compare: 'before' | 'after') => void
   setShowZones: (show: boolean) => void
   startPlayback: () => void
@@ -64,11 +73,16 @@ function lerpPose(from: PoseOverride, to: PoseOverride, t: number): PoseOverride
       lerp(from.position[1], to.position[1], t),
       lerp(from.position[2], to.position[2], t),
     ],
-    rotationY: lerp(from.rotationY, to.rotationY, t),
+    rotationY: from.rotationY + Math.atan2(Math.sin(to.rotationY - from.rotationY), Math.cos(to.rotationY - from.rotationY)) * t,
   }
 }
 
 export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
+  commands: [],
+  panelVisible: false,
+  sessionToken: 0,
+  sourceSignature: null,
+  applying: false,
   open: false,
   status: 'config',
   plan: null,
@@ -83,15 +97,25 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   openPanel() {
     const s = get()
     if (s.open) {
-      // 已打开：仅确保分区参考线可见，不覆盖进行中的预览
-      if (!s.showZones) set({ showZones: true })
+      set({ panelVisible: true })
       return
     }
-    set({ open: true, status: 'config', error: null, showZones: true })
+    set({ open: true, panelVisible: true, sessionToken: s.sessionToken + 1, status: 'config', error: null, showZones: true })
+  },
+
+  hidePanel() {
+    if (get().applying) return
+    if (!get().plan && get().status !== 'planning') { get().closePanel(); return }
+    set({ panelVisible: false })
   },
 
   closePanel() {
     set({
+      commands: [],
+      panelVisible: false,
+      sourceSignature: null,
+      applying: false,
+      sessionToken: get().sessionToken + 1,
       open: false,
       status: 'config',
       plan: null,
@@ -107,8 +131,11 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
 
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
+  setApplying: (applying) => set({ applying }),
 
-  setPlan(plan, objects) {
+  setPlan(plan, objects, sourceSignature, room) {
+    const failure = organizationPlanFailure(plan)
+    const commands = compileOrganizationCommands(plan, objects, room)
     const originals: Record<string, PoseOverride> = {}
     for (const o of objects) {
       originals[o.id] = {
@@ -117,35 +144,38 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
       }
     }
     const overrides: Record<string, PoseOverride> = {}
-    for (const a of plan.assignments) {
-      overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
-    }
+    if (!failure) for (const a of plan.assignments) overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
     set({
       plan,
+      sourceSignature: sourceSignature ?? null,
+      commands,
       originals,
       overrides,
       status: 'preview',
-      error: null,
+      error: failure,
       compare: 'after',
       batchIndex: 0,
       batchProgress: 0,
     })
   },
 
-  setCompare: (compare) => set({ compare }),
+  setCompare: (compare) => {
+    if (get().applying) return
+    set({ compare, ...(compare === 'before' && get().status === 'playing' ? { status: 'paused' as const } : {}) })
+  },
   setShowZones: (showZones) => set({ showZones }),
 
   startPlayback() {
     const { plan } = get()
-    if (!plan) return
+    if (get().applying || !plan || organizationPlanFailure(plan)) return
     // 尊重系统「减少动态效果」偏好：不播放分批动画，直接显示目标布局
     if (prefersReducedMotion()) {
       get().skipToEnd()
       return
     }
     set({
-      status: plan.batches.length > 0 ? 'playing' : 'finished',
-      overrides: {},
+      status: get().commands.length > 0 ? 'playing' : 'finished',
+      overrides: { ...get().originals },
       batchIndex: 0,
       batchProgress: 0,
       compare: 'after',
@@ -157,12 +187,12 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   },
 
   resumePlayback() {
-    if (get().status === 'paused') set({ status: 'playing' })
+    if (!get().applying && get().status === 'paused') set({ status: 'playing', compare: 'after' })
   },
 
   skipToEnd() {
     const { plan } = get()
-    if (!plan) return
+    if (get().applying || !plan || organizationPlanFailure(plan)) return
     const overrides: Record<string, PoseOverride> = {}
     for (const a of plan.assignments) {
       overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
@@ -170,7 +200,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
     set({
       status: 'finished',
       overrides,
-      batchIndex: Math.max(0, plan.batches.length - 1),
+      batchIndex: Math.max(0, get().commands.length - 1),
       batchProgress: 1,
       compare: 'after',
     })
@@ -180,15 +210,17 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
     const s = get()
     const plan = s.plan
     if (s.status !== 'playing' || !plan) return
-    const batches = plan.batches
+    const batches = s.commands
     if (batches.length === 0) {
       set({ status: 'finished' })
       return
     }
-    const targetById = new Map(plan.assignments.map((a) => [a.objectId, a]))
+    const targetById = new Map(s.commands.map((a) => [a.objectId, a]))
     const overrides: Record<string, PoseOverride> = { ...s.overrides }
     let idx = Math.min(s.batchIndex, batches.length - 1)
-    let progress = s.batchProgress + dtMs / batches[idx].durationMs
+    if (!Number.isFinite(dtMs) || dtMs < 0) return
+    let remaining = s.batchProgress * batches[idx].durationMs + dtMs
+    let progress = remaining / batches[idx].durationMs
 
     // 完成整批：位置精确落到目标，推进到下一批
     while (progress >= 1) {
@@ -196,9 +228,10 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
         const a = targetById.get(id)
         if (a) overrides[id] = { position: a.position, rotationY: a.rotationY }
       }
-      progress -= 1
+      remaining -= batches[idx].durationMs
       idx += 1
       if (idx >= batches.length) {
+        for (const a of plan.assignments) overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
         set({
           overrides,
           batchIndex: batches.length - 1,
@@ -207,6 +240,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
         })
         return
       }
+      progress = remaining / batches[idx].durationMs
     }
 
     // 当前批：从原布局插值到目标位姿
@@ -223,8 +257,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   isPreviewBlocking() {
     const s = get()
     return (
-      s.plan !== null &&
-      (s.status === 'preview' || s.status === 'playing' || s.status === 'paused' || s.status === 'finished')
+      s.applying || s.status === 'planning' || s.plan !== null
     )
   },
 }))

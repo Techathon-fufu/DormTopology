@@ -4,8 +4,9 @@ import { formatMeters } from '@/lib/units'
 import type { SceneIssue } from '@/scene/sceneValidation'
 import { cableDisplayPoints } from '@/scene/cables'
 import { estimateCableLength } from '@/scene/cableRoute'
-import { isMockMode } from '@/api'
+import { isMockMode, isOrganizationMockMode } from '@/api'
 import { useProjectJobs } from '@/state/jobsStore'
+import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { FastForwardToggle } from '@/ui/kit/fast-forward'
@@ -27,6 +28,7 @@ export function StatusBar({
   issuesById: Map<string, SceneIssue[]>
   onRetryJob: (job: GenerationJob) => void
 }) {
+  const preview = useOrganizeStore((s) => s.plan !== null)
   const mode = useWorkspaceStore((s) => s.mode)
   const lastScore = useWorkspaceStore((s) => s.lastScore)
   const select = useWorkspaceStore((s) => s.select)
@@ -42,7 +44,7 @@ export function StatusBar({
   )
   const staleCableCount = project.cables.filter((c) => c.status === 'stale').length
   const conflictCableCount = project.cables.filter((c) => c.status === 'conflict').length
-  const mock = isMockMode
+  const activeJobIsMock = active[0]?.mock ?? false
 
   const modelCounts = { none: 0, generating: 0, placeholder: 0, ready: 0, failed: 0 }
   for (const o of project.objects) modelCounts[o.model.status] += 1
@@ -56,10 +58,10 @@ export function StatusBar({
         <span className="font-medium text-foreground">
           {mode === 'organize' ? '整理物品' : '规划走线'}
         </span>
-        <span className="hidden md:inline">
+        <span className="hidden xl:inline">
           {mode === 'organize'
-            ? '「生成整理方案」：规则式演示，按 桌面常用区 / 书架收纳区 / 桌下隐藏区 分批归位'
-            : '「规划走线」：接口 → 路径节点 → 平滑曲线 → 障碍检查（规则式演示，未真实算法验证）'}
+            ? isOrganizationMockMode ? '规则式演示 · 本地保存' : '真实后端整理 · 本地保存'
+            : isMockMode ? '规则式演示 · 结果需核查' : '真实后端 · 结果需核查'}
         </span>
       </span>
 
@@ -70,7 +72,7 @@ export function StatusBar({
         {active.length > 0 ? (
           <span className="inline-flex items-center gap-2">
             <span className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-              {mock ? (
+              {activeJobIsMock ? (
                 <span className="block h-full w-1/3 animate-pulse rounded-full bg-primary" />
               ) : (
                 <span
@@ -85,7 +87,7 @@ export function StatusBar({
               {awaitingCount > 0 ? ` · ${awaitingCount} 待确认` : ''}
               {active.length > 1 ? ` +${active.length - 1}` : ''}
             </span>
-            {mock ? <FastForwardToggle compact /> : null}
+            {activeJobIsMock ? <FastForwardToggle compact /> : null}
           </span>
         ) : null}
         {failed.length > 0 ? (
@@ -121,7 +123,7 @@ export function StatusBar({
           }}
         >
           <AlertTriangle className="h-3 w-3" />
-          校验警示 {issueCount} 件
+          {preview ? '原布局警示' : '校验警示'} {issueCount} 件
         </button>
       ) : null}
 

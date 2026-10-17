@@ -1,7 +1,7 @@
 import type { AppServices } from './types'
 import { mockServices } from './mock'
 import { httpServices } from './http'
-import { envApiMode, isDemoFallbackMode, resolvedApiMode, setApiModeOverride } from './core/config'
+import { envApiMode, isDemoFallbackMode, resolvedApiMode, organizationApiMode, setApiModeOverride } from './core/config'
 
 /**
  * 服务注册入口：按运行模式选择实现（唯一开关，其他模块不得自行判断环境变量）。
@@ -14,9 +14,14 @@ import { envApiMode, isDemoFallbackMode, resolvedApiMode, setApiModeOverride } f
 
 const mode = resolvedApiMode
 
-export const services: AppServices = mode === 'real' ? httpServices : mockServices
+export const services: AppServices = {
+  ...(mode === 'real' ? httpServices : mockServices),
+  organizationPlanning: organizationApiMode === 'real' ? httpServices.organizationPlanning : mockServices.organizationPlanning,
+}
 
 export const isMockMode = services.mode === 'mock'
+export const isOrganizationMockMode = organizationApiMode === 'mock'
+export const hasRealServices = !isMockMode || !isOrganizationMockMode
 export const apiMode = services.mode
 
 // 运行模式（供界面展示与切换；密钥边界：前端没有任何服务密钥）

@@ -1,0 +1,218 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "integrated_desk",
+  "scene_revision": 1,
+  "status": "success",
+  "items": [
+    {
+      "item_id": "monitor",
+      "name": "monitor",
+      "model_url": null,
+      "current_pos": [
+        0.85,
+        0.77,
+        0.35
+      ],
+      "target_pos": [
+        0.95,
+        0.77,
+        0.13
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "monitor_back_center",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "printer",
+      "name": "printer",
+      "model_url": null,
+      "current_pos": [
+        1.55,
+        0.77,
+        0.58
+      ],
+      "target_pos": [
+        1.55,
+        0.77,
+        0.32
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "printer_right",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "laptop",
+      "name": "laptop",
+      "model_url": null,
+      "current_pos": [
+        0.27,
+        0.77,
+        0.5
+      ],
+      "target_pos": [
+        0.28,
+        0.77,
+        0.5700000000000001
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "laptop_left",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "keyboard",
+      "name": "keyboard",
+      "model_url": null,
+      "current_pos": [
+        0.82,
+        0.77,
+        0.65
+      ],
+      "target_pos": [
+        0.8200000000000001,
+        0.77,
+        0.5950000000000001
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "keyboard_front",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "mouse",
+      "name": "mouse",
+      "model_url": null,
+      "current_pos": [
+        1.13,
+        0.77,
+        0.5
+      ],
+      "target_pos": [
+        1.15,
+        0.77,
+        0.6000000000000001
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "mouse_front_right",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "book",
+      "name": "book",
+      "model_url": null,
+      "current_pos": [
+        0.22,
+        0.77,
+        0.25
+      ],
+      "target_pos": [
+        0.39,
+        1.22,
+        0.17
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "shelf_2",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "cup",
+      "name": "cup",
+      "model_url": null,
+      "current_pos": [
+        1.25,
+        0.77,
+        0.19
+      ],
+      "target_pos": [
+        0.19,
+        1.22,
+        0.23
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "shelf_1",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "tissue",
+      "name": "tissue",
+      "model_url": null,
+      "current_pos": [
+        1.55,
+        0.77,
+        0.12
+      ],
+      "target_pos": [
+        1.4849999999999999,
+        0.43,
+        0.6000000000000001
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "drawer",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "power_strip",
+      "name": "power strip",
+      "model_url": null,
+      "current_pos": [
+        0.3,
+        0.77,
+        0.08
+      ],
+      "target_pos": [
+        0.3,
+        0.77,
+        0.08
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "desktop",
+      "placement_status": "unchanged",
+      "reason_code": null
+    },
+    {
+      "item_id": "power_adapter",
+      "name": "power adapter",
+      "model_url": null,
+      "current_pos": [
+        0.18,
+        0.805,
+        0.08
+      ],
+      "target_pos": [
+        0.18,
+        0.805,
+        0.08
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": null,
+      "placement_status": "unchanged",
+      "reason_code": null
+    },
+    {
+      "item_id": "wall_socket",
+      "name": "wall socket",
+      "model_url": null,
+      "current_pos": [
+        0.1,
+        0.3,
+        -0.12
+      ],
+      "target_pos": [
+        0.1,
+        0.3,
+        -0.12
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": null,
+      "placement_status": "unchanged",
+      "reason_code": null
+    }
+  ],
+  "issues": []
+}

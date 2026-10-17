@@ -117,13 +117,19 @@ export function PlanPanel({
   }
 
   const handleSetCurrent = (plan: LayoutPlan) => {
+    let summary
+    try {
+      summary = useWorkspaceStore.getState().applyPlanSnapshot(project.id, plan)
+    } catch (error) {
+      onFlash(error instanceof Error ? error.message : String(error))
+      return
+    }
+    if (!summary) return
     let discardedPreview = false
     if (useOrganizeStore.getState().isPreviewBlocking()) {
       useOrganizeStore.getState().closePanel()
       discardedPreview = true
     }
-    const summary = useWorkspaceStore.getState().applyPlanSnapshot(project.id, plan)
-    if (!summary) return
     const parts = [`已将「${plan.name}」设为当前方案`]
     if (summary.legacy) {
       parts.push(`旧版本方案：仅恢复 ${summary.objects} 件物品位置（无线缆快照，相关走线已标记需重算）`)

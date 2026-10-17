@@ -1,0 +1,184 @@
+{
+  "items": [
+    {
+      "name": "笔记本电脑",
+      "category": "peripheral",
+      "bbox_2d": [
+        300,
+        0,
+        650,
+        560
+      ],
+      "estimated_size_m": [
+        0.32,
+        0.23,
+        0.02
+      ],
+      "current_pos": [
+        0.904,
+        0.365,
+        0.77
+      ]
+    },
+    {
+      "name": "机械键盘",
+      "category": "peripheral",
+      "bbox_2d": [
+        305,
+        555,
+        705,
+        740
+      ],
+      "estimated_size_m": [
+        0.35,
+        0.12,
+        0.04
+      ],
+      "current_pos": [
+        0.935,
+        0.455,
+        0.77
+      ]
+    },
+    {
+      "name": "鼠标",
+      "category": "peripheral",
+      "bbox_2d": [
+        810,
+        595,
+        905,
+        735
+      ],
+      "estimated_size_m": [
+        0.07,
+        0.12,
+        0.04
+      ],
+      "current_pos": [
+        1.302,
+        0.453,
+        0.77
+      ]
+    },
+    {
+      "name": "鼠标垫",
+      "category": "peripheral",
+      "bbox_2d": [
+        695,
+        555,
+        1000,
+        805
+      ],
+      "estimated_size_m": [
+        0.28,
+        0.001,
+        0.001
+      ],
+      "current_pos": [
+        1.291,
+        0.488,
+        0.77
+      ]
+    },
+    {
+      "name": "卷尺",
+      "category": "clutter",
+      "bbox_2d": [
+        215,
+        485,
+        300,
+        585
+      ],
+      "estimated_size_m": [
+        0.05,
+        0.05,
+        0.05
+      ],
+      "current_pos": [
+        0.678,
+        0.378,
+        0.77
+      ]
+    },
+    {
+      "name": "电源排插",
+      "category": "clutter",
+      "bbox_2d": [
+        765,
+        385,
+        905,
+        495
+      ],
+      "estimated_size_m": [
+        0.15,
+        0.05,
+        0.05
+      ],
+      "current_pos": [
+        1.278,
+        0.333,
+        0.77
+      ]
+    },
+    {
+      "name": "充电器",
+      "category": "clutter",
+      "bbox_2d": [
+        835,
+        340,
+        900,
+        455
+      ],
+      "estimated_size_m": [
+        0.08,
+        0.08,
+        0.05
+      ],
+      "current_pos": [
+        1.312,
+        0.312,
+        0.77
+      ]
+    },
+    {
+      "name": "湿纸巾",
+      "category": "clutter",
+      "bbox_2d": [
+        935,
+        425,
+        1000,
+        495
+      ],
+      "estimated_size_m": [
+        0.05,
+        0.05,
+        0.02
+      ],
+      "current_pos": [
+        1.416,
+        0.333,
+        0.77
+      ]
+    },
+    {
+      "name": "平板保护套",
+      "category": "peripheral",
+      "bbox_2d": [
+        0,
+        590,
+        310,
+        995
+      ],
+      "estimated_size_m": [
+        0.25,
+        0.18,
+        0.01
+      ],
+      "current_pos": [
+        0.571,
+        0.583,
+        0.77
+      ]
+    }
+  ]
+}

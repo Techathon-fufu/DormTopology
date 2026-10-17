@@ -179,6 +179,11 @@ export type PrimitiveShape =
   | 'mouse'
   | 'lamp'
   | 'books'
+  | 'book'
+  | 'printer'
+  | 'computerTower'
+  | 'powerAdapter'
+  | 'thermos'
   | 'cup'
   | 'storageBox'
   | 'powerStrip'
@@ -555,5 +560,11 @@ export interface Project {
   layoutSource?: 'rule' | 'algorithm'
   /** 最近一次「设为当前方案」使用的候选方案（用于候选方案列表标识当前方案；后续编辑可能已使场景偏离该方案） */
   lastAppliedPlan?: { planId: string; at: number }
+  /**
+   * 内置示例项目的数据种子版本（仅 isDemo 项目使用）。
+   * 小于当前 `DEMO_SEED_VERSION` 时会在载入时按最新示例数据重种，避免代码已更新而浏览器
+   * 仍显示旧场景；用户自建项目不写该字段，也不受影响。
+   */
+  demoSeedVersion?: number
   stage: ProjectStage
 }

@@ -1,0 +1,223 @@
+{
+  "schema_version": "1.0",
+  "generated_by": "backend.examples.algorithm_fixtures",
+  "cases": [
+    {
+      "id": "packing-success",
+      "label": "Packing success",
+      "kind": "packing",
+      "description": "Eight movable items, four shelf cells, and a fixed drawer.",
+      "scene_url": "/algorithm-fixtures/packing-success/scene.json",
+      "routing_result_url": "/algorithm-fixtures/packing-success/cable_routing.json",
+      "packing_result_url": "/algorithm-fixtures/packing-success/packing_result.json",
+      "applied_scene_url": "/algorithm-fixtures/packing-success/applied_scene.json",
+      "expected": {
+        "packing_status": "success",
+        "routing_status": "infeasible",
+        "reason_codes": [
+          "endpoint_blocked"
+        ]
+      },
+      "metrics": {
+        "before_free_area_m2": 0.6344,
+        "after_free_area_m2": 0.739
+      }
+    },
+    {
+      "id": "packing-partial",
+      "label": "Packing partial",
+      "kind": "packing",
+      "description": "The storage box cannot fit its assigned region and stays in place.",
+      "scene_url": "/algorithm-fixtures/packing-partial/scene.json",
+      "routing_result_url": "/algorithm-fixtures/packing-partial/cable_routing.json",
+      "packing_result_url": "/algorithm-fixtures/packing-partial/packing_result.json",
+      "applied_scene_url": "/algorithm-fixtures/packing-partial/applied_scene.json",
+      "expected": {
+        "packing_status": "partial",
+        "routing_status": "infeasible",
+        "reason_codes": [
+          "endpoint_blocked"
+        ]
+      },
+      "metrics": {
+        "before_free_area_m2": 0.6344,
+        "after_free_area_m2": 0.7134
+      }
+    },
+    {
+      "id": "packing-infeasible",
+      "label": "Packing infeasible",
+      "kind": "packing",
+      "description": "An invalid fixed wall socket prevents the layout being applied.",
+      "scene_url": "/algorithm-fixtures/packing-infeasible/scene.json",
+      "routing_result_url": "/algorithm-fixtures/packing-infeasible/cable_routing.json",
+      "packing_result_url": "/algorithm-fixtures/packing-infeasible/packing_result.json",
+      "expected": {
+        "packing_status": "infeasible",
+        "routing_status": "infeasible",
+        "reason_codes": [
+          "endpoint_blocked",
+          "no_path"
+        ]
+      },
+      "metrics": {
+        "before_free_area_m2": 0.6344,
+        "after_free_area_m2": 0.6344
+      }
+    },
+    {
+      "id": "packing-revision-2",
+      "label": "Packing revision 2",
+      "kind": "packing",
+      "description": "A second input revision exercises source and applied result versions.",
+      "scene_url": "/algorithm-fixtures/packing-revision-2/scene.json",
+      "routing_result_url": "/algorithm-fixtures/packing-revision-2/cable_routing.json",
+      "packing_result_url": "/algorithm-fixtures/packing-revision-2/packing_result.json",
+      "applied_scene_url": "/algorithm-fixtures/packing-revision-2/applied_scene.json",
+      "expected": {
+        "packing_status": "success",
+        "routing_status": "infeasible",
+        "reason_codes": [
+          "endpoint_blocked"
+        ]
+      },
+      "metrics": {
+        "before_free_area_m2": 0.6344,
+        "after_free_area_m2": 0.739
+      }
+    },
+    {
+      "id": "packing-integrated-desk",
+      "label": "Integrated desk with monitor, printer, and mounted adapter",
+      "kind": "packing",
+      "description": "Prioritize major devices, store small items, then route three cables after applying the layout; the adapter plugs directly into the strip.",
+      "scene_url": "/algorithm-fixtures/packing-integrated-desk/scene.json",
+      "routing_result_url": "/algorithm-fixtures/packing-integrated-desk/cable_routing.json",
+      "packing_result_url": "/algorithm-fixtures/packing-integrated-desk/packing_result.json",
+      "applied_scene_url": "/algorithm-fixtures/packing-integrated-desk/applied_scene.json",
+      "expected": {
+        "packing_status": "success",
+        "routing_status": "success",
+        "reason_codes": []
+      },
+      "metrics": {
+        "before_free_area_m2": 0.8681,
+        "after_free_area_m2": 0.9387
+      }
+    },
+    {
+      "id": "routing-slot",
+      "label": "Slot route",
+      "kind": "routing",
+      "description": "A diagnostic route through the desk hole.",
+      "scene_url": "/algorithm-fixtures/routing-slot/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-slot/cable_routing.json",
+      "expected": {
+        "routing_status": "success",
+        "reason_codes": []
+      }
+    },
+    {
+      "id": "routing-backboard",
+      "label": "Backboard route",
+      "kind": "routing",
+      "description": "A diagnostic route behind the backboard.",
+      "scene_url": "/algorithm-fixtures/routing-backboard/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-backboard/cable_routing.json",
+      "expected": {
+        "routing_status": "success",
+        "reason_codes": []
+      }
+    },
+    {
+      "id": "routing-length-exceeded",
+      "label": "Cable too short",
+      "kind": "routing",
+      "description": "The domain planner rejects the cable with length_exceeded.",
+      "scene_url": "/algorithm-fixtures/routing-length-exceeded/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-length-exceeded/cable_routing.json",
+      "expected": {
+        "routing_status": "infeasible",
+        "reason_codes": [
+          "length_exceeded"
+        ]
+      }
+    },
+    {
+      "id": "routing-endpoint-blocked",
+      "label": "Blocked endpoint",
+      "kind": "routing",
+      "description": "The domain planner rejects the cable with endpoint_blocked.",
+      "scene_url": "/algorithm-fixtures/routing-endpoint-blocked/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-endpoint-blocked/cable_routing.json",
+      "expected": {
+        "routing_status": "infeasible",
+        "reason_codes": [
+          "endpoint_blocked"
+        ]
+      }
+    },
+    {
+      "id": "routing-supported-edge",
+      "label": "Supported desk and cabinet edges",
+      "kind": "routing",
+      "description": "A verified route rests on the desktop and uses ties at the hole rim and cabinet side.",
+      "scene_url": "/algorithm-fixtures/routing-supported-edge/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-supported-edge/cable_routing.json",
+      "expected": {
+        "routing_status": "success",
+        "reason_codes": []
+      }
+    },
+    {
+      "id": "routing-underdesk-ties",
+      "label": "Underdesk cable ties",
+      "kind": "routing",
+      "description": "A verified route runs 13 mm below the desktop with mounted cable ties.",
+      "scene_url": "/algorithm-fixtures/routing-underdesk-ties/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-underdesk-ties/cable_routing.json",
+      "expected": {
+        "routing_status": "success",
+        "reason_codes": []
+      }
+    },
+    {
+      "id": "routing-underdesk-tray",
+      "label": "Underdesk cable tray",
+      "kind": "routing",
+      "description": "A verified route runs inside a mechanical tray 13 mm below the desktop.",
+      "scene_url": "/algorithm-fixtures/routing-underdesk-tray/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-underdesk-tray/cable_routing.json",
+      "expected": {
+        "routing_status": "success",
+        "reason_codes": []
+      }
+    },
+    {
+      "id": "routing-underdesk-composite",
+      "label": "Composite underside lanes with tray option",
+      "kind": "routing",
+      "description": "Three individually routed underside lanes retain a separate optional tray candidate.",
+      "scene_url": "/algorithm-fixtures/routing-underdesk-composite/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-underdesk-composite/cable_routing.json",
+      "expected": {
+        "routing_status": "success",
+        "reason_codes": []
+      }
+    },
+    {
+      "id": "routing-unsupported-span",
+      "label": "Missing underside supports",
+      "kind": "routing",
+      "description": "The domain planner rejects the cable with unsupported_span.",
+      "scene_url": "/algorithm-fixtures/routing-unsupported-span/scene.json",
+      "routing_result_url": "/algorithm-fixtures/routing-unsupported-span/cable_routing.json",
+      "expected": {
+        "routing_status": "infeasible",
+        "reason_codes": [
+          "unsupported_span"
+        ]
+      }
+    }
+  ]
+}

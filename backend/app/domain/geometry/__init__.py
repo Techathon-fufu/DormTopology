@@ -103,6 +103,10 @@ def footprint(item: dict) -> Footprint:
 
 
 def aabb_from_item(item: dict) -> AABB:
+    if item.get("collision", {}).get("type") == "compound":
+        from .convex import world_parts, bounds
+        minimum, maximum = bounds(tuple(v for p in world_parts(item) for v in p[0]))
+        return AABB(minimum, maximum)
     corners = footprint(item)
     return AABB(
         (min(p[0] for p in corners), item["position"][1], min(p[1] for p in corners)),
@@ -116,6 +120,27 @@ def aabb_from_item(item: dict) -> AABB:
 
 def aabb_from_zone(zone: dict) -> AABB:
     return AABB(point(zone["min"]), point(zone["max"]))
+
+
+def pose_extent(item: dict) -> tuple[float, float, float]:
+    """Unrotated collision half-sizes and vertical clearance extent.
+
+    Footprint half-sizes describe the bounding box, not distances from the anchor
+    to its edges. Candidate placement must retain actual min/max offsets when
+    the collision geometry is asymmetric about the anchor.
+    """
+    if item.get("collision", {}).get("type") == "compound":
+        from .convex import local_parts, bounds
+
+        vertices = tuple(v for part in local_parts(item) for v in part[0])
+        minimum, maximum = bounds(vertices)
+        return (
+            max((maximum[0] - minimum[0]) / 2, 0.0),
+            max((maximum[2] - minimum[2]) / 2, 0.0),
+            max(maximum[1] - min(minimum[1], 0.0), 0.0),
+        )
+    width, height, depth = item["size_m"]
+    return (width / 2, depth / 2, height)
 
 
 def rectangle(bounds: Sequence[float]) -> Footprint:
@@ -161,6 +186,9 @@ def footprints_overlap(a: Footprint, b: Footprint) -> bool:
 
 
 def items_overlap(a: dict, b: dict) -> bool:
+    if any(i.get("collision", {}).get("type") == "compound" for i in (a, b)):
+        from .convex import items_overlap as compound_overlap
+        return compound_overlap(a, b)
     ay, by = a["position"][1], b["position"][1]
     if min(ay + a["size_m"][1], by + b["size_m"][1]) - max(ay, by) <= NUMERIC_EPSILON:
         return False
@@ -168,6 +196,11 @@ def items_overlap(a: dict, b: dict) -> bool:
 
 
 def item_intersects_box(item: dict, box: AABB) -> bool:
+    if item.get("collision", {}).get("type") == "compound":
+        from .convex import world_parts, overlap
+        vertices = tuple((x,y,z) for x in (box.minimum[0],box.maximum[0]) for y in (box.minimum[1],box.maximum[1]) for z in (box.minimum[2],box.maximum[2]))
+        axes = ((1,0,0),(0,1,0),(0,0,1))
+        return any(overlap(p,(vertices,axes,axes)) for p in world_parts(item))
     y = item["position"][1]
     if (
         min(y + item["size_m"][1], box.maximum[1]) - max(y, box.minimum[1])
@@ -183,13 +216,16 @@ def item_intersects_box(item: dict, box: AABB) -> bool:
 def fits_region(item: dict, region: dict) -> bool:
     box = aabb_from_item(item)
     x0, x1, z0, z1 = region["bounds_xz_m"]
+    # Clearance uses the real volume height: a compound item can be shorter than size_m,
+    # and using the declared height would reject regions it actually fits.
+    height = pose_extent(item)[2]
     return (
         abs(item["position"][1] - region["surface_y_m"]) <= EPSILON + NUMERIC_EPSILON
         and box.minimum[0] >= x0 - NUMERIC_EPSILON
         and box.maximum[0] <= x1 + NUMERIC_EPSILON
         and box.minimum[2] >= z0 - NUMERIC_EPSILON
         and box.maximum[2] <= z1 + NUMERIC_EPSILON
-        and item["size_m"][1] <= region["clearance_height_m"] + NUMERIC_EPSILON
+        and height <= region["clearance_height_m"] + NUMERIC_EPSILON
         and box.maximum[1]
         <= region["surface_y_m"] + region["clearance_height_m"] + NUMERIC_EPSILON
     )

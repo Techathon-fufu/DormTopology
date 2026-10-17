@@ -2,12 +2,24 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { OUTLET_FIXED_Y_M, type Project } from '@/types/project'
-import { createDemoProject, DEMO_PROJECT_ID, DEMO_ROOM_NOTE } from '@/data/demoProject'
+import { createDemoProject, DEMO_PROJECT_ID, DEMO_ROOM_NOTE, DEMO_SEED_VERSION } from '@/data/demoProject'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
  * 照片与模型文件不放这里，见 src/storage/idb.ts。
+ *
+ * 两层版本，职责不同，不要混用：
+ * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
+ * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
+const PROJECTS_PERSIST_VERSION = 3
+
+/** 内置示例项目是否需要按最新示例数据重种 */
+export function isDemoProjectStale(project: Project | undefined): boolean {
+  if (!project || project.id !== DEMO_PROJECT_ID) return false
+  return (project.demoSeedVersion ?? 0) < DEMO_SEED_VERSION
+}
+
 interface ProjectsState {
   projects: Record<string, Project>
   ensureDemo: () => void
@@ -23,7 +35,10 @@ export const useProjectsStore = create<ProjectsState>()(
     (set, get) => ({
       projects: {},
       ensureDemo() {
-        if (!get().projects[DEMO_PROJECT_ID]) {
+        const existing = get().projects[DEMO_PROJECT_ID]
+        // 不存在，或仍是旧种子版本的示例场景：按最新示例数据重种。
+        // 仅作用于内置示例项目，用户自建项目不受影响。
+        if (!existing || isDemoProjectStale(existing)) {
           set((s) => ({ projects: { ...s.projects, [DEMO_PROJECT_ID]: createDemoProject() } }))
         }
       },
@@ -55,16 +70,19 @@ export const useProjectsStore = create<ProjectsState>()(
     }),
     {
       name: 'dormtopology.projects',
-      version: 2,
+      version: PROJECTS_PERSIST_VERSION,
       /**
-       * 0.9.0 迁移：墙面插座收敛为一块「双插孔 ×2」面板
-       * （旧数据为左右两个独立插座，保留第一个插座的位置与 id）。
+       * 迁移历史（两轮改动合并后的口径）：
+       * v1 → v2：早期版本把旧示例场景写进了本地存储，示例数据更新后不生效；迁移时按种子版本重种内置示例项目。
+       * v2 → v3（0.9.0）：墙面插座收敛为一块「双插孔 ×2」面板（合并历史左右两个独立插座）；
+       *   示例项目同时按最新示例数据重种，用户自建项目仅归一插座，其余字段原样保留。
        */
-      migrate: (persisted, version) => {
-        const state = (persisted ?? {}) as Partial<ProjectsState>
-        if (version < 2 && state.projects) {
-          const projects: Record<string, Project> = {}
-          for (const [id, p] of Object.entries(state.projects)) {
+      migrate: (persisted, from) => {
+        const state = persisted as Partial<ProjectsState> | undefined
+        if (!state?.projects) return persisted as ProjectsState
+        const projects = { ...state.projects }
+        if (from < 3) {
+          for (const [id, p] of Object.entries(projects)) {
             if (!p?.room) continue
             projects[id] = {
               ...p,
@@ -75,9 +93,11 @@ export const useProjectsStore = create<ProjectsState>()(
               },
             }
           }
-          return { ...state, projects } as ProjectsState
         }
-        return state as ProjectsState
+        if (from < PROJECTS_PERSIST_VERSION && isDemoProjectStale(projects[DEMO_PROJECT_ID])) {
+          projects[DEMO_PROJECT_ID] = createDemoProject()
+        }
+        return { ...state, projects } as ProjectsState
       },
     },
   ),

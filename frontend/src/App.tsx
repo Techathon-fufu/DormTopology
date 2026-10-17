@@ -9,6 +9,7 @@ import { WorkspacePage } from '@/ui/pages/WorkspacePage'
 import { PlanComparePage } from '@/ui/pages/PlanComparePage'
 import { GuidePage } from '@/ui/pages/GuidePage'
 import { ApiRuntime } from '@/ui/service/ApiRuntime'
+import { AlgorithmLabPage } from '@/algorithm-lab/AlgorithmLabPage'
 import { useProjectsStore } from '@/state/projectsStore'
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
         {/* 三维工作台与方案对比为整屏布局，不套 AppShell */}
         <Route path="/projects/:id/workspace" element={<WorkspacePage />} />
         <Route path="/projects/:id/compare" element={<PlanComparePage />} />
+        <Route path="/algorithm-lab" element={<AlgorithmLabPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

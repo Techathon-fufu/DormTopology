@@ -42,8 +42,8 @@ const VIEW_PRESETS: Record<
   GuideView,
   { position: [number, number, number]; target: [number, number, number] }
 > = {
-  top: { position: [0, 3.3, 0.5], target: [0, 0.02, 0.45] },
-  persp: { position: [2, 1.7, 2.7], target: [0, 0.85, 0.45] },
+  top: { position: [0, 2.7, 0.5], target: [0, 0.75, 0.45] },
+  persp: { position: [1.35, 1.2, 1.9], target: [0, 0.78, 0.35] },
 }
 
 class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -317,7 +317,7 @@ export function DeliverViewport({ project, view, focus, onFocus, captureRef }: D
           shadow-camera-far={14}
         />
         <Suspense fallback={null}>
-          <RoomShell room={project.room} />
+          <RoomShell room={project.room} showBed={view !== 'top'} />
           {project.objects
             .filter((o) => o.visible)
             .map((object) => (

@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { DeskSurfaceMetrics } from '@/scene/deskModel'
+import { bottomContacts, containedInCavity, objectRoomHits, objectsCollide, worldCollision } from './collisionGeometry'
+import { cachedRoomSolids } from './roomCollision'
 
 /**
  * 场景摆放校验与支撑面计算（本地真实计算，非模拟）。
@@ -8,7 +10,7 @@ import type { DeskSurfaceMetrics } from '@/scene/deskModel'
  * - 支撑面：桌面 / 书架搁板 / 地面（用于拖拽吸附与「吸附到支撑面」）；
  *   高度优先采用桌体 GLB 实测锚点（DeskSurfaceMetrics），未加载模型 / 无锚点时回退 RoomConfig
  * - 校验：越界（房间外 / 地面下 / 超层高）、明显相交（物品间）、悬空（无支撑）
- * - 相交检测使用旋转矩形 SAT（x-z 平面）+ 高度区间重叠，旋转角不同也能正确判断
+ * - 相交检测使用共享模型部件的三维凸体 SAT；碰撞与可见实体使用相同几何
  */
 
 export type SupportKind = 'desk' | 'shelf' | 'beam' | 'floor' | 'none'
@@ -39,11 +41,14 @@ export function deskBeamTopY(room: RoomConfig): number {
   return room.desk.height - room.desk.thickness - 0.05
 }
 /** 判定为「贴合支撑面」的高度容差（米） */
-const FLOATING_TOLERANCE = 0.035
-/** 判定为「相交」的最小重叠深度（米） */
-const OVERLAP_TOLERANCE = 0.01
+const FLOATING_TOLERANCE = 0.001
 /** 越界判定容差（米） */
 const BOUNDS_EPSILON = 0.001
+/**
+ * 场地穿模判定容差（米）：贴面摆放与拖拽 / 旋转的浮点噪声不算穿模，
+ * 超过该深度才报告与桌体实体相交。
+ */
+const ROOM_CLEARANCE = 0.001
 
 /** 桌面高度：优先采用桌体 GLB 实测锚点（deskModelStore.metrics），否则回退 RoomConfig */
 export function deskTopY(room: RoomConfig, metrics?: DeskSurfaceMetrics | null): number {
@@ -168,115 +173,20 @@ export function raycastSupports(
 // ── 校验 ────────────────────────────────────────────────────────────────
 
 export interface SceneIssue {
-  type: 'outOfBounds' | 'overlap' | 'floating'
+  type: 'outOfBounds' | 'overlap' | 'roomCollision' | 'floating'
   message: string
   relatedId?: string
 }
 
-/** 旋转矩形（x-z）SAT 相交检测；旋转角以 rotationY 弧度给出 */
-function obbOverlapXZ(
-  ax: number,
-  az: number,
-  aw: number,
-  ad: number,
-  aRot: number,
-  bx: number,
-  bz: number,
-  bw: number,
-  bd: number,
-  bRot: number,
-): boolean {
-  const axes: Array<[number, number]> = [
-    [Math.cos(aRot), -Math.sin(aRot)],
-    [Math.sin(aRot), Math.cos(aRot)],
-    [Math.cos(bRot), -Math.sin(bRot)],
-    [Math.sin(bRot), Math.cos(bRot)],
-  ]
-  const axesA: Array<[number, number]> = [
-    [Math.cos(aRot), -Math.sin(aRot)],
-    [Math.sin(aRot), Math.cos(aRot)],
-  ]
-  const axesB: Array<[number, number]> = [
-    [Math.cos(bRot), -Math.sin(bRot)],
-    [Math.sin(bRot), Math.cos(bRot)],
-  ]
-  const dx = bx - ax
-  const dz = bz - az
-  for (const [ux, uz] of axes) {
-    const dist = Math.abs(dx * ux + dz * uz)
-    let ra = 0
-    for (let i = 0; i < 2; i += 1) {
-      ra += (i === 0 ? aw : ad) / 2 * Math.abs(ux * axesA[i][0] + uz * axesA[i][1])
-    }
-    let rb = 0
-    for (let i = 0; i < 2; i += 1) {
-      rb += (i === 0 ? bw : bd) / 2 * Math.abs(ux * axesB[i][0] + uz * axesB[i][1])
-    }
-    if (dist >= ra + rb) return false // 找到分离轴
-  }
-  return true
-}
-
-/** 容器类物品：收纳进其内部的小件不计为「相交」 */
+/** Storage semantics describe a real cavity; no blanket collision exemptions. */
 export function isContainerLike(o: SceneObject): boolean {
-  return o.category === 'storage' || o.model.shape === 'storageBox'
+  return o.model.shape === 'storageBox'
 }
-
-/**
- * inner 是否被「收纳进」outer 内部（如小件物品放入收纳盒）：
- * 仅当 outer 是收纳容器类物品时成立；底面不低过 outer 底面、顶面不超出 outer 顶面（+2cm 容差）、
- * 俯视投影落在 outer 截面内（+2cm 容差）。收纳关系不计为「相交」。
- */
-export function isContainedWithin(
-  inner: SceneObject,
-  innerPos: Vec3,
-  outer: SceneObject,
-  outerPos: Vec3,
-): boolean {
-  if (!isContainerLike(outer)) return false
-  const tolerance = 0.02
-  if (Math.abs(innerPos[0] - outerPos[0]) + inner.dimensions.width / 2 >
-    outer.dimensions.width / 2 + tolerance) {
-    return false
-  }
-  if (Math.abs(innerPos[2] - outerPos[2]) + inner.dimensions.depth / 2 >
-    outer.dimensions.depth / 2 + tolerance) {
-    return false
-  }
-  if (innerPos[1] < outerPos[1] - 0.001) return false
-  if (innerPos[1] + inner.dimensions.height > outerPos[1] + outer.dimensions.height + tolerance) {
-    return false
-  }
-  return true
+export function isContainedWithin(inner: SceneObject, innerPos: Vec3, outer: SceneObject, outerPos: Vec3): boolean {
+  return containedInCavity(inner, innerPos, outer, outerPos)
 }
-
-/**
- * 两物品在各自位置是否「明显相交」（SAT + 高度区间重叠）。
- * 一件物品收纳进另一件容器内部（isContainedWithin）不算相交。
- */
-export function objectsOverlapAt(
-  a: SceneObject,
-  aPos: Vec3,
-  b: SceneObject,
-  bPos: Vec3,
-): boolean {
-  const yOverlap =
-    Math.min(aPos[1] + a.dimensions.height, bPos[1] + b.dimensions.height) -
-    Math.max(aPos[1], bPos[1])
-  if (yOverlap <= OVERLAP_TOLERANCE) return false
-  if (isContainedWithin(a, aPos, b, bPos) || isContainedWithin(b, bPos, a, aPos)) return false
-  return obbOverlapXZ(
-    aPos[0],
-    aPos[2],
-    a.dimensions.width,
-    a.dimensions.depth,
-    a.transform.rotationY,
-    bPos[0],
-    bPos[2],
-    b.dimensions.width,
-    b.dimensions.depth,
-    b.transform.rotationY,
-  )
+export function objectsOverlapAt(a: SceneObject, aPos: Vec3, b: SceneObject, bPos: Vec3): boolean {
+  return objectsCollide(a, aPos, b, bPos)
 }
 
 /**
@@ -291,19 +201,18 @@ export function placementIssues(
   metrics?: DeskSurfaceMetrics | null,
 ): SceneIssue[] {
   const issues: SceneIssue[] = []
-  const [x, y, z] = position
-  const { width: w, height: h, depth: d } = object.dimensions
+  const bounds = worldCollision(object, position).bounds
 
   // 1) 越界
   const outParts: string[] = []
-  if (x - w / 2 < -room.length / 2 + BOUNDS_EPSILON || x + w / 2 > room.length / 2 - BOUNDS_EPSILON) {
+  if (bounds.min[0] < -room.length / 2 - BOUNDS_EPSILON || bounds.max[0] > room.length / 2 + BOUNDS_EPSILON) {
     outParts.push('左右超出房间')
   }
-  if (z - d / 2 < -BOUNDS_EPSILON || z + d / 2 > room.width - BOUNDS_EPSILON) {
+  if (bounds.min[2] < -BOUNDS_EPSILON || bounds.max[2] > room.width + BOUNDS_EPSILON) {
     outParts.push('前后超出房间')
   }
-  if (y < -BOUNDS_EPSILON) outParts.push('低于地面')
-  if (y + h > room.height - BOUNDS_EPSILON) outParts.push('超过层高')
+  if (bounds.min[1] < -BOUNDS_EPSILON) outParts.push('低于地面')
+  if (bounds.max[1] > room.height + BOUNDS_EPSILON) outParts.push('超过层高')
   if (outParts.length > 0) {
     issues.push({ type: 'outOfBounds', message: `越界：${outParts.join('、')}` })
   }
@@ -327,39 +236,38 @@ export function placementIssues(
     issues.push({ type: 'overlap', message: `另有 ${overlapCount - 2} 件物品相交` })
   }
 
-  // 3) 悬空（下方无支撑面 / 与支撑面距离过远）
-  let supportY: number | null = null
-  for (const support of supportsContaining(room, x, z, metrics)) {
-    if (support.y <= y + FLOATING_TOLERANCE) {
-      supportY = supportY === null ? support.y : Math.max(supportY, support.y)
-    }
-  }
-  for (const other of others) {
-    if (other.id === object.id || !other.visible) continue
-    const top = other.transform.position[1] + other.dimensions.height
-    if (top > y + FLOATING_TOLERANCE) continue
-    const overlap = obbOverlapXZ(
-      x,
-      z,
-      w,
-      d,
-      object.transform.rotationY,
-      other.transform.position[0],
-      other.transform.position[2],
-      other.dimensions.width,
-      other.dimensions.depth,
-      other.transform.rotationY,
-    )
-    if (overlap) supportY = supportY === null ? top : Math.max(supportY, top)
-  }
-  if (supportY === null) {
-    if (y > FLOATING_TOLERANCE) issues.push({ type: 'floating', message: '悬空：下方无支撑面' })
-  } else if (y - supportY > FLOATING_TOLERANCE) {
+  // 3) 与场地固定实体（桌面 / 桌腿 / 横梁 / 书架搁板与侧板 / 立柱）穿模
+  const roomHits = objectRoomHits(object, position, cachedRoomSolids(room), ROOM_CLEARANCE)
+  if (roomHits.length > 0) {
+    const labels = [...new Set(roomHits.map((hit) => hit.label))]
     issues.push({
-      type: 'floating',
-      message: `悬空：距下方支撑面 ${Math.round((y - supportY) * 1000)} mm（可用「吸附到支撑面」）`,
+      type: 'roomCollision',
+      message: `穿模：与${labels.join('、')}相交，超出声明的允许间隙`,
+      relatedId: roomHits[0].id,
     })
   }
+
+  // Every bottom contact must rest on a declared room plane or a real horizontal solid face.
+  const contacts = bottomContacts(object, position)
+  const supported = contacts.every(contact => {
+    if (supportsContaining(room, contact[0], contact[2], metrics).some(s => Math.abs(s.y-contact[1]) <= FLOATING_TOLERANCE)) return true
+    for (const other of others) {
+      if (other.id === object.id || !other.visible) continue
+      for (const part of worldCollision(other).parts) {
+        for (const [ia,ib,ic] of part.faces) {
+          const a = new THREE.Vector3(...part.vertices_m[ia]), b = new THREE.Vector3(...part.vertices_m[ib]), c = new THREE.Vector3(...part.vertices_m[ic])
+          const normal = b.clone().sub(a).cross(c.clone().sub(a)).normalize()
+          if (normal.y < .999999 || Math.abs(contact[1]-a.y)>FLOATING_TOLERANCE) continue
+          const point = new THREE.Vector3(contact[0], a.y, contact[2])
+          // Triangle barycentric containment includes touching edges.
+          const bary = new THREE.Triangle(a,b,c).getBarycoord(point,new THREE.Vector3())
+          if (bary && Math.min(bary.x,bary.y,bary.z)>=-1e-6) return true
+        }
+      }
+    }
+    return false
+  })
+  if (!supported) issues.push({type:'floating', message:'支撑不足：底部接触区域未完整落在支撑面上（容差 1mm）'})
 
   return issues
 }

@@ -13,6 +13,16 @@ import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
 
+/**
+ * 内置示例项目的数据种子版本。
+ * 每次修改示例场景（尺寸、物品、线缆等）都要 +1：浏览器里已存在的示例项目会在载入时
+ * 按最新数据重种，避免"代码已更新、页面仍是旧场景"。
+ * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
+ * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
+ * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
+ */
+export const DEMO_SEED_VERSION = 3
+
 export const DEMO_ROOM_NOTE =
   '固定标准空间：床桌 / 房间 / 立柱为预设固定模型（不可编辑）；书架 / 出线孔 / 插座可在「空间配置」中调整'
 
@@ -23,7 +33,7 @@ export function createStandardRoom(): RoomConfig {
     length: 2.6,
     width: 2.0,
     height: 2.7,
-    desk: { width: 1.2, depth: 0.6, thickness: 0.025, height: 0.75 },
+    desk: { width: 1.6, depth: 0.8, thickness: 0.025, height: 0.75 },
     shelf: { enabled: true, levels: 1, heightAboveDesk: 0.38, depth: 0.2 },
     posts: [
       { id: 'post-fl', position: [-0.93, 0, 0.07], section: 0.04 },
@@ -31,7 +41,7 @@ export function createStandardRoom(): RoomConfig {
       { id: 'post-bl', position: [-0.93, 0, 0.83], section: 0.04 },
       { id: 'post-br', position: [0.93, 0, 0.83], section: 0.04 },
     ],
-    cableHoles: [{ id: 'hole-1', position: [0.45, 0.75, 0.12], diameter: 0.05 }],
+    cableHoles: [{ id: 'hole-1', position: [0.65, 0.75, 0.12], diameter: 0.05 }],
     outlets: [
       { id: 'outlet-1', position: [0, OUTLET_FIXED_Y_M, 0.01], label: '后墙插座（双插孔 ×2）', slots: 2 },
     ],
@@ -39,7 +49,7 @@ export function createStandardRoom(): RoomConfig {
   }
 }
 
-/** 演示物品库：笔记本、显示器、键鼠、台灯、书本、水杯、收纳盒、耳机、排插（单位：米） */
+/** 扩展演示物品库：独立书本与桌面设备，尺寸为示例值（单位：米）。 */
 export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject[] {
   const deskY = 0.75
   const beamY = deskBeamTopY(createStandardRoom())
@@ -99,7 +109,8 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       name: '显示器',
       category: 'electrical',
       dimensions: { width: 0.54, height: 0.46, depth: 0.18 },
-      transform: { position: [0.1, deskY, 0.13], rotationY: 0.1 },
+      // 避开书架搁板 z 范围 [0.05, 0.25]：显示器高 0.46 > 搁板下净空 0.371，必须放在搁板投影之外
+      transform: { position: [0.1, deskY, 0.4], rotationY: 0.1 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'monitor' },
       ports: [
         {
@@ -171,7 +182,8 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       name: '台灯',
       category: 'electrical',
       dimensions: { width: 0.16, height: 0.45, depth: 0.18 },
-      transform: { position: [0.47, deskY, 0.16], rotationY: 0.6 },
+      // 同显示器：高 0.45 > 搁板下净空 0.371，落在搁板投影之外（z ≥ 0.25 + 深度/2）
+      transform: { position: [0.47, deskY, 0.46], rotationY: 0.6 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'lamp' },
       ports: [
         {
@@ -190,18 +202,74 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       note: '演示物品：LED 台灯',
     },
     {
-      id: 'demo-books',
+      id: 'demo-book-math',
       ...base,
-      name: '书本（叠放）',
+      name: '高等数学教材',
       category: 'nonElectrical',
-      dimensions: { width: 0.21, height: 0.14, depth: 0.15 },
+      dimensions: { width: 0.21, height: 0.035, depth: 0.15 },
       transform: { position: [0.33, deskY, 0.33], rotationY: 0.9 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'books' },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'book' },
       ports: [],
-      quantity: 3,
+      quantity: 1,
       needsPower: false,
       source: 'demo',
-      note: '演示物品：3 本教材',
+      note: '演示物品：独立教材，可单独移动与整理',
+    },
+    ...[
+      { id: 'demo-book-programming', name: '程序设计教材', width: 0.23, height: 0.028, x: -0.38, z: 0.64, angle: -0.3 },
+      { id: 'demo-book-notebook', name: '课堂笔记本', width: 0.19, height: 0.018, x: 0.14, z: 0.68, angle: 0.25 },
+    ].map((book): SceneObject => ({
+      ...base,
+      id: book.id,
+      name: book.name,
+      category: 'nonElectrical',
+      dimensions: { width: book.width, height: book.height, depth: 0.15 },
+      transform: { position: [book.x, deskY, book.z], rotationY: book.angle },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'book' },
+      ports: [], quantity: 1, needsPower: false, source: 'demo',
+      note: '演示物品：独立书本，可单独移动与整理',
+    })),
+    {
+      ...base, id: 'demo-printer', name: '打印机', category: 'electrical',
+      dimensions: { width: 0.38, height: 0.20, depth: 0.30 },
+      transform: { position: [-0.58, deskY, 0.48], rotationY: 0 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'printer' },
+      ports: [
+        { id: 'port-printer-power', type: 'power-ac', label: '电源输入', powered: true, offset: [-0.12, 0.05, -0.15], direction: 'back' },
+        { id: 'port-printer-usb', type: 'usb-a', label: 'USB 接口', powered: false, offset: [0.12, 0.05, -0.15], direction: 'back' },
+      ],
+      quantity: 1, needsPower: true, source: 'demo', note: '演示物品：紧凑打印机，接线待用户确认',
+    },
+    {
+      ...base, id: 'demo-computer-tower', name: '电脑主机', category: 'electrical',
+      dimensions: { width: 0.20, height: 0.42, depth: 0.38 },
+      transform: { position: [0.66, deskY, 0.49], rotationY: 0 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'computerTower' },
+      ports: [
+        { id: 'port-tower-power', type: 'power-ac', label: '电源输入', powered: true, offset: [0, 0.08, -0.19], direction: 'back' },
+        { id: 'port-tower-hdmi', type: 'hdmi', label: 'HDMI 输出', powered: false, offset: [0.04, 0.22, -0.19], direction: 'back' },
+        { id: 'port-tower-network', type: 'rj45', label: '网口', powered: false, offset: [-0.04, 0.26, -0.19], direction: 'back' },
+      ],
+      quantity: 1, needsPower: true, source: 'demo', note: '演示物品：桌面主机，接线待用户确认',
+    },
+    {
+      ...base, id: 'demo-power-adapter', name: '电源适配器', category: 'electrical',
+      dimensions: { width: 0.10, height: 0.035, depth: 0.055 },
+      transform: { position: [-0.10, deskY, 0.34], rotationY: 0.45 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'powerAdapter' },
+      ports: [
+        { id: 'port-adapter-ac', type: 'power-ac', label: '交流输入', powered: true, offset: [-0.05, 0.0175, 0], direction: 'left' },
+        { id: 'port-adapter-usbc', type: 'usb-c', label: 'USB-C 输出', powered: true, offset: [0.05, 0.0175, 0], direction: 'right' },
+      ],
+      quantity: 1, needsPower: true, source: 'demo', note: '演示物品：独立电源适配器，接线待用户确认',
+    },
+    {
+      ...base, id: 'demo-thermos', name: '保温杯', category: 'nonElectrical',
+      dimensions: { width: 0.08, height: 0.24, depth: 0.08 },
+      transform: { position: [0.49, deskY, 0.71], rotationY: 0 },
+      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'thermos' },
+      ports: [], quantity: 1, needsPower: false, frequent: true, source: 'demo',
+      note: '演示物品：带盖保温杯，与普通水杯分别管理',
     },
     {
       id: 'demo-cup',
@@ -216,7 +284,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       needsPower: false,
       frequent: true,
       source: 'demo',
-      note: '演示物品：保温杯',
+      note: '演示物品：普通水杯',
     },
     {
       id: 'demo-storage-box',
@@ -479,6 +547,7 @@ export function createDemoProject(): Project {
     objects,
     cables: createDemoCables(objects),
     organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backLeft' },
+    demoSeedVersion: DEMO_SEED_VERSION,
     stage: 'organize',
   }
 }

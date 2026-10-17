@@ -3,3 +3,10 @@
 .venv
 __pycache__/
 *.py[cod]
+*key*.txt
+*.env
+_temp_*
+*.blend1
+
+# 本地 agent 委派脚手架（任务清单、运行回执、临时脚本），不属于产品代码
+.work/

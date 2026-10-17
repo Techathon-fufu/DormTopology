@@ -20,6 +20,11 @@ class Port(TypedDict):
     confirmed: bool
 
 
+class PlugMount(TypedDict):
+    socket_port_id: str
+    plug_port_id: str
+
+
 class Item(TypedDict):
     id: str
     name: str
@@ -32,6 +37,7 @@ class Item(TypedDict):
     fixed: bool
     usage_frequency: str
     allowed_region_ids: list[str]
+    preferred_region_ids: NotRequired[list[str]]
     allowed_rotations_y_rad: list[float]
     collision: dict
     ports: list[Port]
@@ -39,6 +45,8 @@ class Item(TypedDict):
     model_url: str | None
     generation: dict
     socket_count: NotRequired[int]
+    plug_mount: NotRequired[PlugMount]
+    placement_priority: NotRequired[int]
 
 
 class Region(TypedDict):
@@ -112,6 +120,12 @@ class CurveSegment(TypedDict):
     control_points: list[Vec3]
 
 
+class SupportCheck(TypedDict):
+    status: Literal["verified", "not_evaluated"]
+    max_unsupported_span_m: float | None
+    support_ids: list[str]
+
+
 class CableRoute(TypedDict):
     id: str
     start_port_id: str
@@ -125,11 +139,32 @@ class CableRoute(TypedDict):
     path_points: list[Vec3]
     path_length_m: float | None
     reason_code: str | None
+    support_check: NotRequired[SupportCheck]
 
 
 class RoutingMetrics(TypedDict):
     exposed_length_m: float | None
     baseline_exposed_length_m: float | None
+
+
+class TrayMount(TypedDict):
+    obstacle_id: str
+    face: Literal["y_min"]
+    bounds_uv_m: list[float]
+    stand_off_m: float
+
+
+class UndersideTrayOptimization(TypedDict):
+    id: str
+    status: Literal["recommended", "verified", "not_used"]
+    support_id: str | None
+    cable_ids: list[str]
+    shared_length_m: float
+    occupied_width_m: float
+    available_width_m: float | None
+    requires_installation: bool
+    reason_code: str | None
+    mount: TrayMount
 
 
 class RoutingResult(TypedDict):
@@ -140,3 +175,4 @@ class RoutingResult(TypedDict):
     cables: list[CableRoute]
     metrics: RoutingMetrics
     issues: list[Issue]
+    underside_tray_optimizations: NotRequired[list[UndersideTrayOptimization]]

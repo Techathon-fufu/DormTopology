@@ -7,7 +7,7 @@ import type {
   RoomConfig,
   SceneObject,
 } from '@/types/project'
-import type { OrganizationPlan, OrganizationPreferences } from '@/types/organization'
+import type { OrganizationPlan, OrganizationPreferences, OrganizationSceneRef } from '@/types/organization'
 
 /**
  * 服务接口层：识别 / 模型生成 / 布局规划 / 走线规划 / 空间整理。
@@ -165,9 +165,18 @@ export interface OrganizationPlanningService {
     objects: SceneObject[]
     room: RoomConfig
     preferences: OrganizationPreferences
+    baseline: LayoutPlan
+    confirmed: boolean
     onProgress?: ServiceProgress
     signal?: AbortSignal
   }): Promise<OrganizationPlan>
+  applyOrganization(input: {
+    projectId: string
+    plan: OrganizationPlan
+    objects: SceneObject[]
+    room: RoomConfig
+    preferences: OrganizationPreferences
+  }): Promise<OrganizationSceneRef | void>
 }
 
 // ── 服务集合 ─────────────────────────────────────────────────────────────

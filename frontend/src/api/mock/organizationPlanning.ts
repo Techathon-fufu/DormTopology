@@ -24,4 +24,5 @@ export const mockOrganizationPlanningService: OrganizationPlanningService = {
     onProgress?.(1, '完成')
     return plan
   },
+  async applyOrganization() {},
 }

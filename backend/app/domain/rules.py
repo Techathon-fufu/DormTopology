@@ -4,6 +4,8 @@ import math
 
 from .errors import SceneInputError
 from .geometry import validate_item_geometry
+from .geometry.convex import validate_compound
+from .plug_mounts import plug_mount_geometry_issues
 
 
 def _fail(field: str, message: str):
@@ -157,6 +159,10 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
         )
         _boolean(item["dimensions_confirmed"], path + ".dimensions_confirmed")
         _boolean(item["fixed"], path + ".fixed")
+        if "placement_priority" in item:
+            priority = item["placement_priority"]
+            if type(priority) is not int or not 0 <= priority <= 100:
+                _fail(path + ".placement_priority", "must be an integer from 0 to 100")
         if for_planning and not item["dimensions_confirmed"]:
             _fail(path + ".dimensions_confirmed", "confirm dimensions before planning")
         _enum(
@@ -171,6 +177,18 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _string(region_id, path + ".allowed_region_ids")
             if region_id not in regions:
                 _fail(path + ".allowed_region_ids", f"unknown region {region_id}")
+        if "preferred_region_ids" in item:
+            preferred = _array(item["preferred_region_ids"], path + ".preferred_region_ids")
+            seen_preferred = set()
+            for region_id in preferred:
+                _string(region_id, path + ".preferred_region_ids")
+                if region_id not in regions:
+                    _fail(path + ".preferred_region_ids", f"unknown region {region_id}")
+                if region_id not in allowed:
+                    _fail(path + ".preferred_region_ids", "must be a subset of allowed_region_ids")
+                if region_id in seen_preferred:
+                    _fail(path + ".preferred_region_ids", f"duplicate region {region_id}")
+                seen_preferred.add(region_id)
         rotations = _array(
             item["allowed_rotations_y_rad"], path + ".allowed_rotations_y_rad"
         )
@@ -183,7 +201,12 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                     path + ".allowed_rotations_y_rad", "only 0 and pi/2 are supported"
                 )
         collision = _object(item["collision"], "type", path + ".collision")
-        _enum(collision["type"], {"box"}, path + ".collision.type")
+        _enum(collision["type"], {"box", "compound"}, path + ".collision.type")
+        if collision["type"] == "compound":
+            try:
+                validate_compound(collision)
+            except (ValueError, TypeError, OverflowError) as error:
+                _fail(path + ".collision", str(error))
         for key in ("image_url", "model_url"):
             _nullable_string(item[key], path + "." + key)
         generation = _object(
@@ -229,6 +252,44 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             ):
                 _fail(path + ".ports", "expected socket_count sources and one bus sink")
 
+    owners = {port["id"]: item for item in scene["items"] for port in item["ports"]}
+    mounted_ports: set[str] = set()
+    for i, adapter in enumerate(scene["items"]):
+        if "plug_mount" not in adapter:
+            continue
+        path = f"items[{i}].plug_mount"
+        mount = _object(adapter["plug_mount"], "socket_port_id plug_port_id", path)
+        if adapter["category"] != "power_adapter" or not adapter["fixed"]:
+            _fail(path, "only a fixed power_adapter can have a direct plug mount")
+        for key in ("socket_port_id", "plug_port_id"):
+            identifier = _string(mount[key], path + "." + key)
+            if identifier not in ports:
+                _fail(path + "." + key, "unknown port ID")
+            if identifier in mounted_ports:
+                _fail(path + "." + key, "a direct plug port is already mounted")
+            mounted_ports.add(identifier)
+        socket, plug = ports[mount["socket_port_id"]], ports[mount["plug_port_id"]]
+        strip = owners[socket["id"]]
+        if (
+            strip["category"] != "power_strip"
+            or not strip["fixed"]
+            or socket["type"] != "power_source"
+        ):
+            _fail(
+                path + ".socket_port_id",
+                "must reference a fixed power_strip power_source",
+            )
+        if owners[plug["id"]]["id"] != adapter["id"] or plug["type"] != "power_sink":
+            _fail(path + ".plug_port_id", "must reference this adapter's power_sink")
+        if not socket["confirmed"] or not plug["confirmed"]:
+            _fail(path, "confirm both direct plug ports before mounting")
+        if not adapter["dimensions_confirmed"] or not strip["dimensions_confirmed"]:
+            _fail(path, "confirm adapter and strip dimensions before mounting")
+        if for_planning:
+            problems = plug_mount_geometry_issues(scene, adapter)
+            if problems:
+                _fail(path, problems[0]["message"])
+
     graph = _object(scene["routing_graph"], "nodes edges", "routing_graph")
     nodes = {}
     for i, value in enumerate(_array(graph["nodes"], "routing_graph.nodes")):
@@ -262,6 +323,81 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _enum(mode, {"slot", "backboard"}, path + ".modes")
         _number(edge["clearance_radius_m"], path + ".clearance_radius_m", positive=True)
         _boolean(edge["exposed"], path + ".exposed")
+    if "supports" in graph and "support_policy" not in graph:
+        _fail("routing_graph.support_policy", "supports require an explicit policy")
+    if "support_policy" in graph:
+        policy = _object(
+            graph["support_policy"],
+            "max_unsupported_span_m",
+            "routing_graph.support_policy",
+        )
+        _number(
+            policy["max_unsupported_span_m"],
+            "routing_graph.support_policy.max_unsupported_span_m",
+            positive=True,
+        )
+    obstacles = {zone["id"]: zone for zone in scene["obstacles"]}
+    for collection in ("supports", "tray_candidates"):
+        for i, value in enumerate(
+            _array(graph.get(collection, []), f"routing_graph.{collection}")
+        ):
+            path = f"routing_graph.{collection}[{i}]"
+            support = entity(
+                value, "kind obstacle_id face bounds_uv_m stand_off_m", path
+            )
+            _enum(
+                support["kind"], {"surface", "cable_tie", "cable_tray"}, path + ".kind"
+            )
+            if collection == "tray_candidates":
+                _enum(support["kind"], {"cable_tray"}, path + ".kind")
+                _enum(support["face"], {"y_min"}, path + ".face")
+            obstacle_id = _string(support["obstacle_id"], path + ".obstacle_id")
+            if obstacle_id not in obstacles:
+                _fail(path + ".obstacle_id", "support must mount on an obstacle")
+            _enum(
+                support["face"],
+                {"x_min", "x_max", "y_min", "y_max", "z_min", "z_max"},
+                path + ".face",
+            )
+            if support["kind"] == "surface" and support["face"] != "y_max":
+                _fail(path + ".face", "passive surface support must face upward")
+            _bounds(support["bounds_uv_m"], path + ".bounds_uv_m")
+            axis = "xyz".index(support["face"][0])
+            tangents = [other for other in range(3) if other != axis]
+            obstacle = obstacles[obstacle_id]
+            u0, u1, v0, v1 = support["bounds_uv_m"]
+            for tangent, lower, upper in zip(tangents, (u0, v0), (u1, v1)):
+                if lower < obstacle["min"][tangent] or upper > obstacle["max"][tangent]:
+                    _fail(
+                        path + ".bounds_uv_m",
+                        "patch must stay within the mounting face",
+                    )
+            stand_off = _number(
+                support["stand_off_m"], path + ".stand_off_m", positive=True
+            )
+            limit = {"surface": 0.02, "cable_tie": 0.05, "cable_tray": 0.10}[
+                support["kind"]
+            ]
+            if stand_off > limit:
+                _fail(
+                    path + ".stand_off_m", "support reach exceeds the prototype limit"
+                )
+            if support["kind"] == "cable_tie" and max(u1 - u0, v1 - v0) > 0.05 + 1e-10:
+                _fail(
+                    path + ".bounds_uv_m", "a tie patch must not exceed 0.05m per side"
+                )
+            if collection == "tray_candidates":
+                _object(support, "cable_ids", path)
+                cable_ids = _array(support["cable_ids"], path + ".cable_ids")
+                if len(cable_ids) < 2:
+                    _fail(
+                        path + ".cable_ids",
+                        "a tray candidate needs at least two cable IDs",
+                    )
+                for identifier in cable_ids:
+                    _string(identifier, path + ".cable_ids")
+                if len(set(cable_ids)) != len(cable_ids):
+                    _fail(path + ".cable_ids", "duplicate cable ID")
     for i, value in enumerate(_array(scene["cables"], "cables")):
         path = f"cables[{i}]"
         cable = entity(
@@ -294,3 +430,7 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                 _fail(path + ".baseline_path_points", "expected at least two points")
             for p in points:
                 _vector(p, 3, path + ".baseline_path_points")
+    cable_ids = {cable["id"] for cable in scene["cables"]}
+    for i, candidate in enumerate(graph.get("tray_candidates", [])):
+        if any(identifier not in cable_ids for identifier in candidate["cable_ids"]):
+            _fail(f"routing_graph.tray_candidates[{i}].cable_ids", "unknown cable ID")

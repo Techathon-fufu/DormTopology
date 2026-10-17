@@ -1,0 +1,247 @@
+{
+  "items": [
+    {
+      "id": "item_01",
+      "name": "数位板",
+      "category": "peripheral",
+      "usage_frequency": "high",
+      "pose": "flat",
+      "facing": "user",
+      "bbox_2d": [
+        0,
+        550,
+        300,
+        1000
+      ],
+      "estimated_size_m": [
+        0.2,
+        0.02,
+        0.02
+      ],
+      "model_source": "rodin",
+      "prefab_key": null,
+      "model_url": "Prefabmodel/item_01.glb",
+      "current_pos": [
+        1.294,
+        0.585,
+        0.77
+      ]
+    },
+    {
+      "id": "item_02",
+      "name": "卷尺",
+      "category": "misc",
+      "usage_frequency": "low",
+      "pose": "flat",
+      "facing": "user",
+      "bbox_2d": [
+        200,
+        450,
+        300,
+        550
+      ],
+      "estimated_size_m": [
+        0.05,
+        0.05,
+        0.02
+      ],
+      "model_source": "rodin",
+      "prefab_key": null,
+      "model_url": "Prefabmodel/item_02.glb",
+      "current_pos": [
+        1.19,
+        0.36,
+        0.77
+      ]
+    },
+    {
+      "id": "item_03",
+      "name": "展开笔记本",
+      "category": "peripheral",
+      "usage_frequency": "high",
+      "pose": "upright",
+      "facing": "user",
+      "bbox_2d": [
+        300,
+        0,
+        650,
+        550
+      ],
+      "estimated_size_m": [
+        0.35,
+        0.25,
+        0.15
+      ],
+      "model_source": "prefab",
+      "prefab_key": "laptop_expand",
+      "model_url": "Prefabmodel/laptop_expand.glb",
+      "current_pos": [
+        0.956,
+        0.36,
+        0.77
+      ]
+    },
+    {
+      "id": "item_04",
+      "name": "机械键盘",
+      "category": "peripheral",
+      "usage_frequency": "high",
+      "pose": "flat",
+      "facing": "user",
+      "bbox_2d": [
+        300,
+        550,
+        700,
+        750
+      ],
+      "estimated_size_m": [
+        0.3,
+        0.1,
+        0.05
+      ],
+      "model_source": "prefab",
+      "prefab_key": "keyboard",
+      "model_url": "Prefabmodel/keyboard.glb",
+      "current_pos": [
+        0.93,
+        0.46,
+        0.77
+      ]
+    },
+    {
+      "id": "item_05",
+      "name": "鼠标垫",
+      "category": "peripheral",
+      "usage_frequency": "high",
+      "pose": "flat",
+      "facing": "user",
+      "bbox_2d": [
+        700,
+        550,
+        1000,
+        800
+      ],
+      "estimated_size_m": [
+        0.3,
+        0.2,
+        0.01
+      ],
+      "model_source": "prefab",
+      "prefab_key": "mouse_pad",
+      "model_url": "Prefabmodel/mouse_pad.glb",
+      "current_pos": [
+        0.566,
+        0.485,
+        0.77
+      ]
+    },
+    {
+      "id": "item_06",
+      "name": "鼠标",
+      "category": "peripheral",
+      "usage_frequency": "high",
+      "pose": "flat",
+      "facing": "user",
+      "bbox_2d": [
+        800,
+        600,
+        900,
+        750
+      ],
+      "estimated_size_m": [
+        0.1,
+        0.05,
+        0.05
+      ],
+      "model_source": "prefab",
+      "prefab_key": "mouse",
+      "model_url": "Prefabmodel/mouse.glb",
+      "current_pos": [
+        0.566,
+        0.46,
+        0.77
+      ]
+    },
+    {
+      "id": "item_07",
+      "name": "纸巾包",
+      "category": "misc",
+      "usage_frequency": "high",
+      "pose": "flat",
+      "facing": "user",
+      "bbox_2d": [
+        900,
+        400,
+        1000,
+        500
+      ],
+      "estimated_size_m": [
+        0.1,
+        0.05,
+        0.02
+      ],
+      "model_source": "prefab",
+      "prefab_key": "tissue_box",
+      "model_url": "Prefabmodel/tissue_box.glb",
+      "current_pos": [
+        0.462,
+        0.335,
+        0.77
+      ]
+    },
+    {
+      "id": "item_08",
+      "name": "充电器",
+      "category": "misc",
+      "usage_frequency": "low",
+      "pose": "upright",
+      "facing": "user",
+      "bbox_2d": [
+        750,
+        350,
+        850,
+        450
+      ],
+      "estimated_size_m": [
+        0.1,
+        0.05,
+        0.08
+      ],
+      "model_source": "prefab",
+      "prefab_key": "charger",
+      "model_url": "Prefabmodel/charger.glb",
+      "current_pos": [
+        0.618,
+        0.31,
+        0.77
+      ]
+    },
+    {
+      "id": "item_09",
+      "name": "手机",
+      "category": "peripheral",
+      "usage_frequency": "high",
+      "pose": "flat",
+      "facing": "user",
+      "bbox_2d": [
+        950,
+        450,
+        1000,
+        550
+      ],
+      "estimated_size_m": [
+        0.15,
+        0.07,
+        0.008
+      ],
+      "model_source": "prefab",
+      "prefab_key": "phone",
+      "model_url": "Prefabmodel/phone.glb",
+      "current_pos": [
+        0.436,
+        0.36,
+        0.77
+      ]
+    }
+  ]
+}
