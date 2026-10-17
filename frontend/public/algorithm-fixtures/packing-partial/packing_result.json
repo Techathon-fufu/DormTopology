@@ -1,0 +1,229 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "packing_demo",
+  "scene_revision": 1,
+  "status": "partial",
+  "items": [
+    {
+      "item_id": "keyboard",
+      "name": "keyboard",
+      "model_url": null,
+      "current_pos": [
+        0.55,
+        0.77,
+        0.42
+      ],
+      "target_pos": [
+        0.69,
+        0.77,
+        0.51
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "desk_primary",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "mouse",
+      "name": "mouse",
+      "model_url": null,
+      "current_pos": [
+        0.9,
+        0.77,
+        0.45
+      ],
+      "target_pos": [
+        0.69,
+        0.77,
+        0.38
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "desk_primary",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "tablet",
+      "name": "tablet",
+      "model_url": null,
+      "current_pos": [
+        0.87,
+        0.77,
+        0.22
+      ],
+      "target_pos": [
+        1.0499999999999998,
+        0.77,
+        0.505
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "desk_primary",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "book",
+      "name": "book",
+      "model_url": null,
+      "current_pos": [
+        0.16,
+        0.77,
+        0.43
+      ],
+      "target_pos": [
+        0.635,
+        1.15,
+        0.175
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "shelf_2",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "cup",
+      "name": "cup",
+      "model_url": null,
+      "current_pos": [
+        0.1,
+        0.77,
+        0.2
+      ],
+      "target_pos": [
+        0.6975,
+        1.5,
+        0.24749999999999997
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "shelf_4",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "storage_box",
+      "name": "storage box",
+      "model_url": null,
+      "current_pos": [
+        1.28,
+        0.77,
+        0.39
+      ],
+      "target_pos": [
+        1.28,
+        0.77,
+        0.39
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "desk_right_surface",
+      "placement_status": "unplaced",
+      "reason_code": "no_space"
+    },
+    {
+      "item_id": "tissue",
+      "name": "tissue",
+      "model_url": null,
+      "current_pos": [
+        1.29,
+        0.77,
+        0.15
+      ],
+      "target_pos": [
+        0.47400000000000003,
+        1.15,
+        0.19999999999999996
+      ],
+      "target_rotation_y_rad": 1.5707963267948966,
+      "target_region_id": "shelf_2",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "charger",
+      "name": "charger",
+      "model_url": null,
+      "current_pos": [
+        0.57,
+        0.77,
+        0.15
+      ],
+      "target_pos": [
+        1.22,
+        0.45,
+        0.47
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "drawer",
+      "placement_status": "placed",
+      "reason_code": null
+    },
+    {
+      "item_id": "strip",
+      "name": "strip",
+      "model_url": null,
+      "current_pos": [
+        0.91,
+        0.77,
+        0.07
+      ],
+      "target_pos": [
+        0.91,
+        0.77,
+        0.07
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": "desk_left_surface",
+      "placement_status": "unchanged",
+      "reason_code": null
+    },
+    {
+      "item_id": "wall_power",
+      "name": "wall power",
+      "model_url": null,
+      "current_pos": [
+        1.22,
+        0.3,
+        -0.04
+      ],
+      "target_pos": [
+        1.22,
+        0.3,
+        -0.04
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": null,
+      "placement_status": "unchanged",
+      "reason_code": null
+    },
+    {
+      "item_id": "wall_network",
+      "name": "wall network",
+      "model_url": null,
+      "current_pos": [
+        1.35,
+        0.3,
+        -0.04
+      ],
+      "target_pos": [
+        1.35,
+        0.3,
+        -0.04
+      ],
+      "target_rotation_y_rad": 0.0,
+      "target_region_id": null,
+      "placement_status": "unchanged",
+      "reason_code": null
+    }
+  ],
+  "issues": [
+    {
+      "entity_id": "storage_box",
+      "code": "no_space",
+      "message": "Storage target has not been reached"
+    },
+    {
+      "entity_id": "storage_box",
+      "code": "no_space",
+      "message": "No tested target satisfies region, clearance, obstacle and item constraints"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "routing_length_exceeded",
+  "scene_revision": 1,
+  "status": "infeasible",
+  "cables": [
+    {
+      "id": "power",
+      "start_port_id": "source_port",
+      "end_port_id": "sink_port",
+      "cable_type": "power",
+      "thickness": "thin",
+      "mode": "slot",
+      "diameter_m": 0.004,
+      "status": "failed",
+      "curve_segments": [],
+      "path_points": [],
+      "path_length_m": null,
+      "reason_code": "length_exceeded",
+      "support_check": {
+        "status": "not_evaluated",
+        "max_unsupported_span_m": null,
+        "support_ids": []
+      }
+    }
+  ],
+  "metrics": {
+    "exposed_length_m": null,
+    "baseline_exposed_length_m": null
+  },
+  "issues": [
+    {
+      "entity_id": "power",
+      "code": "length_exceeded",
+      "message": "Path length plus slack exceeds the cable length"
+    }
+  ],
+  "underside_tray_optimizations": []
+}

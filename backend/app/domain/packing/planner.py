@@ -172,6 +172,7 @@ def plan_packing(scene: Scene) -> PackingResult:
     movable = sorted(
         (i for i in scene["items"] if not i["fixed"]),
         key=lambda i: (
+            -i.get("placement_priority", 0),
             len(set(i["allowed_region_ids"])),
             -i["size_m"][0] * i["size_m"][2],
             -FREQUENCY_WEIGHT[i["usage_frequency"]],

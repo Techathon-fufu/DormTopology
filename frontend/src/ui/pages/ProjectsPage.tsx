@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { FolderOpen, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { FlaskConical, FolderOpen, Plus, Sparkles, Trash2 } from 'lucide-react'
 import type { Project } from '@/types/project'
 import { DEMO_PROJECT_ID } from '@/data/demoProject'
 import { useProjectsStore } from '@/state/projectsStore'
@@ -96,6 +96,10 @@ export function ProjectsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => navigate('/algorithm-lab')}>
+            <FlaskConical className="h-4 w-4" />
+            算法验证
+          </Button>
           <Button onClick={() => navigate('/projects/new')}>
             <Plus className="h-4 w-4" />
             创建项目

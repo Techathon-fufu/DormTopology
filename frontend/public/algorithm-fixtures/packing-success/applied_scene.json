@@ -1,0 +1,1108 @@
+{
+  "schema_version": "1.0",
+  "scene_id": "packing_demo",
+  "scene_revision": 2,
+  "baseline_id": "packing_baseline_1",
+  "template_id": "demo_desk_v1",
+  "desk": {
+    "width_m": 1.45,
+    "depth_m": 0.6,
+    "top_height_m": 0.77
+  },
+  "wall": {
+    "z_m": -0.04,
+    "bounds_xy_m": [
+      0.0,
+      1.45,
+      0.0,
+      1.9
+    ]
+  },
+  "regions": [
+    {
+      "id": "desk_left_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        0,
+        1.09,
+        0,
+        0.6
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "desk_right_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        1.13,
+        1.45,
+        0,
+        0.6
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "desk_hole_back_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        1.09,
+        1.13,
+        0,
+        0.01
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "desk_hole_front_surface",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        1.09,
+        1.13,
+        0.05,
+        0.6
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "desk_primary",
+      "surface_y_m": 0.77,
+      "bounds_xz_m": [
+        0.22,
+        1.16,
+        0.18,
+        0.58
+      ],
+      "clearance_height_m": 1.0
+    },
+    {
+      "id": "shelf_1",
+      "surface_y_m": 1.15,
+      "bounds_xz_m": [
+        0.025,
+        0.365,
+        0.025,
+        0.285
+      ],
+      "clearance_height_m": 0.3
+    },
+    {
+      "id": "shelf_2",
+      "surface_y_m": 1.15,
+      "bounds_xz_m": [
+        0.395,
+        0.735,
+        0.025,
+        0.285
+      ],
+      "clearance_height_m": 0.3
+    },
+    {
+      "id": "shelf_3",
+      "surface_y_m": 1.5,
+      "bounds_xz_m": [
+        0.025,
+        0.365,
+        0.025,
+        0.285
+      ],
+      "clearance_height_m": 0.3
+    },
+    {
+      "id": "shelf_4",
+      "surface_y_m": 1.5,
+      "bounds_xz_m": [
+        0.395,
+        0.735,
+        0.025,
+        0.285
+      ],
+      "clearance_height_m": 0.3
+    },
+    {
+      "id": "drawer",
+      "surface_y_m": 0.45,
+      "bounds_xz_m": [
+        1.18,
+        1.42,
+        0.08,
+        0.5
+      ],
+      "clearance_height_m": 0.22
+    }
+  ],
+  "items": [
+    {
+      "id": "keyboard",
+      "name": "keyboard",
+      "category": "keyboard",
+      "size_m": [
+        0.4,
+        0.03,
+        0.14
+      ],
+      "position": [
+        0.69,
+        0.77,
+        0.51
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "high",
+      "allowed_region_ids": [
+        "desk_primary"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "keyboard_port",
+          "type": "usb",
+          "local_position": [
+            0,
+            0.015,
+            -0.07
+          ],
+          "local_direction": [
+            0,
+            0,
+            -1
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "mouse",
+      "name": "mouse",
+      "category": "mouse",
+      "size_m": [
+        0.06,
+        0.03,
+        0.1
+      ],
+      "position": [
+        0.69,
+        0.77,
+        0.38
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "high",
+      "allowed_region_ids": [
+        "desk_primary"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "tablet",
+      "name": "tablet",
+      "category": "tablet",
+      "size_m": [
+        0.22,
+        0.025,
+        0.15
+      ],
+      "position": [
+        1.0499999999999998,
+        0.77,
+        0.505
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "high",
+      "allowed_region_ids": [
+        "desk_primary"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "tablet_port",
+          "type": "usb",
+          "local_position": [
+            0.11,
+            0.0125,
+            0
+          ],
+          "local_direction": [
+            1,
+            0,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "book",
+      "name": "book",
+      "category": "book",
+      "size_m": [
+        0.2,
+        0.05,
+        0.22
+      ],
+      "position": [
+        0.635,
+        1.15,
+        0.175
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [
+        "shelf_1",
+        "shelf_2",
+        "shelf_3",
+        "shelf_4"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "cup",
+      "name": "cup",
+      "category": "cup",
+      "size_m": [
+        0.075,
+        0.12,
+        0.075
+      ],
+      "position": [
+        0.6975,
+        1.5,
+        0.24749999999999997
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "high",
+      "allowed_region_ids": [
+        "shelf_1",
+        "shelf_2",
+        "shelf_3",
+        "shelf_4"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "storage_box",
+      "name": "storage box",
+      "category": "storage_box",
+      "size_m": [
+        0.15,
+        0.12,
+        0.16
+      ],
+      "position": [
+        1.255,
+        0.45,
+        0.42
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "low",
+      "allowed_region_ids": [
+        "drawer"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "tissue",
+      "name": "tissue",
+      "category": "tissue",
+      "size_m": [
+        0.17,
+        0.09,
+        0.12
+      ],
+      "position": [
+        0.47400000000000003,
+        1.15,
+        0.19999999999999996
+      ],
+      "rotation_y_rad": 1.5707963267948966,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [
+        "shelf_1",
+        "shelf_2",
+        "shelf_3",
+        "shelf_4"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "charger",
+      "name": "charger",
+      "category": "charger",
+      "size_m": [
+        0.08,
+        0.04,
+        0.06
+      ],
+      "position": [
+        1.22,
+        0.45,
+        0.30899999999999994
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": false,
+      "usage_frequency": "low",
+      "allowed_region_ids": [
+        "drawer"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "charger_port",
+          "type": "power_sink",
+          "local_position": [
+            0.04,
+            0.02,
+            0
+          ],
+          "local_direction": [
+            1,
+            0,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "strip",
+      "name": "strip",
+      "category": "power_strip",
+      "size_m": [
+        0.3,
+        0.04,
+        0.06
+      ],
+      "position": [
+        0.91,
+        0.77,
+        0.07
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": true,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [
+        "desk_left_surface"
+      ],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "strip_socket_1",
+          "type": "power_source",
+          "local_position": [
+            -0.1,
+            0.04,
+            0
+          ],
+          "local_direction": [
+            0,
+            1,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        },
+        {
+          "id": "strip_socket_2",
+          "type": "power_source",
+          "local_position": [
+            -0.04000000000000001,
+            0.04,
+            0
+          ],
+          "local_direction": [
+            0,
+            1,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        },
+        {
+          "id": "strip_socket_3",
+          "type": "power_source",
+          "local_position": [
+            0.01999999999999999,
+            0.04,
+            0
+          ],
+          "local_direction": [
+            0,
+            1,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        },
+        {
+          "id": "strip_socket_4",
+          "type": "power_source",
+          "local_position": [
+            0.07999999999999999,
+            0.04,
+            0
+          ],
+          "local_direction": [
+            0,
+            1,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        },
+        {
+          "id": "strip_in",
+          "type": "power_sink",
+          "local_position": [
+            0.15,
+            0.02,
+            0
+          ],
+          "local_direction": [
+            1,
+            0,
+            0
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      },
+      "socket_count": 4
+    },
+    {
+      "id": "wall_power",
+      "name": "wall power",
+      "category": "wall_socket",
+      "size_m": [
+        0.07,
+        0.09,
+        0.015
+      ],
+      "position": [
+        1.22,
+        0.3,
+        -0.04
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": true,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "wall_power_port",
+          "type": "power_source",
+          "local_position": [
+            0,
+            0.04,
+            0.0075
+          ],
+          "local_direction": [
+            0,
+            0,
+            1
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    },
+    {
+      "id": "wall_network",
+      "name": "wall network",
+      "category": "wall_network",
+      "size_m": [
+        0.07,
+        0.09,
+        0.015
+      ],
+      "position": [
+        1.35,
+        0.3,
+        -0.04
+      ],
+      "rotation_y_rad": 0.0,
+      "dimensions_source": "template",
+      "dimensions_confirmed": true,
+      "fixed": true,
+      "usage_frequency": "medium",
+      "allowed_region_ids": [],
+      "allowed_rotations_y_rad": [
+        0.0,
+        1.5707963267948966
+      ],
+      "collision": {
+        "type": "box"
+      },
+      "ports": [
+        {
+          "id": "wall_network_port",
+          "type": "network",
+          "local_position": [
+            0,
+            0.04,
+            0.0075
+          ],
+          "local_direction": [
+            0,
+            0,
+            1
+          ],
+          "capacity": 1,
+          "confirmed": true
+        }
+      ],
+      "image_url": null,
+      "model_url": null,
+      "generation": {
+        "task_id": null,
+        "status": "not_requested",
+        "source": "placeholder",
+        "error": null
+      }
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "desk_left",
+      "min": [
+        0,
+        0.745,
+        0
+      ],
+      "max": [
+        1.09,
+        0.77,
+        0.6
+      ]
+    },
+    {
+      "id": "desk_right",
+      "min": [
+        1.13,
+        0.745,
+        0
+      ],
+      "max": [
+        1.45,
+        0.77,
+        0.6
+      ]
+    },
+    {
+      "id": "desk_hole_back",
+      "min": [
+        1.09,
+        0.745,
+        0
+      ],
+      "max": [
+        1.13,
+        0.77,
+        0.01
+      ]
+    },
+    {
+      "id": "desk_hole_front",
+      "min": [
+        1.09,
+        0.745,
+        0.05
+      ],
+      "max": [
+        1.13,
+        0.77,
+        0.6
+      ]
+    },
+    {
+      "id": "shelf_lower",
+      "min": [
+        0,
+        1.12,
+        0
+      ],
+      "max": [
+        0.76,
+        1.15,
+        0.3
+      ]
+    },
+    {
+      "id": "shelf_upper",
+      "min": [
+        0,
+        1.47,
+        0
+      ],
+      "max": [
+        0.76,
+        1.5,
+        0.3
+      ]
+    },
+    {
+      "id": "shelf_roof",
+      "min": [
+        0,
+        1.8,
+        0
+      ],
+      "max": [
+        0.76,
+        1.83,
+        0.3
+      ]
+    },
+    {
+      "id": "shelf_left",
+      "min": [
+        0,
+        0.77,
+        0
+      ],
+      "max": [
+        0.02,
+        1.83,
+        0.3
+      ]
+    },
+    {
+      "id": "shelf_divider",
+      "min": [
+        0.37,
+        0.77,
+        0
+      ],
+      "max": [
+        0.39,
+        1.83,
+        0.3
+      ]
+    },
+    {
+      "id": "shelf_right",
+      "min": [
+        0.74,
+        0.77,
+        0
+      ],
+      "max": [
+        0.76,
+        1.83,
+        0.3
+      ]
+    },
+    {
+      "id": "drawer_base",
+      "min": [
+        1.16,
+        0.43,
+        0.06
+      ],
+      "max": [
+        1.44,
+        0.45,
+        0.52
+      ]
+    },
+    {
+      "id": "drawer_left",
+      "min": [
+        1.16,
+        0.45,
+        0.06
+      ],
+      "max": [
+        1.18,
+        0.69,
+        0.52
+      ]
+    },
+    {
+      "id": "drawer_right",
+      "min": [
+        1.42,
+        0.45,
+        0.06
+      ],
+      "max": [
+        1.44,
+        0.69,
+        0.52
+      ]
+    },
+    {
+      "id": "drawer_back",
+      "min": [
+        1.18,
+        0.45,
+        0.06
+      ],
+      "max": [
+        1.42,
+        0.69,
+        0.08
+      ]
+    },
+    {
+      "id": "drawer_front",
+      "min": [
+        1.18,
+        0.45,
+        0.5
+      ],
+      "max": [
+        1.42,
+        0.69,
+        0.52
+      ]
+    },
+    {
+      "id": "drawer_roof",
+      "min": [
+        1.16,
+        0.67,
+        0.06
+      ],
+      "max": [
+        1.44,
+        0.69,
+        0.52
+      ]
+    },
+    {
+      "id": "backboard",
+      "min": [
+        0,
+        0.1,
+        -0.015
+      ],
+      "max": [
+        1.45,
+        0.74,
+        -0.005
+      ]
+    }
+  ],
+  "reserved_zones": [
+    {
+      "id": "front_operation",
+      "min": [
+        0.25,
+        0.77,
+        0.585
+      ],
+      "max": [
+        1.15,
+        1.1,
+        0.6
+      ]
+    }
+  ],
+  "exposure_zones": [
+    {
+      "id": "desktop_exposure",
+      "min": [
+        0,
+        0.77,
+        0
+      ],
+      "max": [
+        1.45,
+        1.0,
+        0.6
+      ]
+    }
+  ],
+  "routing_graph": {
+    "nodes": [
+      {
+        "id": "slot_top",
+        "position": [
+          1.11,
+          0.81,
+          0.03
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "slot_hole",
+        "position": [
+          1.11,
+          0.7,
+          0.03
+        ],
+        "kind": "slot"
+      },
+      {
+        "id": "slot_bottom",
+        "position": [
+          1.11,
+          0.3,
+          0.03
+        ],
+        "kind": "fixing_point"
+      },
+      {
+        "id": "back_top",
+        "position": [
+          1.11,
+          0.81,
+          -0.08
+        ],
+        "kind": "corner"
+      },
+      {
+        "id": "back_bottom",
+        "position": [
+          1.11,
+          0.3,
+          -0.08
+        ],
+        "kind": "fixing_point"
+      }
+    ],
+    "edges": [
+      {
+        "id": "slot_down",
+        "from_node_id": "slot_top",
+        "to_node_id": "slot_hole",
+        "modes": [
+          "slot"
+        ],
+        "clearance_radius_m": 0.015,
+        "exposed": false
+      },
+      {
+        "id": "slot_vertical",
+        "from_node_id": "slot_hole",
+        "to_node_id": "slot_bottom",
+        "modes": [
+          "slot"
+        ],
+        "clearance_radius_m": 0.015,
+        "exposed": false
+      },
+      {
+        "id": "back_vertical",
+        "from_node_id": "back_top",
+        "to_node_id": "back_bottom",
+        "modes": [
+          "backboard"
+        ],
+        "clearance_radius_m": 0.015,
+        "exposed": false
+      }
+    ]
+  },
+  "cables": [
+    {
+      "id": "strip_bus",
+      "start_port_id": "strip_in",
+      "end_port_id": "wall_power_port",
+      "cable_type": "power",
+      "thickness": "thin",
+      "length_m": 3.0,
+      "diameter_m": 0.004,
+      "min_bend_radius_m": 0.015,
+      "slack_m": 0.05,
+      "mode": "slot"
+    },
+    {
+      "id": "charger_power",
+      "start_port_id": "charger_port",
+      "end_port_id": "strip_socket_1",
+      "cable_type": "power",
+      "thickness": "thin",
+      "length_m": 3.0,
+      "diameter_m": 0.004,
+      "min_bend_radius_m": 0.015,
+      "slack_m": 0.05,
+      "mode": "slot"
+    },
+    {
+      "id": "keyboard_usb",
+      "start_port_id": "keyboard_port",
+      "end_port_id": "tablet_port",
+      "cable_type": "usb",
+      "thickness": "thin",
+      "length_m": 3.0,
+      "diameter_m": 0.004,
+      "min_bend_radius_m": 0.015,
+      "slack_m": 0.05,
+      "mode": "slot"
+    }
+  ]
+}
