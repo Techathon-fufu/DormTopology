@@ -1,13 +1,11 @@
 import { Dropdown } from '@/ui/kit/dropdown'
 import {
-  Cable,
   CheckCircle2,
   Eye,
   EyeOff,
   GitCompareArrows,
   MoreHorizontal,
   ChevronDown,
-  LayoutGrid,
   Loader2,
   PanelLeft,
   PanelRight,
@@ -16,7 +14,6 @@ import {
   Save,
   Sparkles,
   Undo2,
-  Wand2,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Project } from '@/types/project'
@@ -25,7 +22,6 @@ import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
 import { Select } from '@/ui/kit/primitives'
-import { Segmented } from '@/ui/kit/segmented'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { usePlansStore } from '@/state/plansStore'
@@ -73,16 +69,13 @@ interface ToolbarProps {
 export function Toolbar({
   project,
   onOpenOrganize,
-  onPlanCables,
   onSavePlan,
   onOpenPlans,
   plansOpen,
-  busy,
   onToggleLeftPanel,
   onToggleRightPanel,
 }: ToolbarProps) {
   const mode = useWorkspaceStore((s) => s.mode)
-  const setMode = useWorkspaceStore((s) => s.setMode)
   const viewPreset = useWorkspaceStore((s) => s.viewPreset)
   const setViewPreset = useWorkspaceStore((s) => s.setViewPreset)
   const resetView = useWorkspaceStore((s) => s.resetView)
@@ -93,7 +86,6 @@ export function Toolbar({
   /** 空间整理预览 / 动画进行中：禁止切到走线模式（避免两种会话状态互相干扰） */
   const previewBlocking = useOrganizeStore((s) => s.isPreviewBlocking())
   const applying = useOrganizeStore((s) => s.applying)
-  const staleCount = project.cables.filter((c) => c.status === 'stale').length
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
   const candidateCount = usePlansStore((s) => (s.candidates[project.id] ?? []).length)
@@ -114,16 +106,10 @@ export function Toolbar({
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {project.isDemo ? <DataBadge kind="demo" /> : null}
           <Button variant="ghost" size="icon" className="lg:hidden" aria-label="打开物品面板" title="打开物品面板" onClick={onToggleLeftPanel}><PanelLeft className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="xl:hidden" aria-label="打开属性面板" title="打开属性面板" onClick={onToggleRightPanel}><PanelRight className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="xl:hidden" aria-label="打开引导与方案" title="打开引导与方案" onClick={onToggleRightPanel}><PanelRight className="h-4 w-4" /></Button>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-5">
-        <Segmented value={mode} onChange={setMode} options={[
-          { value: 'organize', label: '整理物品', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
-          { value: 'cable', label: '规划走线', icon: <Cable className="h-3.5 w-3.5" />, disabled: previewBlocking,
-            title: previewBlocking ? '预览进行中，请先接受方案或取消预览' : '接口管理与路径规划' },
-        ]} />
-        <div className="hidden h-5 w-px bg-border md:block" />
         <div className="hidden items-center gap-0.5 md:flex">
           <Button variant="ghost" size="icon" title="撤销（Ctrl+Z）" aria-label="撤销" disabled={!canUndo || previewBlocking} onClick={() => undo(project.id)}><Undo2 className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled={!canRedo || previewBlocking} onClick={() => redo(project.id)}><Redo2 className="h-4 w-4" /></Button>
@@ -132,14 +118,10 @@ export function Toolbar({
           <option value="persp">透视视角</option><option value="top">俯视视角</option><option value="front">正面视角</option><option value="desk">桌面视角</option>
         </Select>
         <div className="ml-auto flex items-center gap-2">
-          {mode === 'organize' ? (
-            <Button size="sm" onClick={onOpenOrganize} title="打开空间整理面板：分区归位与整理方案"><Wand2 className="h-4 w-4" /><span>{previewBlocking ? '查看整理方案' : '生成整理方案'}</span></Button>
-          ) : (
-            <Button size="sm" disabled={busy !== null || project.cables.length === 0} onClick={onPlanCables} title={project.cables.length === 0 ? '先点击两个接口建立连接' : '规划全部走线'}>
-              {busy === 'cable' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cable className="h-4 w-4" />}
-              {busy === 'cable' ? '规划中' : staleCount > 0 ? `更新走线 · ${staleCount}` : '规划全部走线'}
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={mode === 'organize' ? onOpenOrganize : onToggleRightPanel}
+            title={mode === 'organize' ? '打开空间整理面板：分区归位与整理方案' : '打开理线引导与方案'}>
+            <PanelRight className="h-4 w-4" />任务与方案
+          </Button>
           <Button
             variant={plansOpen ? 'primary' : 'outline'}
             size="sm"

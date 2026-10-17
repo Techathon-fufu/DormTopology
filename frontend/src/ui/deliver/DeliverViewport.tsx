@@ -16,7 +16,8 @@ import type { CableConnection, Project, SceneObject } from '@/types/project'
 import { CABLE_KIND_META } from '@/types/project'
 import { hasUsableCableRoute } from '@/scene/cables'
 import { cablePathSamples, createCableTube } from '@/scene/cableGeometry'
-import { CATEGORY_COLORS, PrimitiveModel } from '@/scene/models'
+import { CATEGORY_COLORS } from '@/scene/models'
+import { ObjectModel } from '@/scene/ObjectModel'
 import { RoomShell } from '@/scene/RoomShell'
 import { basicMaterial, ringGeometry } from '@/scene/resources'
 import { detectWebGL } from '@/lib/webgl'
@@ -138,9 +139,9 @@ function DeliverObjectMesh({
       }}
     >
       <group position={[0, h / 2, 0]}>
-        <PrimitiveModel
+        <ObjectModel
+          object={object}
           shape={object.model.shape}
-          dims={object.dimensions}
           color={color}
           sockets={object.powerStrip?.socketCount}
         />

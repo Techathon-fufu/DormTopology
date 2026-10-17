@@ -93,8 +93,9 @@ def generate_single_item(
     return result
 
 
-def update_detection_json(item_id: str, model_rel_path: str):
+def update_detection_json(item_id: str, model_rel_path: str, collision: dict | None = None):
     candidate_json_paths = [
+        PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_pose_test.json",
         PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_round2.json",
         PROJECT_ROOT / "vlm" / "results" / "vlm_result_round2.json",
     ]
@@ -105,7 +106,9 @@ def update_detection_json(item_id: str, model_rel_path: str):
                 for item in data.get("items", []):
                     if item.get("id") == item_id:
                         item["model_url"] = model_rel_path
-                        print(f"[+] Linked model '{model_rel_path}' to {item_id} in {json_path.name}")
+                        if collision is not None:
+                            item["collision"] = collision
+                        print(f"[+] Linked model '{model_rel_path}' and collision to {item_id} in {json_path.name}")
                 json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
             except Exception as e:
                 print(f"[!] Warning: Failed to update {json_path}: {e}")
@@ -153,7 +156,14 @@ def main():
         print(f"[*] Task completed! Downloading asset to {output_dir / args.resume_name}...", flush=True)
         saved = client.download_assets(args.resume_uuid, output_dir, target_filename=args.resume_name)
         print(f"[+] Download complete: {saved}", flush=True)
-        update_detection_json("item_05", f"{ASSET_DIR_NAME}/{args.resume_name}")
+        col = None
+        try:
+            from backend.app.domain.geometry.collision_generator import generate_collision_from_glb, save_collision_json
+            col = generate_collision_from_glb(output_dir / args.resume_name)
+            save_collision_json(col, PROJECT_ROOT / ASSET_DIR_NAME / "collisionsize" / "item_05.collision.json")
+        except Exception as e:
+            print(f"[!] Warning: Failed to generate collision: {e}")
+        update_detection_json("item_05", f"{ASSET_DIR_NAME}/{args.resume_name}", col)
         return
 
     if args.image:
@@ -171,6 +181,14 @@ def main():
             tier=args.tier,
             use_agentic=not args.gen25,
         )
+        col = None
+        try:
+            from backend.app.domain.geometry.collision_generator import generate_collision_from_glb, save_collision_json
+            col = generate_collision_from_glb(output_dir / model_name)
+            save_collision_json(col, PROJECT_ROOT / ASSET_DIR_NAME / "collisionsize" / f"{args.name or img_p.stem}.collision.json")
+        except Exception as e:
+            print(f"[!] Warning: Failed to generate collision: {e}")
+        update_detection_json("custom", f"{ASSET_DIR_NAME}/{model_name}", col)
         return
 
     items_to_process = [args.item] if args.item != "all" else list(DEFAULT_CANDIDATE_ITEMS.keys())
@@ -195,7 +213,14 @@ def main():
             use_agentic=not args.gen25,
         )
         rel_model_path = f"{ASSET_DIR_NAME}/{model_name}"
-        update_detection_json(item_key, rel_model_path)
+        col = None
+        try:
+            from backend.app.domain.geometry.collision_generator import generate_collision_from_glb, save_collision_json
+            col = generate_collision_from_glb(output_dir / model_name)
+            save_collision_json(col, PROJECT_ROOT / ASSET_DIR_NAME / "collisionsize" / f"{item_key}.collision.json")
+        except Exception as e:
+            print(f"[!] Warning: Failed to generate collision: {e}")
+        update_detection_json(item_key, rel_model_path, col)
 
 
 if __name__ == "__main__":

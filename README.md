@@ -20,13 +20,11 @@
 | --- | --- |
 | `frontend/` | 前端应用（成员 A）：空间配置、照片导入与物品确认、三维工作台、整理预览、走线规划与执行指南；整理和走线固定调用真实后端，识别与模型生成的模拟数据单独标记。提供示例导览与[历史验收说明](frontend/docs/demo-and-acceptance.md)，运行方式与已知差异见 [frontend/README.md](frontend/README.md) |
 | `Prefabmodel/` | 模型资产与 prefab 清单；独立单品位于根层，拆分家具位于 `dormdesk_parts/`，旧整组 `dormdesk.glb` 保留作历史核验。路由约定与实际资产检查见 [tests/README.md](tests/README.md) 与 [tests/test_rodin_pipeline/test_prefab_routing.py](tests/test_rodin_pipeline/test_prefab_routing.py) |
-| `objects/dorm_desk.blend` | 桌体 Blender 源文件；尺寸、原点、轴向与网格仍需核验 |
-| `objects/tissue_box.obj` | 纸巾盒 OBJ 资产；运行时导入前需校正尺寸与轴向 |
-| `objects/杯子.obj` | 杯子 OBJ 资产；运行时导入前需校正尺寸与轴向 |
+| `objects/` | 历史 Blender/OBJ 源资产，仅保留，不用于当前默认模型或算法验证 |
 | `algorithm/cable_routing/` | 旧走线模块的兼容导出，不再承载业务实现 |
 | `backend/app/domain/` | C/D 的纯 Python 布局与走线算法、共享几何、输入校验及领域类型；调用与证据见[布局算法交接](docs/packing_algorithm.md)和[走线算法说明](docs/routing_algorithm_plan.md) |
 
-默认示例已接入 `Prefabmodel/dormdesk_parts/` 的桌体与三个抽屉 GLB，运行时副本位于 `frontend/public/models/dormdesk_parts/`。四份资产使用共同变换，L 形桌面、五个书架支撑面、三个静态抽屉内腔和 75 个保守碰撞盒同时用于显示、拖拽校验及后端规划输入；加载失败时使用同源简化几何。旧项目保留参数化家具，旧示例升级前归档。生成、核验命令与限制见[桌体接入说明](frontend/docs/desk-model.md)。`objects/` 源资产不由运行时生成流程覆盖；真实 Rodin 独立物品接入仍按任务清单验收。
+默认示例已接入 `Prefabmodel/dormdesk_parts/` 的桌体与三个抽屉 GLB，运行时副本位于 `frontend/public/models/dormdesk_parts/`。四份配套碰撞 JSON 生成 L 形桌面、五个书架支撑面、三个静态抽屉内腔和 75 个保守碰撞盒，用共同变换支持显示、拖拽校验及后端规划输入；单品碰撞来自 `Prefabmodel/collisionsize/`，随编辑尺寸同步缩放。加载失败时使用同源简化几何。旧项目保留参数化家具，旧示例升级前归档。生成、核验命令与限制见[桌体接入说明](frontend/docs/desk-model.md)。当前模型与碰撞流程不读取 `objects/`；真实 Rodin 独立物品接入仍按任务清单验收。
 
 当前产品默认示例为 17 件物品、7 根线：笔记本与手机连接适配器的两个 USB 输出，适配器另有独立 AC 输入连接插排。该示例尚未连接插排总线，不替代首版规定的“8 件待整理物品、3 根线含插排总线”验收；完整新家具走线仍以实际运行结果与待办清单为准。
 
@@ -78,3 +76,9 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 新增后端时按[分层架构与依赖方向](docs/implementation_roadmap.md#分层与依赖方向)组织工程：`domain` 承载规则与算法，`service` 编排用例，`api` 处理 HTTP，`db` 与外部适配器实现存储及供应商能力。当前走线模块已保持纯函数和无外部 I/O；后续由统一装配入口接入 service，不能把 Web、数据库或凭证依赖放回算法模块。
 
 前端安装、启动与环境变量见 [frontend/README.md](frontend/README.md)，后端见 [backend/README.md](backend/README.md)。先启动后端，再在 `frontend/` 运行 `npm run dev` 即会调用真实整理与理线；Vite 默认将 `/api/v1` 代理到 `http://127.0.0.1:8000`。`VITE_API_MODE=mock|real` 仅控制识别与模型生成，旧 `VITE_ORGANIZATION_API_MODE`、`VITE_CABLE_API_MODE` 和浏览器模式覆盖均不再生效。真实请求失败不会回退到本地规则规划。
+
+## 工作流与预制模型整合
+
+`codex/merge-workflow-prefab` 在 main `3bbc18e` 的产品真实整理、走线与固定家具几何之上，合入独立 `/workflow`（完整契约场景、基线、算法、对比和 Markdown 指南），以及 12 个单品预制 GLB、8 件示例模型替换和三个独立抽屉推拉。产品 API 保留 `/api/v1`，独立工作流使用 `/api/v1/workflow`，由同一应用工厂装配。预制模型外观与碰撞随编辑尺寸同步。示例种子 v6 将键鼠区左移 6cm，保留 55cm 宽度，为真实笔记本留出侧位；旧示例归档保留。17 件真实模型布局已通过算法、前端完整碰撞与应用检查，16 件可移动物品全部归位，零未放置；相交问题按实际物品对统计，修复小数计数。实际验收与边界见[整合记录](docs/merge_workflow_prefab_acceptance.md)。
+
+同步 `main` 的 `7ebdec2` 后，产品示例升级为 v7：保留 55cm 键鼠区，将中线设在左侧 10cm，为真实展开笔记本与显示器保留 20mm 净距；旧示例先归档。保留七线、桌后缘通道和理线配件，走线先预览、接受后应用；更换预制模型会使旧走线及候选失效。独立 `/workflow` 仍按导入契约运行，不自动采用产品工作台的默认间距与线缆参数。

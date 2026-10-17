@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { OrbitControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { useDrawerStore } from '@/state/drawerStore'
+import { useObjectResizeStore } from '@/state/objectResizeStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
 
@@ -9,16 +11,18 @@ const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [numb
   persp: { pos: [1.35, 1.2, 1.9], target: [0, 0.78, 0.35] },
   front: { pos: [0, 1.05, 3.0], target: [0, 0.95, 0.4] },
   top: { pos: [0, 2.7, 0.46], target: [0, 0.75, 0.45] },
-  left: { pos: [-2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
+  // 从室内斜前方看抽屉，避免左墙遮挡操作面。
+  left: { pos: [-1.05, 1.35, 1.95], target: [0.55, 0.6, 0.7] },
   right: { pos: [2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
   desk: { pos: [0.75, 1.9, 2.0], target: [0, 0.85, 0.45] },
 }
+const FIXED_PERSPECTIVE = { pos: [.05, 1.45, 2.8], target: [.07, .96, .35] } as const
 
 /**
  * 视角预设 + 轨道控制：
  * - 切换预设 / 点击「重置视角」（viewNonce 变化）时移动相机与目标点；
  * - 用户自由旋转、平移、缩放（左键空白处旋转 · 右键平移 · 滚轮缩放）；
- * - 拖拽物品期间禁用轨道控制，避免与物品拖拽冲突。
+ * - 拖拽物品 / 抽屉推拉期间禁用轨道控制，避免与拖拽冲突。
  *
  * 小画布（空间配置预览）可传 zoomOut / targetShiftY：正式模型整体更高更大，
  * 默认机位按桌面区域取景，预览需要拉远并抬高注视点才能看到完整家具。
@@ -40,12 +44,15 @@ export function CameraRig({
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
   const nonce = useWorkspaceStore((s) => s.viewNonce)
-  const dragActive = useWorkspaceStore((s) => s.drag !== null)
+  const objectDragActive = useWorkspaceStore((s) => s.drag !== null)
+  const drawerDragActive = useDrawerStore((s) => s.draggingId !== null)
+  const resizeActive = useObjectResizeStore((s) => s.preview !== null)
+  const currentPreset = furnitureModel === 'dormdesk-v1' && preset === 'persp'
+    ? FIXED_PERSPECTIVE : PRESETS[preset]
 
   useEffect(() => {
     // Approach the fixed L desk from the front so its ladder does not obscure the workspace.
-    const p = furnitureModel === 'dormdesk-v1' && preset === 'persp'
-      ? { pos: [.05, 1.45, 2.8], target: [.07, .96, .35] } : PRESETS[preset]
+    const p = currentPreset
     const distanceScale = zoomOut * Math.max(1, 1.1 / (size.width / Math.max(1, size.height)))
     const tx = p.target[0]
     const ty = p.target[1] + targetShiftY
@@ -60,13 +67,13 @@ export function CameraRig({
       controls.target.set(tx, ty, tz)
       controls.update()
     }
-  }, [preset, nonce, camera, size.width, size.height, zoomOut, targetShiftY, furnitureModel])
+  }, [currentPreset, nonce, camera, size.width, size.height, zoomOut, targetShiftY])
 
   return (
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enabled={!dragActive}
+      enabled={!objectDragActive && !drawerDragActive && !resizeActive}
       enableDamping
       dampingFactor={0.08}
       enablePan
@@ -75,7 +82,7 @@ export function CameraRig({
       minDistance={0.5}
       maxDistance={8}
       maxPolarAngle={Math.PI / 2 - 0.02}
-      target={[0, 0.9, 0.45]}
+      target={[currentPreset.target[0], currentPreset.target[1] + targetShiftY, currentPreset.target[2]]}
     />
   )
 }

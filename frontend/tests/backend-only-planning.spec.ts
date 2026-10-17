@@ -234,6 +234,9 @@ test('plans a verified route without asking for actual length and shows the comp
   const sceneResponse = await saved
   expect(sceneResponse.status()).toBe(200)
   expect((await sceneResponse.json()).cables[0].length_m).toBeNull()
+  await expect(page.locator('aside:visible').getByText('理线方案预览（本地）', {exact:true})).toBeVisible({timeout:30_000})
+  expect((await readProject(page,id)).cables[0].route.verification).toBeUndefined()
+  await page.getByRole('button',{name:'接受理线方案',exact:true}).click()
   await expect.poll(async () => (await readProject(page, id)).cables[0].route.verification?.status, { timeout: 30_000 }).toBe('valid')
   const cable = (await readProject(page, id)).cables[0]
   expect(cable.actualLengthM).toBeUndefined()

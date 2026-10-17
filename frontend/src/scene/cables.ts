@@ -116,9 +116,9 @@ export function invalidateCableRoutes(cables: CableConnection[]): CableConnectio
   return changed ? next : cables
 }
 
-/** Appearance replacement keeps geometry; primitive shape changes do not. */
+/** Appearance replacement keeps geometry; primitive and prefab changes do not. */
 export function cableRoutingObjectsSignature(objects: SceneObject[]): string {
-  return JSON.stringify(objects.map(({ model, ...object }) => ({ ...object, shape: model.shape })))
+  return JSON.stringify(objects.map(({ model, ...object }) => ({ ...object, shape: model.shape, prefabId: model.prefabId })))
 }
 
 export function hasUsableCableRoute(cable: CableConnection): boolean {

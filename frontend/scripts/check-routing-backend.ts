@@ -94,6 +94,7 @@ const rotated = { ...project, objects: [{ ...a, transform: { ...a.transform, rot
 assert.equal(toRoutingScene({ project: rotated, confirmed: true }).items[0].ports[0].confirmed, true)
 assert.notEqual(cablePlanningInputSignature(project), cablePlanningInputSignature(rotated))
 assert.notEqual(cablePlanningInputSignature(project), cablePlanningInputSignature({ ...project, objects: [...project.objects, object('obstacle', .2)] }))
+assert.notEqual(cablePlanningInputSignature(project), cablePlanningInputSignature({ ...project, objects: [{ ...a, model: { ...a.model, prefabId: 'charger' } }, b] }), 'a prefab swap changes the collision geometry')
 assert.equal(cablePlanningInputSignature(project), cablePlanningInputSignature({ ...project, objects: [{ ...a, model: { ...a.model, status: 'ready', assetUrl: '/models/appearance.glb' } }, b] }))
 
 function runDomain(value: unknown): Record<string, any> {

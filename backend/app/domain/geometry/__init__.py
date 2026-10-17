@@ -233,3 +233,11 @@ def fits_region(item: dict, region: dict) -> bool:
 
 def support_region(item: dict, regions: Sequence[dict]) -> str | None:
     return next((r["id"] for r in regions if fits_region(item, r)), None)
+
+
+from .collision_generator import (
+    extract_glb_bounds,
+    generate_collision_from_glb,
+    generate_compound_box,
+    save_collision_json,
+)

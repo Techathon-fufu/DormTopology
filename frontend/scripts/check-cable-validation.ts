@@ -129,6 +129,9 @@ install(); useProjectsStore.getState().update(fixture.id, (p) => ({ ...p, object
   ? { ...entry, dimensions: { ...entry.dimensions, width: 0.1 } } : entry) })); stale()
 install(); useProjectsStore.getState().update(fixture.id, (p) => ({ ...p, objects: p.objects.map((entry) => entry.id === 'unrelated-obstacle'
   ? { ...entry, model: { ...entry.model, shape: 'printer' } } : entry) })); stale()
+install(); useProjectsStore.getState().update(fixture.id, (p) => ({ ...p, objects: p.objects.map((entry) => entry.id === 'unrelated-obstacle'
+  ? { ...entry, model: { ...entry.model, prefabId: 'charger' } } : entry) })); stale()
+install(); workspace().updateObject(fixture.id, 'unrelated-obstacle', { model: { ...current().objects.find((entry) => entry.id === 'unrelated-obstacle')!.model, prefabId: 'charger' } }); stale()
 install(); useProjectsStore.getState().update(fixture.id, (p) => ({ ...p, objects: [...p.objects, laterObject()] })); stale()
 install(); useProjectsStore.getState().update(fixture.id, (p) => ({ ...p, objects: p.objects.map((entry) => ({ ...entry,
   model: { ...entry.model, status: 'ready', source: 'rodin', url: '/models/generated.glb', note: 'appearance only' } })) }))

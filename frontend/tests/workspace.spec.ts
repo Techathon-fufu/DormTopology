@@ -14,11 +14,18 @@ function collectRuntimeFailures(page: Page) {
   return failures
 }
 
-async function openWorkspace(page: Page) {
+async function openWorkspace(page: Page, expectedModelStatus: 'loaded' | 'failed' = 'loaded') {
   await page.goto(`/projects/${demoProjectId}/workspace`)
   await expect(page.getByRole('banner').getByTitle('示例：上床下桌·四人间')).toBeVisible()
   await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
   await expect(page.locator('canvas')).toBeVisible()
+  await expect.poll(async () => page.evaluate(async () => {
+    const url = performance.getEntriesByType('resource').map(entry => entry.name)
+      .filter(name => new URL(name).pathname === '/src/state/deskModelStore.ts').at(-1)
+    if (!url) return 'missing'
+    const { useDeskModelStore } = await import(url)
+    return useDeskModelStore.getState().status
+  }), { message: 'The split desk GLBs should reach the expected state before visual checks.' }).toBe(expectedModelStatus)
 }
 
 async function deskState(page: Page) {
@@ -33,10 +40,12 @@ async function deskState(page: Page) {
 }
 
 async function expectNonblankCanvas(page: Page) {
+  let lastMetrics: unknown
+  try {
   await expect.poll(async () => {
     // The production WebGL buffer is discarded after presentation, so inspect the displayed image.
     const screenshot = await page.locator('canvas').screenshot({ scale: 'css', animations: 'disabled' })
-    return page.evaluate(async (base64) => {
+    const metrics = await page.evaluate(async (base64) => {
       const image = new Image()
       image.src = `data:image/png;base64,${base64}`
       await image.decode()
@@ -46,14 +55,39 @@ async function expectNonblankCanvas(page: Page) {
       const context = canvas.getContext('2d')!
       context.drawImage(image, 0, 0)
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
-      const colors = new Set<number>()
+      let count = 0
+      let sum = 0
+      let squareSum = 0
+      const cells = new Map<number, { count: number; sum: number }>()
       const stride = Math.max(1, Math.floor((canvas.width * canvas.height) / 10_000))
       for (let index = 0; index < pixels.length; index += stride * 4) {
-        if (pixels[index + 3]) colors.add((pixels[index] << 16) + (pixels[index + 1] << 8) + pixels[index + 2])
+        if (pixels[index + 3] < 128) continue
+        const luminance = 0.2126 * pixels[index] + 0.7152 * pixels[index + 1] + 0.0722 * pixels[index + 2]
+        count += 1
+        sum += luminance
+        squareSum += luminance * luminance
+        const pixel = index / 4
+        const x = pixel % canvas.width
+        const y = Math.floor(pixel / canvas.width)
+        const cellId = Math.floor(y * 4 / canvas.height) * 4 + Math.floor(x * 4 / canvas.width)
+        const cell = cells.get(cellId) ?? { count: 0, sum: 0 }
+        cell.count += 1
+        cell.sum += luminance
+        cells.set(cellId, cell)
       }
-      return colors.size
+      const samples = Math.ceil(canvas.width * canvas.height / stride)
+      const coverage = count / samples
+      const variance = count ? squareSum / count - (sum / count) ** 2 : 0
+      const means = [...cells.values()].map(cell => cell.sum / cell.count)
+      const spatialRange = means.length ? Math.max(...means) - Math.min(...means) : 0
+      return { coverage, variance, cells: cells.size, spatialRange }
     }, screenshot.toString('base64'))
-  }, { message: 'The workspace should render varied, nontransparent 3D geometry.' }).toBeGreaterThan(32)
+    lastMetrics = metrics
+    return metrics.coverage > 0.5 && metrics.variance > 25 && metrics.cells >= 8 && metrics.spatialRange > 5
+  }, { message: 'The workspace should render nonuniform geometry across the canvas.' }).toBe(true)
+  } catch (error) {
+    throw new Error(`Canvas metrics: ${JSON.stringify(lastMetrics)}`, { cause: error })
+  }
 }
 
 async function attachViewport(page: Page, testInfo: TestInfo, name: string) {
@@ -124,7 +158,7 @@ test('keeps the fixed furniture visible after a partial asset failure and recove
   const failures = collectRuntimeFailures(page)
   const asset = '**/models/dormdesk_parts/drawer_middle.glb'
   await page.route(asset, (route) => route.fulfill({ status: 404, body: 'Missing drawer' }))
-  await openWorkspace(page)
+  await openWorkspace(page, 'failed')
   await expect.poll(async () => (await deskState(page)).status).toBe('failed')
   await expectNonblankCanvas(page)
   await attachViewport(page, testInfo, 'fixed-furniture-fallback')
@@ -174,6 +208,8 @@ test('updates the status bar when project jobs change and excludes other project
   await expect(statusBar).toContainText('工作台模型任务 · 等待尺寸确认 · 1 待确认')
   await mutateJob(page, { action: 'update', id: jobId!, patch: { status: 'failed', error: '测试失败状态' } })
   await expect(statusBar).toContainText('1 个任务未完成')
+  // 状态栏把失败重试收进「服务与任务」折叠区，展开后断言可见
+  await statusBar.locator('summary').click()
   await expect(statusBar.getByRole('button', { name: '重试', exact: true })).toBeVisible()
   await expect(statusBar).not.toContainText('工作台模型任务')
 
@@ -182,6 +218,8 @@ test('updates the status bar when project jobs change and excludes other project
   await expect(statusBar.getByRole('button', { name: '重试', exact: true })).toHaveCount(0)
   await expect(statusBar).not.toContainText('其他项目模型任务')
   await mutateJob(page, { action: 'remove', id: otherId! })
+  // 收起「服务与任务」折叠区，避免展开的任务面板遮挡画布像素采样
+  if (await statusBar.locator('details[open]').count()) await statusBar.locator('summary').click()
   await expectNonblankCanvas(page)
   await attachViewport(page, testInfo, 'workspace-jobs-updated')
   expect(failures).toEqual([])

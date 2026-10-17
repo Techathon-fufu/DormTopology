@@ -9,6 +9,7 @@ import {
 } from '@/types/project'
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
 import { endpointOf } from '@/scene/cables'
+import { prefabModelRef } from '@/scene/prefabItems'
 
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
@@ -20,9 +21,12 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
  * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
  * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
  * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
- * v4：拆分家具、真实 L 形桌面、书架及抽屉支撑；升级前归档旧示例。
+ * v4：来源分支分别接入家具几何和预制物品。
+ * v5：合并真实 L 形桌面、书架及抽屉支撑与预制物品尺寸/碰撞；归档两个不同的旧 v4 示例。
+ * v6：键鼠区左移 6cm，给真实笔记本留出主桌面侧位，避免与打印机争用回台。
+ * v7：合并预制物品碰撞与双输出适配器接线，键鼠区左移 10cm 以保留 20mm 净距。
  */
-export const DEMO_SEED_VERSION = 4
+export const DEMO_SEED_VERSION = 7
 
 export const DEMO_ROOM_NOTE =
   '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
@@ -68,9 +72,9 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       ...base,
       name: '笔记本电脑',
       category: 'electrical',
-      dimensions: { width: 0.34, height: 0.24, depth: 0.24 },
+      dimensions: { width: 0.35, height: 0.228, depth: 0.346 },
       transform: { position: [-0.3, deskY, 0.3], rotationY: -0.25 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'laptop' },
+      model: prefabModelRef('laptop_extend', 'laptop'),
       ports: [
         {
           id: 'port-laptop-usbc',
@@ -78,7 +82,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: 'USB-C 供电',
           powered: true,
           maxWatt: 65,
-          offset: [0.172, 0.009, -0.06],
+          offset: [0.175, 0.005, -0.06],
           direction: 'right',
         },
         {
@@ -86,7 +90,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           type: 'hdmi',
           label: 'HDMI 输出',
           powered: false,
-          offset: [0.172, 0.009, -0.01],
+          offset: [0.175, 0.005, -0.01],
           direction: 'right',
         },
         {
@@ -94,7 +98,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           type: 'usb-a',
           label: 'USB-A 数据',
           powered: false,
-          offset: [0.172, 0.009, 0.06],
+          offset: [0.175, 0.005, 0.06],
           direction: 'right',
         },
       ],
@@ -109,10 +113,10 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       ...base,
       name: '显示器',
       category: 'electrical',
-      dimensions: { width: 0.54, height: 0.46, depth: 0.18 },
-      // 初始位置是待整理状态；规划使用真实碰撞体与中央主视位。
+      dimensions: { width: 0.6, height: 0.55, depth: 0.18 },
+      // 初始位置仍为待整理状态；规划使用实测碰撞体与真实家具支撑。
       transform: { position: [0.1, deskY, 0.4], rotationY: 0.1 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'monitor' },
+      model: prefabModelRef('monitor', 'monitor'),
       ports: [
         {
           id: 'port-monitor-pwr',
@@ -142,9 +146,9 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       ...base,
       name: '键盘',
       category: 'electrical',
-      dimensions: { width: 0.35, height: 0.03, depth: 0.13 },
+      dimensions: { width: 0.328, height: 0.035, depth: 0.134 },
       transform: { position: [-0.26, deskY, 0.47], rotationY: -0.15 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'keyboard' },
+      model: prefabModelRef('keyboard', 'keyboard'),
       ports: [
         {
           id: 'port-keyboard-usba',
@@ -167,9 +171,9 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       ...base,
       name: '鼠标',
       category: 'electrical',
-      dimensions: { width: 0.07, height: 0.04, depth: 0.11 },
+      dimensions: { width: 0.068, height: 0.045, depth: 0.118 },
       transform: { position: [0.0, deskY, 0.49], rotationY: 0.2 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'mouse' },
+      model: prefabModelRef('mouse', 'mouse'),
       ports: [{ id: 'port-mouse-wireless', type: 'wireless', label: '无线接收器', powered: false }],
       quantity: 1,
       needsPower: false,
@@ -255,21 +259,21 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
     },
     {
       ...base, id: 'demo-power-adapter', name: '电源适配器', category: 'electrical',
-      dimensions: { width: 0.10, height: 0.035, depth: 0.055 },
+      dimensions: { width: 0.058, height: 0.028, depth: 0.05 },
       transform: { position: [-0.10, deskY, 0.34], rotationY: 0.45 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'powerAdapter' },
+      model: prefabModelRef('charger', 'powerAdapter'),
       ports: [
-        { id: 'port-adapter-ac', type: 'power-ac', label: '交流输入', powered: true, offset: [-0.05, 0.0175, 0], direction: 'left' },
-        { id: 'port-adapter-usbc', type: 'usb-c', label: 'USB-C 输出 1', powered: true, offset: [0.05, 0.0175, -0.015], direction: 'right' },
-        { id: 'port-adapter-usbc-phone', type: 'usb-c', label: 'USB-C 输出 2', powered: true, offset: [0.05, 0.0175, 0.015], direction: 'right' },
+        { id: 'port-adapter-ac', type: 'power-ac', label: '交流输入', powered: true, offset: [-0.029, 0.014, 0], direction: 'left' },
+        { id: 'port-adapter-usbc', type: 'usb-c', label: 'USB-C 输出 1', powered: true, offset: [0.029, 0.014, -0.015], direction: 'right' },
+        { id: 'port-adapter-usbc-phone', type: 'usb-c', label: 'USB-C 输出 2', powered: true, offset: [0.029, 0.014, 0.015], direction: 'right' },
       ],
       quantity: 1, needsPower: true, source: 'demo', note: '演示物品：双 USB-C 输出适配器，两个输出分别连接笔记本与手机，交流输入连接插排',
     },
     {
       ...base, id: 'demo-thermos', name: '保温杯', category: 'nonElectrical',
-      dimensions: { width: 0.08, height: 0.24, depth: 0.08 },
+      dimensions: { width: 0.07, height: 0.22, depth: 0.07 },
       transform: { position: [0.49, deskY, 0.71], rotationY: 0 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'thermos' },
+      model: prefabModelRef('stainless_bottle', 'thermos'),
       ports: [], quantity: 1, needsPower: false, frequent: true, source: 'demo',
       note: '演示物品：带盖保温杯，与普通水杯分别管理',
     },
@@ -278,9 +282,9 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       ...base,
       name: '水杯',
       category: 'nonElectrical',
-      dimensions: { width: 0.07, height: 0.17, depth: 0.07 },
+      dimensions: { width: 0.111, height: 0.095, depth: 0.08 },
       transform: { position: [-0.47, deskY, 0.16], rotationY: 0 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'cup' },
+      model: prefabModelRef('cup', 'cup'),
       ports: [],
       quantity: 1,
       needsPower: false,
@@ -321,9 +325,10 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       ...base,
       name: '手机',
       category: 'electrical',
-      dimensions: { width: 0.075, height: 0.012, depth: 0.155 },
-      transform: { position: [0.2, deskY, 0.53], rotationY: 0.1 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'genericBox' },
+      dimensions: { width: 0.15, height: 0.007, depth: 0.075 },
+      // 预制手机长边在局部 +x：旋转 90° 保持示例原本的「长边沿 z、充电口朝后」摆放
+      transform: { position: [0.2, deskY, 0.53], rotationY: 0.1 + Math.PI / 2 },
+      model: prefabModelRef('phone', 'genericBox'),
       ports: [
         {
           id: 'port-phone-usbc',
@@ -331,8 +336,8 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: 'USB-C 充电口',
           powered: true,
           maxWatt: 20,
-          offset: [0, 0.006, -0.0775],
-          direction: 'back',
+          offset: [0.075, 0.0035, 0],
+          direction: 'right',
         },
       ],
       quantity: 1,
@@ -574,7 +579,8 @@ export function createDemoProject(): Project {
     room: createStandardRoom(),
     objects,
     cables: createDemoCables(objects),
-    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backRight' },
+    // 保留 55cm 键鼠区；左移 10cm，为真实笔记本及显示器之间保留 20mm 净距。
+    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, typingOffsetX: -0.10, cupCorner: 'backRight' },
     demoSeedVersion: DEMO_SEED_VERSION,
     stage: 'organize',
   }

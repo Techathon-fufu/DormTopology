@@ -136,6 +136,14 @@ export interface Port {
   offset?: Vec3
   /** 接口朝向（局部方向），默认朝后 */
   direction?: PortDirection
+  /**
+   * 接口局部朝向（单位向量，设备自身坐标系）。
+   * 显式填写时优先于六轴 `direction`；非法（非有限 / 零向量）时回退 `direction`。
+   * 与 `direction` 同义（不是新的走线字段，仅本地存储更精确方向）。
+   */
+  localDirection?: Vec3
+  /** 用户本地备注（仅本地元数据，不参与后端走线 JSON） */
+  note?: string
   /** 用户已核对当前局部接口位置、方向及类型；编辑这些字段后须重新确认。 */
   confirmed?: boolean
 }
@@ -206,6 +214,12 @@ export interface ModelRef {
   assetUrl?: string
   /** 渲染用法说明（占位盒 / glb 等） */
   format?: 'placeholder-box' | 'glb' | 'gltf'
+  /**
+   * 预制模型 id（Prefabmodel 随包资产，注册表见 scene/prefabItems.ts）。
+   * 命中时三维渲染使用真实 GLB、摆放校验使用随包碰撞数据；model.shape 仍是语义键
+   * （整理规则 / 后端打包按语义形状分发），不随模型接入变化。
+   */
+  prefabId?: string
   /** 占位渲染使用的语义几何体（模型未完成时统一用匹配尺寸的几何占位物） */
   shape?: PrimitiveShape
   /** 生成中的阶段文字（不编造百分比，仅显示阶段） */

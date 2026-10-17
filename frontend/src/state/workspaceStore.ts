@@ -284,9 +284,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (o.id !== objectId) return o
         const dimensions = dPatch ? { ...o.dimensions, ...dPatch } : o.dimensions
         const dimensionsChanged = JSON.stringify(dimensions) !== JSON.stringify(o.dimensions)
-        const ports = (rest.ports ?? o.ports).map((port) => {
+        const ports = (rest.ports ?? o.ports).map((inputPort) => {
+          let port = inputPort
           const previous = o.ports.find((p) => p.id === port.id)
-          const geometry = (p: typeof port) => JSON.stringify({ type: p.type, powered: p.powered, offset: p.offset, direction: p.direction })
+          // Legacy axis editor explicitly overrides a previously picked free normal.
+          if (previous && port.direction !== previous.direction && JSON.stringify(port.localDirection) === JSON.stringify(previous.localDirection)) {
+            port = { ...port, localDirection: undefined }
+          }
+          const geometry = (p: typeof port) => JSON.stringify({ type: p.type, powered: p.powered, offset: p.offset, direction: p.direction, localDirection: p.localDirection })
           return dimensionsChanged || !previous || geometry(previous) !== geometry(port)
             ? { ...port, confirmed: false } : port
         })

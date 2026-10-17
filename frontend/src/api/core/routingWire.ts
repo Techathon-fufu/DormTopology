@@ -1,9 +1,10 @@
+import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 import { CABLE_THICKNESS_META, type CableConnection, type LayoutPlan, type Project, type Vec3 } from '@/types/project'
 import type { CablePlanningResult } from '../types'
 import type { OrganizationSceneRef } from '@/types/organization'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { isPowerSourcePort, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
-import { localDirVec, portWorldDirection, portWorldPosition, resolvePortOffset } from '@/scene/ports'
+import { portWorldDirection, portWorldPosition, resolvePortOffset } from '@/scene/ports'
 import { DESK_GAP } from '@/scene/sceneValidation'
 import { furnitureSurfaces, hasFixedFurniture, validFurnitureHole } from '@/scene/fixedFurniture'
 import { cableMountVolume, mountToRoutingSupport, mountToTrayCandidate, resolveCableManagement } from '@/scene/cableManagement'
@@ -21,7 +22,7 @@ function record(value: unknown): Record<string, unknown> {
 /** Include obstacles and all cables: another device or route can invalidate this result. */
 export function cablePlanningInputSignature(project: Project): string {
   return JSON.stringify([project.id, project.room,
-    project.objects.map(({ model, ...object }) => ({ ...object, modelShape: model.shape })),
+    project.objects.map(({ model, ...object }) => ({ ...object, modelShape: model.shape, prefabId: model.prefabId })),
     project.cables, resolveOrganizationPreferences(project)])
 }
 
@@ -229,7 +230,7 @@ export function toRoutingScene(input: { project: Project; confirmed: boolean; re
       if (!original) continue
       port.confirmed = original.confirmed === true
       port.local_position = resolvePortOffset(object, original)
-      port.local_direction = localDirVec(original.direction ?? 'back')
+      port.local_direction = resolvePortLocalDirection(original)
       if (original.type === 'power-ac' || original.type === 'dc') port.type = isPowerSourcePort(object, original) ? 'power_source' : 'power_sink'
     }
   }

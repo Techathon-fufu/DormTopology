@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="820" viewBox="0 0 1440 820">
+  <style>
+    text{font-family:'Microsoft YaHei','PingFang SC',sans-serif;fill:#26292c;font-size:14px}
+    .muted{fill:#5a5f66;font-size:12px}.small{font-size:12px}.title{font-size:16px;font-weight:600}
+    .green{fill:#0c8776}.white{fill:white}.line{stroke:#e5e1d8;fill:none}.btn{fill:white;stroke:#e5e1d8}
+  </style>
+  <rect width="1440" height="820" rx="16" fill="#faf8f5"/>
+  <path d="M0 16Q0 0 16 0H1424Q1440 0 1440 16V104H0Z" fill="white"/>
+  <rect x="20" y="16" width="28" height="28" rx="8" fill="#e6f4f1"/>
+  <text x="27" y="36" class="green">⌂</text><text x="62" y="35" class="title">示例：上床下桌</text>
+  <text x="280" y="34" class="muted">本机项目</text>
+  <text x="540" y="34" class="muted">空间配置　 ›　 照片与物品　 ›　</text><text x="763" y="34" class="green">工作台</text><text x="825" y="34" class="muted">　›　执行指南</text>
+  <text x="1190" y="34" class="muted">布局草图 · 待评审</text>
+  <path d="M0 56H1440M0 104H1440" class="line"/>
+  <text x="23" y="86" class="muted">↶　↷　 │　桌面视角 ▾　 │　重置视角</text>
+  <rect x="1100" y="65" width="110" height="30" rx="8" class="btn"/><text x="1126" y="85" class="small">查看方案</text>
+  <rect x="1220" y="65" width="110" height="30" rx="8" class="btn"/><text x="1245" y="85" class="small">方案对比</text>
+  <rect x="1340" y="65" width="77" height="30" rx="8" class="btn"/><text x="1360" y="85" class="small">更多</text>
+  <rect x="0" y="105" width="264" height="683" fill="white"/><path d="M264 104V788M1140 104V788" class="line"/>
+  <text x="18" y="137" class="title">物体与连线</text>
+  <rect x="14" y="153" width="236" height="30" rx="8" fill="#f1efea"/><rect x="17" y="156" width="114" height="24" rx="6" fill="white"/>
+  <text x="60" y="173" class="small green">物体</text><text x="177" y="173" class="muted">连线</text>
+  <rect x="14" y="195" width="110" height="32" rx="8" class="btn"/><text x="29" y="216" class="small">＋ 添加物体</text>
+  <rect x="134" y="195" width="116" height="32" rx="8" class="btn"/><text x="153" y="216" class="small">照片生成模型</text>
+  <rect x="14" y="242" width="236" height="121" rx="10" fill="#faf8f5" stroke="#e5e1d8"/>
+  <text x="28" y="267">手动扫描照片</text><text x="28" y="288" class="muted">照片 → 标记物体 → 生成外观</text>
+  <rect x="28" y="301" width="208" height="31" rx="7" class="btn"/><text x="102" y="321" class="small">选择照片</text>
+  <text x="28" y="350" class="muted">界面预览 · 生成服务待接入</text>
+  <text x="18" y="389" class="muted">场景物体</text><text x="230" y="389" class="muted">17</text>
+  <rect x="14" y="401" width="236" height="32" rx="8" fill="#faf8f5" stroke="#e5e1d8"/><text x="27" y="422" class="muted">⌕　搜索物体</text>
+  <rect x="9" y="445" width="246" height="40" rx="8" fill="#e6f4f1"/><rect x="9" y="455" width="3" height="20" rx="1.5" fill="#0f9d8a"/>
+  <text x="24" y="470" class="green">▣　笔记本电脑</text><text x="222" y="470" class="green">›</text>
+  <text x="24" y="511">▣　显示器</text><text x="24" y="554">▤　键盘</text><text x="24" y="597">◉　鼠标</text>
+  <text x="24" y="640">▤　高等数学教材</text><text x="24" y="683">□　收纳盒</text>
+  <path d="M14 731H250" class="line"/><text x="18" y="753" class="muted">选中物体 → 在本栏查看与处理</text><text x="18" y="774" class="muted">连线工具：描点、连接与编辑</text>
+  <rect x="280" y="120" width="104" height="27" rx="7" fill="white" stroke="#e5e1d8"/><text x="296" y="138" class="small">方案预览</text>
+  <text x="681" y="202" text-anchor="middle" class="muted">保留现有 3D 画布与真实模型</text>
+  <g stroke="#b8ac98" stroke-width="2" fill="#ede8dd">
+    <path d="M387 269L824 269L899 314L462 314Z"/>
+    <path d="M387 269V399L462 444V314Z"/><path d="M824 269V399L899 444V314Z"/>
+    <path d="M532 269V399L607 444V314Z"/><path d="M678 269V399L753 444V314Z"/>
+    <path d="M387 399L824 399L899 444L462 444Z"/>
+    <path d="M354 445L826 445L944 522L472 522Z" fill="#d6b98c"/>
+    <path d="M472 522V630L458 621V514"/><path d="M929 513V625L944 634V522"/>
+    <path d="M826 445L944 522L977 583L895 583L797 512Z" fill="#d6b98c"/>
+  </g>
+  <g stroke="#6d7776" stroke-width="2" fill="#d9dfdd"><path d="M534 370H667V457H534Z"/><path d="M596 457V481M572 481H625"/><path d="M716 431H799L831 487H748Z"/><path d="M748 487H831L845 500H760Z"/></g>
+  <text x="681" y="661" text-anchor="middle" class="muted">家具线稿仅为布局示意 · 不修改模型与碰撞</text>
+  <rect x="401" y="694" width="552" height="70" rx="12" fill="white" stroke="#e5e1d8"/>
+  <text x="420" y="720" class="small">预览完成　16 / 16 步</text><text x="420" y="743" class="muted">整理前　 │　 最终方案　　·　 同视角对比</text>
+  <text x="833" y="731" class="green">↻　 ▶　 ▷|</text>
+  <rect x="402" y="760" width="550" height="4" rx="2" fill="#0f9d8a"/>
+  <rect x="1141" y="105" width="299" height="683" fill="white"/>
+  <text x="1161" y="137" class="title">引导与生成</text><text x="1411" y="136" class="muted">×</text><path d="M1141 153H1440" class="line"/>
+  <text x="1161" y="174" class="muted">准备 ✓　→　整理　→　理线　→　指南</text>
+  <rect x="1157" y="187" width="267" height="63" rx="10" fill="#e6f4f1"/><text x="1172" y="212" class="green">✓　整理方案可应用</text><text x="1172" y="235" class="muted">预览尚未应用，原布局保留</text>
+  <text x="1161" y="273" class="muted">已归位</text><text x="1161" y="302" style="font-size:25px;font-weight:600">16 / 16</text><text x="1302" y="273" class="muted">待处理问题</text><text x="1302" y="302" style="font-size:25px;font-weight:600">0</text>
+  <path d="M1157 319H1424" class="line"/><text x="1161" y="347" class="muted">连续可用面积</text><text x="1161" y="376" style="font-size:22px;font-weight:600">0.44 → 0.49 m²</text>
+  <path d="M1157 398H1424" class="line"/><text x="1161" y="429" class="title">操作步骤</text>
+  <text x="1161" y="464">✓　显示器与键鼠区对齐</text><text x="1161" y="503">✓　笔记本移到主桌面右侧</text><text x="1161" y="542">✓　书本放入书架</text>
+  <text x="1161" y="588" class="muted">查看全部步骤　⌄</text><text x="1161" y="625" class="muted">指标口径与来源　⌄</text>
+  <path d="M1141 689H1440" class="line"/><rect x="1157" y="705" width="267" height="38" rx="8" fill="#0f9d8a"/><text x="1252" y="730" class="white">接受方案</text><text x="1230" y="770" class="muted">取消预览，返回编辑</text>
+  <rect x="0" y="788" width="1440" height="32" fill="white"/><path d="M0 788H1440" class="line"/><text x="18" y="809" class="muted">●　原布局已保存</text><text x="1074" y="809" class="muted">后端算法　 ·　物品 17　 ·　线缆待规划　 ·　详情 ⌃</text>
+</svg>

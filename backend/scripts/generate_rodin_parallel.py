@@ -60,6 +60,7 @@ def load_tasks_from_contract(contract_path: Path) -> List[Dict[str, Any]]:
             "output_name": f"{iid}.glb",
             "prompt": f"A realistic 3D model of {name}, high fidelity, accurate desktop object proportions",
             "tier": "basic",
+            "size_m": it.get("size_m") or it.get("estimated_size_m"),
         })
     return tasks
 
@@ -84,10 +85,12 @@ def load_api_keys() -> List[str]:
     return keys
 
 
-def update_contract(item_id: str, model_rel_path: str):
-    """Thread-safe update to vlm_result_round2.json."""
+def update_contract(item_id: str, model_rel_path: str, collision: Dict[str, Any] | None = None):
+    """Thread-safe update to contract JSON with model_url and collision volume."""
     with LOCK:
-        contract_path = PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_round2.json"
+        contract_path = PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_pose_test.json"
+        if not contract_path.exists():
+            contract_path = PROJECT_ROOT / "tests" / "test_vlm_round2" / "vlm_result_round2.json"
         if not contract_path.exists():
             return
         try:
@@ -95,7 +98,9 @@ def update_contract(item_id: str, model_rel_path: str):
             for item in data.get("items", []):
                 if item.get("id") == item_id:
                     item["model_url"] = model_rel_path
-                    print(f"[{item_id}] Linked '{model_rel_path}' into {contract_path.name}", flush=True)
+                    if collision is not None:
+                        item["collision"] = collision
+                    print(f"[{item_id}] Linked '{model_rel_path}' and collision into {contract_path.name}", flush=True)
             contract_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         except Exception as e:
             print(f"[{item_id}] Failed to update contract: {e}", flush=True)
@@ -141,9 +146,29 @@ def worker_task(item_info: Dict[str, Any], key_queue: Queue) -> Dict[str, Any]:
         )
 
         rel_model_path = f"{ASSET_DIR_NAME}/{output_name}"
-        update_contract(item_id, rel_model_path)
+        glb_file = output_dir / output_name
+
+        # Generate conservative AABB collision volume
+        collision = None
+        try:
+            from backend.app.domain.geometry.collision_generator import (
+                generate_collision_from_glb,
+                save_collision_json,
+            )
+            collision = generate_collision_from_glb(
+                glb_file,
+                target_dimensions=item_info.get("size_m"),
+            )
+            col_dir = PROJECT_ROOT / ASSET_DIR_NAME / "collisionsize"
+            col_path = col_dir / f"{item_id}.collision.json"
+            save_collision_json(collision, col_path)
+            print(f"[{item_id} | {name}] Generated collision volume: {col_path.name}", flush=True)
+        except Exception as ce:
+            print(f"[{item_id} | {name}] Warning: Failed to generate collision volume: {ce}", flush=True)
+
+        update_contract(item_id, rel_model_path, collision)
         print(f"[{item_id} | {name}] SUCCESS! Generated {rel_model_path}", flush=True)
-        return {"id": item_id, "status": "success", "file": rel_model_path}
+        return {"id": item_id, "status": "success", "file": rel_model_path, "collision": collision}
 
     except Exception as e:
         print(f"[{item_id} | {name}] FAILED: {e}", flush=True)

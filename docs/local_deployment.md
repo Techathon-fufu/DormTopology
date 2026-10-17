@@ -8,7 +8,7 @@
 
 当前代码源为 `/Users/qdd09/Projects/DormTopology`。以下命令使用当前工作区中的前后端代码，部署前以 `git status` 核对分支和修改。Python 虚拟环境和数据库复用前次独立实例的运行目录 `/private/tmp/dorm-monitor-placement/.work/local-demo-20261017`；保留原 `organization.sqlite3`，不删库、不清除用户项目。
 
-当前工作区已保存前序修复为 `24dc7f2`，并通过 `678f78f` 合并远端 main 的家具更新。固定示例采用拆分家具 `dormdesk-v1`，桌面包络 1.45×0.86m，实际支撑为 L 形；布局与走线适配提交真实桌板、书架、抽屉和碰撞体。设备策略由前端场景适配提交给后端，不能仅凭 `packing-1.1` 版本判定部署正确。部署前运行下述专项，并在真实浏览器检查完整 17 件场景的显示器居中、朝向和打印机侧置。
+当前工作区已保存净距与理线修复为 `82f562e`，并整合远端 main `7ebdec2` 的预制单品、抽屉和工作流更新。固定示例采用拆分家具 `dormdesk-v1`，桌面包络 1.45×0.86m，实际支撑为 L 形；布局与走线适配提交 `Prefabmodel/` 配套 JSON 的桌板、书架、抽屉和单品碰撞体，不读取 `objects/`。示例 v7 的键鼠区保留 55cm 宽度，中线左移 10cm，兼容真实展开笔记本和 20mm 物品净距；旧示例归档。设备策略由前端场景适配提交给后端，不能仅凭 `packing-1.1` 版本判定部署正确。部署前运行下述专项，并在真实浏览器检查完整 17 件场景的显示器居中、朝向和打印机侧置。
 
 ### 1. 准备与构建
 
@@ -25,6 +25,12 @@ cd frontend
 npm ci
 ./node_modules/.bin/esbuild scripts/generate-furniture-geometry.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-furniture.mjs
 node /tmp/dorm-deploy-furniture.mjs
+./node_modules/.bin/esbuild scripts/sync-desk-parts.ts --bundle --platform=node --format=esm --outfile=scripts/sync-desk-parts.generated.mjs
+node scripts/sync-desk-parts.generated.mjs
+rm scripts/sync-desk-parts.generated.mjs
+./node_modules/.bin/esbuild scripts/sync-prefab-items.ts --bundle --platform=node --format=esm --outfile=scripts/sync-prefab-items.generated.mjs
+node scripts/sync-prefab-items.generated.mjs
+rm scripts/sync-prefab-items.generated.mjs
 VITE_API_MODE=mock VITE_API_BASE_URL='' VITE_DEV_API_TARGET=http://127.0.0.1:8003 npm run build
 ./node_modules/.bin/esbuild scripts/check-fixed-furniture.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-fixed.mjs '--define:import.meta.env={}'
 node /tmp/dorm-deploy-fixed.mjs
@@ -35,6 +41,10 @@ node /tmp/dorm-deploy-routing.mjs
 ./node_modules/.bin/esbuild scripts/check-cable-management.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-management.mjs '--define:import.meta.env={}'
 node /tmp/dorm-deploy-management.mjs
 ```
+
+家具几何生成器只核验 `Prefabmodel/` 源 GLB 与碰撞 JSON，并生成算法几何；随后由 `sync-desk-parts.ts` 复制桌体及为抽屉注入源材质，统一写入运行时 GLB。同步脚本依赖相对脚本位置定位资产，临时编译文件须放在 `scripts/` 中，执行后移除。资产与检查命令见[桌体模型说明](../frontend/docs/desk-model.md#资产与生成)。
+
+`sync-prefab-items.ts` 同步 12 件单品 GLB，并从 `Prefabmodel/collisionsize/` 生成前端及算法共用的碰撞数据。后端新增的 `/workflow` 上传 API 需要 `python-multipart`，已列入 `backend/requirements.txt`；更新代码后须同步安装依赖。独立工作流默认数据为同目录的 `workflow.sqlite3` 和 `workflow-data/`，可分别用 `DORMTOPOLOGY_WORKFLOW_DB_PATH`、`DORMTOPOLOGY_WORKFLOW_DATA_DIR` 指定；它与产品整理数据库分开保存。
 
 本机已建立上述虚拟环境；若该临时目录被系统清理，应先以 `python3 -m venv "$DORM_DEPLOY_DATA/venv"` 重建环境，再安装依赖，并从备份恢复所需数据库。`VITE_API_MODE=mock` 仅为识别和模型生成保留明确标记的模拟数据；整理、理线和遗留布局始终走 HTTP。真实识别、Rodin 及遗留布局应用端点尚未实现，选择或调用时返回 HTTP 501。
 
@@ -62,6 +72,14 @@ Vite preview 继承 `vite.config.ts` 的代理；空 `VITE_API_BASE_URL` 使 `/a
 本轮实际实例由当前工作区 `.work/backend-only/launch.mjs` 在后台启动，参数等同上述命令；该启动器属于本机临时文件，重新部署可直接使用前台命令。日志为 `.work/backend-only/backend.log`、`frontend.log`，PID 文件为同目录 `backend.pid`、`frontend.pid`。停止后台实例时，以 `lsof` 查询的当前监听进程为准，再用 `ps -p <PID> -o pid,command` 和 `lsof -a -p <PID> -d cwd` 核对命令及目录，确认后执行 `kill -TERM <PID>`；不要仅凭旧 PID 文件终止进程。
 
 ### 4. 当前版本验证
+
+2026-10-18 同步 main `7ebdec2`：后端 250 项、兼容 1 项通过；离线碰撞生成器 5 项通过、1 项因缺少历史 `tape_measure.glb` 跳过，另用现有 `mouse.glb` 验证目标尺寸生成分支。领域算法保持标准库隔离；GLB 读取依赖按需加载，生成器 Ruff 通过。家具 75 盒与 GLB/JSON 一致，12 件预制单品的非均匀缩放、底心和旋转检查共 108 例通过。生成器不再覆盖抽屉材质，同步前后的源文件保持不变。前端类型检查、生产构建、净距/接口/结果失效/走线预览转换专项、真实 17 件整理及整理后 7/7 路径验证通过；原始散乱场景仍如实返回部分走线失败。
+
+真实后端浏览器专项 7 项通过、1 项按原设置跳过：桌面完整整理与七线预览接受、桌面/模拟手机设备布局、配件与集线槽分析、抽屉推拉及取消。完整默认七线流程仍只在桌面执行。证据分别位于 `/private/tmp/dorm-merge-default-browser-results`、`/private/tmp/dorm-merge-cable-accessory-results`、`/private/tmp/dorm-merge-drawer-results`。更新后的 `5177` 构建预览在两种视口与三个视角均非空，无资产错误、脚本错误或横向溢出，截图位于 `.work/backend-only/preview-*.png`。已有项目需刷新并重新生成、预览和接受方案，不自动改变用户摆放。
+
+本轮写入测试使用独立 QA 数据库。生产重启前后均有 7 份基线、SHA256 为 `1b585b83f3cbc1e2d7867740819046350e86139e49ace15c2804b9647d75be88`、未完成任务为 0；前轮记录的 6 份基线内容也逐项保留。当前 `5177` / `8003` 保持运行，临时 QA `5178` / `8004` 在验证后停止。新增独立 `/workflow` 按导入契约运行，未自动套用产品 20mm、未知线长或零弯曲半径的默认参数。
+
+以下为同步本轮 main 之前的净距版本记录：
 
 2026-10-18 物品最小净距版本：产品整理默认 `constraints.min_item_gap_m: 0.02`，按真实部件水平距离检查，并保护穿线孔上方空间。后端 225 项及兼容 1 项通过，包含 20 项净距边界与延长接口引出避开已有线缆的回归；真实默认 17 件布局与 7/7 走线脚本、前端转换/间距/候选恢复/播放/同步检查、类型检查和生产构建通过。本轮修改文件的 Ruff 通过；全仓 Ruff 尚有 79 项既有问题，位于未改动的供应商适配器、几何模块和离线脚本。生产构建保留 Three.js 大产物提示。
 

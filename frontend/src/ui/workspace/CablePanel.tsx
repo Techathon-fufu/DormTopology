@@ -65,6 +65,7 @@ export function CablePanel({
   onFlash,
   className,
   onClose,
+  showPlanningActions = true,
 }: {
   project: Project
   busy: boolean
@@ -72,6 +73,7 @@ export function CablePanel({
   onFlash: (msg: string) => void
   className?: string
   onClose?: () => void
+  showPlanningActions?: boolean
 }) {
   const selectedCableId = useCableStore((s) => s.selectedCableId)
   const selectCable = useCableStore((s) => s.selectCable)
@@ -339,7 +341,7 @@ export function CablePanel({
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
               {displayStatus === 'conflict' ? '走线未通过检查，请修改参数后重新规划。' : legacyRoute ? '历史路径未经后端验证，请重新规划。' : '场景或线缆参数已修改：当前路径需要重新计算。'}
             </p>
-            <Button
+            {showPlanningActions ? <Button
               size="sm"
               variant="outline"
               className="h-7 w-full border-warning/50 text-warning"
@@ -348,7 +350,7 @@ export function CablePanel({
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
               更新此走线
-            </Button>
+            </Button> : null}
           </div>
         ) : null}
 
@@ -441,7 +443,7 @@ export function CablePanel({
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                 当前路径为「{CABLE_STRATEGY_META[cable.route.strategy].label}」，与线材类型不符：点击按钮按新类型生成候选路径（原路径保留，可对比 / 撤销）。
               </p>
-              <Button
+              {showPlanningActions ? <Button
                 size="sm"
                 variant="outline"
                 className="h-7 w-full border-warning/50 text-warning"
@@ -450,7 +452,7 @@ export function CablePanel({
               >
                 {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                 按「{visMeta.label}」重新规划
-              </Button>
+              </Button> : null}
             </div>
           ) : null}
           <div className="flex items-center justify-between gap-2">

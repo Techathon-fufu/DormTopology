@@ -77,17 +77,47 @@ async function createProject(page: Page) {
 }
 
 async function openPanel(page: Page) {
-  const panel = page.getByTestId('cable-management-panel').filter({ visible: true })
-  if (!await panel.isVisible()) {
+  const guideDrawer = page.getByRole('dialog', { name: '属性与方案面板' })
+  if (await guideDrawer.isVisible()) await page.keyboard.press('Escape')
+  const tools = page.getByRole('complementary', { name: '物体与连线', exact: true }).filter({ visible: true })
+  if (!await tools.isVisible()) {
     await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
   }
+  await expect(tools).toBeVisible()
+  await tools.getByRole('button', { name: '连线', exact: true }).click()
+  const panel = page.getByTestId('cable-management-panel').filter({ visible: true })
   await expect(panel).toBeVisible()
   return panel
 }
 
 async function closeDrawer(page: Page) {
-  const drawer = page.getByRole('dialog', { name: '物品与线缆面板' })
-  if (await drawer.isVisible()) await drawer.getByTitle('关闭面板').click()
+  const drawer = page.getByRole('dialog').filter({ visible: true })
+  if (await drawer.count()) await page.keyboard.press('Escape')
+}
+
+async function openRoutingGuide(page: Page) {
+  await closeDrawer(page)
+  const guide = page.getByRole('complementary', { name: '引导与生成', exact: true }).filter({ visible: true })
+  if (!await guide.isVisible()) {
+    await page.getByRole('button', { name: '打开引导与方案', exact: true }).click()
+  }
+  await expect(guide).toBeVisible()
+  return guide
+}
+
+async function acceptRoutingCandidate(page: Page, id: string, count: number, timeout: number) {
+  const previewUrl = await moduleUrl(page, '/src/features/connections/routingPreview.ts')
+  await expect.poll(() => page.evaluate(async ({ url, id }) => {
+    const { useRoutingPreviewStore } = await import(url)
+    const candidate = useRoutingPreviewStore.getState().candidate
+    return candidate?.projectId === id ? candidate.validation : null
+  }, { url: previewUrl, id }), { timeout }).toMatchObject({ validCount: count, failedCount: 0 })
+  const beforeAcceptance = await readProject(page, id)
+  expect(beforeAcceptance.cables.every(cable => cable.route.verification?.status !== 'valid')).toBe(true)
+  expect(beforeAcceptance.cableTrayAnalysis).toBeUndefined()
+  await openPanel(page)
+  await page.getByRole('button', { name: '接受理线方案', exact: true }).filter({ visible: true }).click()
+  await expect.poll(async () => (await readProject(page, id)).cables.filter(cable => cable.route.verification?.status === 'valid').length).toBe(count)
 }
 
 async function historyAction(page: Page, action: '撤销' | '重做') {
@@ -151,7 +181,6 @@ test('edits installed accessories, persists history, and renders real tray analy
     if (/Maximum update depth exceeded|The result of getSnapshot should be cached/i.test(message.text())) errors.push(message.text())
   })
   const id = await createProject(page)
-  await page.getByRole('button', { name: '规划走线', exact: true }).click()
   let panel = await openPanel(page)
   await expect(panel.getByRole('checkbox', { name: '复核已安装配件的支撑跨距' })).not.toBeChecked()
   for (const preset of ['rear-clips', 'underside-ties', 'underside-tray']) {
@@ -186,7 +215,6 @@ test('edits installed accessories, persists history, and renders real tray analy
   await page.reload()
   await expect(page.locator('canvas')).toBeVisible()
   await expect.poll(async () => (await readProject(page, id)).room.cableManagement).toEqual(savedConfig)
-  await page.getByRole('button', { name: '规划走线', exact: true }).click()
   panel = await openPanel(page)
   await expect(panel.getByTestId('cable-mount-row')).toHaveCount(config.mounts.length - 1)
   await expect(panel.getByRole('checkbox', { name: `确认已安装 ${config.mounts[1].label}`, exact: true })).toBeChecked()
@@ -194,14 +222,15 @@ test('edits installed accessories, persists history, and renders real tray analy
   await expect(page.getByText('避让操作区', { exact: true })).toHaveCount(0)
   await expectScene(page, config.mounts.length - 1)
   await screenshot(page, testInfo, 'accessory-controls')
-  await page.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).check()
+  const guide = await openRoutingGuide(page)
+  await guide.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).check()
   const planned = page.waitForResponse(response => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/v1/cables/plan')
-  await page.getByRole('button', { name: '规划全部走线（真实后端）', exact: true }).click()
+  await guide.getByRole('button', { name: '规划全部走线（真实后端）', exact: true }).click()
   const response = await planned
   expect(response.status()).toBe(202)
-  await expect.poll(async () => (await readProject(page, id)).cables.filter(cable => cable.route.verification?.status === 'valid').length,
-    { timeout: 30_000 }).toBe(2)
+  await acceptRoutingCandidate(page, id, 2, 30_000)
+  panel = await openPanel(page)
   await expect.poll(async () => (await readProject(page, id)).cableTrayAnalysis?.optimizations.length).toBeGreaterThan(0)
   await expect(panel.getByTestId('tray-analysis')).toBeVisible()
   await expect(panel.getByText('集线槽复查', { exact: true })).toBeVisible()
@@ -286,14 +315,15 @@ test('organizes the default 17 items and verifies all seven cables on the applie
   const applied = await readProject(page, id)
   expect(itemSpacingViolations(applied.objects, .02)).toEqual([])
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: '规划走线', exact: true }).click()
-  await page.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).check()
+  await openPanel(page)
+  const guide = await openRoutingGuide(page)
+  await guide.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).check()
   expect((await readProject(page, id)).objects.every(object => object.ports.every(port => port.type === 'wireless' || port.confirmed))).toBe(true)
   const routingSave = page.waitForResponse(response => response.request().method() === 'PUT'
     && new URL(response.url()).pathname === `/api/v1/projects/${id}/scene`)
   const routingJob = page.waitForResponse(response => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/v1/cables/plan')
-  await page.getByRole('button', { name: '规划全部走线（真实后端）', exact: true }).click()
+  await guide.getByRole('button', { name: '规划全部走线（真实后端）', exact: true }).click()
   const synchronized = await routingSave
   expect(synchronized.status()).toBe(200)
   expect(synchronized.request().postDataJSON().expected_revision).toBe(appliedScene.scene_revision)
@@ -301,6 +331,7 @@ test('organizes the default 17 items and verifies all seven cables on the applie
   expect(routingScene.scene_id).toBe(appliedScene.scene_id)
   expect(routingScene.scene_revision).toBe(appliedScene.scene_revision + 1)
   expect((await routingJob).status()).toBe(202)
+  await acceptRoutingCandidate(page, id, 7, 180_000)
   await expect.poll(async () => {
     const project = await readProject(page, id)
     return project.cables.map(cable => ({ id: cable.id, status: cable.route.verification?.status,

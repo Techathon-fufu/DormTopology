@@ -4,9 +4,14 @@ import type { Project, SceneObject } from '@/types/project'
 import type { SceneIssue } from '@/scene/sceneValidation'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { CATEGORY_COLORS, PrimitiveModel } from './models'
+import { useObjectResizeStore } from '@/state/objectResizeStore'
+import { CATEGORY_COLORS } from './models'
+import { ObjectModel } from './ObjectModel'
+import { ObjectResizeHandles } from './ObjectResizeHandles'
 import { basicMaterial, boxGeometry } from './resources'
 import { useObjectDrag } from './useObjectDrag'
+import { useSurfacePortPick } from '@/features/connections/useSurfacePortPick'
+import { useConnectionsStore } from '@/features/connections/store'
 
 /**
  * 场景对象网格：点击 / 拖拽选中与移动、悬停高亮、选中青绿外框、校验问题红框。
@@ -19,16 +24,24 @@ export function SceneObjectMesh({
   selected,
   issues,
   onSelect,
+  onContextMenu,
 }: {
   project: Project
   object: SceneObject
   selected: boolean
   issues?: SceneIssue[]
   onSelect: (id: string) => void
+  /** 右键（或长按上下文菜单）时上报物品与屏幕坐标，由工作台决定展示什么菜单 */
+  onContextMenu?: (objectId: string, clientX: number, clientY: number) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const drag = useObjectDrag(project, object)
-  const { transform: t, dimensions: dims } = object
+  const pick = useSurfacePortPick(project, object)
+  const resizePreview = useObjectResizeStore((s) =>
+    s.preview?.projectId === project.id && s.preview.objectId === object.id ? s.preview : null,
+  )
+  const { transform: t } = object
+  const dims = resizePreview?.dimensions ?? object.dimensions
 
   const dragPreview = useWorkspaceStore((s) =>
     s.drag && s.drag.objectId === object.id ? s.drag : null,
@@ -65,30 +78,51 @@ export function SceneObjectMesh({
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation()
           onSelect(object.id)
+          if (e.button === 2) {
+            // 右键只上报菜单，不进入拖拽或描点
+            onContextMenu?.(object.id, e.nativeEvent.clientX, e.nativeEvent.clientY)
+            return
+          }
+          // Ctrl 角点缩放：不进入普通平移；缩放预览期间同样不响应拖动
+          if (e.ctrlKey || useObjectResizeStore.getState().preview) return
+          const marking = useConnectionsStore.getState()
+          if (marking.projectId === project.id && marking.pickingObjectId) {
+            if (pick.active) pick.onPointerDown(e)
+            return
+          }
           drag.onPointerDown(e)
+        }}
+        onContextMenu={(e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation()
+          e.nativeEvent.preventDefault()
+          onContextMenu?.(object.id, e.nativeEvent.clientX, e.nativeEvent.clientY)
         }}
         onPointerOver={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation()
           setHovered(true)
         }}
-        onPointerOut={() => setHovered(false)}
+        onPointerMove={pick.onPointerMove}
+        onPointerUp={pick.onPointerUp}
+        onPointerCancel={pick.onPointerCancel}
+        onPointerOut={() => { setHovered(false); pick.onPointerOut() }}
       >
-        <PrimitiveModel
+        <ObjectModel
+          object={resizePreview ? { ...object, dimensions: dims } : object}
           shape={modelDone ? object.model.shape : 'genericBox'}
-          dims={dims}
           color={CATEGORY_COLORS[object.category]}
           sockets={object.powerStrip?.socketCount}
         />
       </group>
       {selected || hovered || dragging || activeOperation ? (
         <mesh
-          geometry={boxGeometry(dims.width * 1.06, dims.height * 1.08, dims.depth * 1.06)}
+          geometry={boxGeometry(dims.width, dims.height, dims.depth)}
           material={basicMaterial('#0F9D8A', {
             wireframe: true,
             opacity: selected || dragging || activeOperation ? 0.85 : 0.4,
           })}
         />
       ) : null}
+      <ObjectResizeHandles project={project} object={object} selected={selected} />
       {hasIssues || dragInvalid ? (
         <mesh
           geometry={boxGeometry(dims.width * 1.1, dims.height * 1.1, dims.depth * 1.1)}

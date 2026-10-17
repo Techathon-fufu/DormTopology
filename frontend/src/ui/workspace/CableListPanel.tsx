@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
+import { RoutingPreviewPanel } from '@/features/connections/RoutingPreviewPanel'
 import {
   Cable,
   ChevronDown,
   ChevronRight,
+  Crosshair,
   Link2,
   Loader2,
   Pause,
@@ -46,20 +48,25 @@ export function CableListPanel({
   onConfirmRouting,
   busy,
   onPlanCables,
+  onOpenMarking,
   onFlash,
   className,
   onClose,
   onAfterSelect,
+  showPlanningActions = true,
 }: {
   project: Project
   routingConfirmed: boolean
   onConfirmRouting: (confirmed: boolean) => void
   busy: boolean
   onPlanCables: (targetIds?: string[]) => void
+  /** 打开表面描点页面（走线模式与手机端的入口；桌面也可直接右键物品） */
+  onOpenMarking?: () => void
   onFlash: (msg: string) => void
   className?: string
   onClose?: () => void
   onAfterSelect?: () => void
+  showPlanningActions?: boolean
 }) {
   const cables = project.cables
   const selectedCableId = useCableStore((s) => s.selectedCableId)
@@ -149,6 +156,12 @@ export function CableListPanel({
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
+        <RoutingPreviewPanel project={project} />
+        {/* 描点控件只在描点页面里出现；这里是进入该页面的入口（桌面也可右键物品） */}
+        <Button size="sm" variant="outline" className="w-full" disabled={!onOpenMarking} onClick={() => onOpenMarking?.()}>
+          <Crosshair className="mr-1 h-3.5 w-3.5" />
+          描点与连接检查
+        </Button>
         {/* 颜色 + 文字图例：电源线 / 视频线 / 数据线等 */}
         <div className="flex flex-wrap gap-1.5">
           {kinds.map((kind) => (
@@ -172,6 +185,7 @@ export function CableListPanel({
 
         {/* 规划操作 */}
         <div className="space-y-1.5">
+          {showPlanningActions ? <>
           <label className="flex items-start gap-2 py-1 text-xs">
             <input
               type="checkbox"
@@ -203,6 +217,7 @@ export function CableListPanel({
               更新 {staleIds.length} 条「需重算」走线
             </Button>
           ) : null}
+          </> : null}
           {missingPorts > 0 ? (
             <Button size="sm" variant="outline" className="w-full" onClick={handleEnsurePorts}>
               <PlugZap className="h-3.5 w-3.5" />

@@ -13,6 +13,8 @@ import { CameraRig } from '@/scene/CameraRig'
 import { CablePlanningOverlay } from '@/scene/CablePlanningOverlay'
 import { CablesLayer } from '@/scene/CablesLayer'
 import { PortMarkers } from '@/scene/PortMarkers'
+import { SurfacePointOverlay } from '@/features/connections/SurfacePointOverlay'
+import { RoutingPreviewLayer } from '@/features/connections/RoutingPreviewLayer'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
 import { SceneObjectMesh } from '@/scene/SceneObjectMesh'
@@ -108,9 +110,12 @@ function OperationPlayback() {
 export function Viewport({
   project,
   issuesById,
+  onObjectContextMenu,
 }: {
   project: Project
   issuesById: Map<string, SceneIssue[]>
+  /** 物品右键 → 上报屏幕坐标，工作台据此展示上下文菜单 */
+  onObjectContextMenu?: (objectId: string, clientX: number, clientY: number) => void
 }) {
   const mode = useWorkspaceStore((s) => s.mode)
   const viewPreset = useWorkspaceStore((s) => s.viewPreset)
@@ -150,7 +155,7 @@ export function Viewport({
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full" onContextMenu={(e) => e.preventDefault()}>
       <SceneErrorBoundary>
         <Canvas
           shadows
@@ -179,8 +184,8 @@ export function Viewport({
             shadow-camera-far={14}
           />
           <Suspense fallback={null}>
-            {/* 房间外壳与桌体分离：桌体优先加载 dorm_desk_assembled.glb，失败 / 未就绪回退参数化几何；
-                GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}
+            {/* 房间外壳与桌体分离：桌体加载正式模型（无抽屉桌体 + 三只抽屉分离件，抽屉可推拉），
+                失败 / 未就绪回退参数化几何；GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}
             <RoomShell
               room={project.room}
               deskMode="none"
@@ -199,6 +204,7 @@ export function Viewport({
                 selected={object.id === selectedId}
                 issues={object.id === selectedId ? previewIssues.get(object.id) : undefined}
                 onSelect={select}
+                onContextMenu={onObjectContextMenu}
               />
             ))}
             {mode === 'cable' ? (
@@ -206,6 +212,8 @@ export function Viewport({
                 <CablePlanningOverlay project={project} />
                 <CablesLayer project={project} />
                 <PortMarkers project={project} />
+                <SurfacePointOverlay project={project} />
+                <RoutingPreviewLayer project={project} />
               </>
             ) : null}
           </Suspense>
