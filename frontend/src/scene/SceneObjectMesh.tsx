@@ -8,6 +8,8 @@ import { CATEGORY_COLORS } from './models'
 import { ObjectModel } from './ObjectModel'
 import { basicMaterial, boxGeometry } from './resources'
 import { useObjectDrag } from './useObjectDrag'
+import { useSurfacePortPick } from '@/features/connections/useSurfacePortPick'
+import { useConnectionsStore } from '@/features/connections/store'
 
 /**
  * 场景对象网格：点击 / 拖拽选中与移动、悬停高亮、选中青绿外框、校验问题红框。
@@ -29,6 +31,7 @@ export function SceneObjectMesh({
 }) {
   const [hovered, setHovered] = useState(false)
   const drag = useObjectDrag(project, object)
+  const pick = useSurfacePortPick(project, object)
   const { transform: t, dimensions: dims } = object
 
   const dragPreview = useWorkspaceStore((s) =>
@@ -66,13 +69,21 @@ export function SceneObjectMesh({
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation()
           onSelect(object.id)
+          const marking = useConnectionsStore.getState()
+          if (marking.projectId === project.id && marking.pickingObjectId) {
+            if (pick.active) pick.onPointerDown(e)
+            return
+          }
           drag.onPointerDown(e)
         }}
         onPointerOver={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation()
           setHovered(true)
         }}
-        onPointerOut={() => setHovered(false)}
+        onPointerMove={pick.onPointerMove}
+        onPointerUp={pick.onPointerUp}
+        onPointerCancel={pick.onPointerCancel}
+        onPointerOut={() => { setHovered(false); pick.onPointerOut() }}
       >
         <ObjectModel
           object={object}

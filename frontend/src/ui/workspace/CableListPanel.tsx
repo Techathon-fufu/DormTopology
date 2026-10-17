@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { ConnectionsPanel } from '@/features/connections/ConnectionsPanel'
+import { RoutingPreviewPanel } from '@/features/connections/RoutingPreviewPanel'
 import {
   Cable,
   ChevronDown,
@@ -150,6 +152,8 @@ export function CableListPanel({
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
+        <RoutingPreviewPanel project={project} />
+        <ConnectionsPanel project={project} busy={busy} />
         {/* 颜色 + 文字图例：电源线 / 视频线 / 数据线等 */}
         <div className="flex flex-wrap gap-1.5">
           {kinds.map((kind) => (

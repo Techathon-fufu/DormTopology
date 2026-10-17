@@ -13,6 +13,8 @@ import { CameraRig } from '@/scene/CameraRig'
 import { CablePlanningOverlay } from '@/scene/CablePlanningOverlay'
 import { CablesLayer } from '@/scene/CablesLayer'
 import { PortMarkers } from '@/scene/PortMarkers'
+import { SurfacePointOverlay } from '@/features/connections/SurfacePointOverlay'
+import { RoutingPreviewLayer } from '@/features/connections/RoutingPreviewLayer'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
 import { SceneObjectMesh } from '@/scene/SceneObjectMesh'
@@ -206,6 +208,8 @@ export function Viewport({
                 <CablePlanningOverlay project={project} />
                 <CablesLayer project={project} />
                 <PortMarkers project={project} />
+                <SurfacePointOverlay project={project} />
+                <RoutingPreviewLayer project={project} />
               </>
             ) : null}
           </Suspense>

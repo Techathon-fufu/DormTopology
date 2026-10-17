@@ -11,6 +11,9 @@ import { useDeskModelStore } from '@/state/deskModelStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { isMockMode, services } from '@/api'
 import { cablePlanningInputSignature } from '@/api/core/routingWire'
+import { auditConnections } from '@/features/connections/model'
+import { useRoutingPreviewStore } from '@/features/connections/routingPreview'
+import { useConnectionsStore } from '@/features/connections/store'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { validateScene, type SceneIssue } from '@/scene/sceneValidation'
 import { cn } from '@/lib/utils'
@@ -188,6 +191,7 @@ export function WorkspacePage() {
         return
       }
       if (mod) return
+      if (useConnectionsStore.getState().pickingObjectId) return
 
       const p = useProjectsStore.getState().projects[projectId]
       const selected =
@@ -289,6 +293,12 @@ export function WorkspacePage() {
       showFlash('请先核对并确认物品尺寸、位置与接口')
       return
     }
+    const audit = auditConnections(p)
+    if (audit.blocking) { showFlash(`请先处理连接问题：${audit.issues[0].message}`); return }
+    useConnectionsStore.getState().cancelPick()
+    useRoutingPreviewStore.getState().discard()
+    const baseline = usePlansStore.getState().baselines[p.id]
+    if (!baseline) { showFlash('整理前快照缺失，请重新进入工作台。'); return }
     const inputSignature = cablePlanningInputSignature(p)
     cablePlanning.current = true
     const job = createJob({
@@ -305,7 +315,7 @@ export function WorkspacePage() {
     try {
       const result = await services.cablePlanning.planCables({
         project: p,
-        baseline: usePlansStore.getState().baselines[p.id],
+        baseline,
         confirmed: routingConfirmed,
         projectId: p.id,
         objects: p.objects,
@@ -321,9 +331,8 @@ export function WorkspacePage() {
       if (cablePlanningInputSignature(current) !== inputSignature) {
         throw new Error('场景或线缆已变化，旧走线结果已丢弃。请重新规划。')
       }
-      const updatedById = new Map(result.cables.map((c) => [c.id, c]))
-      const nextCables = current.cables.map((c) => updatedById.get(c.id) ?? c)
-      useWorkspaceStore.getState().replaceCables(p.id, nextCables, true)
+      if (usePlansStore.getState().baselines[p.id]?.id !== baseline.id) throw new Error('原始快照已变化，请重新规划。')
+      useRoutingPreviewStore.getState().stage(current, result, baseline.id)
 
       const summary = `规划 ${result.plannedCount} 条${
         result.conflictCount > 0 ? `，${result.conflictCount} 条存在障碍（见右侧路径检查）` : ''
@@ -338,7 +347,7 @@ export function WorkspacePage() {
         resultNote: `${summary} · ${verifyNote}`,
       })
       showFlash(
-        `${summary}：路径来自真实后端算法${result.plannedCount > 0 ? '，可在左侧播放「收拢动画」查看原始 → 建议对比' : ''}（可撤销）`,
+        `${summary}：路径来自真实后端算法${result.plannedCount > 0 ? '，请在左侧预览并接受理线方案' : ''}（可撤销）`,
       )
     } catch (err) {
       showFlash(err instanceof Error ? err.message : String(err))
