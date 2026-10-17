@@ -20,7 +20,8 @@
         0.935,
         0.455,
         0.77
-      ]
+      ],
+      "model_url": "objects/keyboard.glb"
     },
     {
       "id": "item_02",
@@ -87,7 +88,8 @@
         1.291,
         0.488,
         0.77
-      ]
+      ],
+      "model_url": "objects/mousepad.glb"
     },
     {
       "id": "item_05",
@@ -132,7 +134,8 @@
         1.276,
         0.333,
         0.77
-      ]
+      ],
+      "model_url": "objects/power_strip.glb"
     },
     {
       "id": "item_07",
@@ -154,7 +157,8 @@
         1.31,
         0.312,
         0.77
-      ]
+      ],
+      "model_url": "objects/charger.glb"
     },
     {
       "id": "item_08",
@@ -176,7 +180,8 @@
         1.41,
         0.333,
         0.77
-      ]
+      ],
+      "model_url": "objects/tissue_pack.glb"
     },
     {
       "id": "item_09",
@@ -198,7 +203,8 @@
         0.571,
         0.58,
         0.77
-      ]
+      ],
+      "model_url": "objects/tablet.glb"
     }
   ]
 }

@@ -45,6 +45,12 @@ def main():
     
     test_glb_asset("objects/tape_measure.glb", expected_min_geometries=5)
     test_glb_asset("objects/mouse.glb", expected_min_geometries=10)
+    test_glb_asset("objects/charger.glb", expected_min_geometries=1)
+    test_glb_asset("objects/keyboard.glb", expected_min_geometries=1)
+    test_glb_asset("objects/mousepad.glb", expected_min_geometries=1)
+    test_glb_asset("objects/power_strip.glb", expected_min_geometries=1)
+    test_glb_asset("objects/tissue_pack.glb", expected_min_geometries=1)
+    test_glb_asset("objects/tablet.glb", expected_min_geometries=1)
     
     print("\n[SUCCESS] All 3D asset validation tests passed!")
 
