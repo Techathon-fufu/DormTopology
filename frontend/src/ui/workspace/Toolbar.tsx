@@ -1,6 +1,8 @@
 import {
   Cable,
   CheckCircle2,
+  Eye,
+  EyeOff,
   GitCompareArrows,
   LayoutGrid,
   Loader2,
@@ -20,6 +22,7 @@ import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
 import { Segmented } from '@/ui/kit/segmented'
+import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
@@ -81,6 +84,8 @@ export function Toolbar({
   /** 空间整理预览 / 动画进行中：禁止切到走线模式（避免两种会话状态互相干扰） */
   const previewBlocking = useOrganizeStore((s) => s.isPreviewBlocking())
   const staleCount = project.cables.filter((c) => c.status === 'stale').length
+  const showDesk = useDeskModelStore((s) => s.showDesk)
+  const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
 
   return (
     <header className="z-30 border-b border-border bg-surface">
@@ -161,6 +166,14 @@ export function Toolbar({
           </Button>
           <Button variant="ghost" size="icon" title="重置视角（F）" onClick={resetView}>
             <RotateCcw className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={showDesk ? '隐藏桌体（GLB 模型 / 简化几何）' : '显示桌体'}
+            onClick={() => setShowDesk(!showDesk)}
+          >
+            {showDesk ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </Button>
         </div>
 

@@ -1,27 +1,31 @@
 import { Grid } from '@react-three/drei'
 import type { RoomConfig } from '@/types/project'
-import { boxGeometry, standardMaterial, torusGeometry } from './resources'
+import { ParametricDesk } from './ParametricDesk'
+import { boxGeometry, standardMaterial } from './resources'
 
 const WALL = '#EFECE6'
 const FLOOR = '#E9E4DB'
 const METAL = '#3A3F45'
-const WOOD = '#D6B98C'
 
 /**
- * 上床下桌结构 + 地面/墙面 + 出线孔/电源标记。
+ * 房间外壳与床架结构：地面 / 墙面 / 网格 + 床架横梁 / 床板 / 梯子 + 墙面插座。
  * 坐标约定：后墙位于 z = 0，房间向 +z 展开，x 以桌面中心为 0（米）。
- * 所有部件使用共享几何体 / 材质缓存（立柱、桌腿、横梁等重复件只创建一次）。
+ * 桌体（桌面 / 桌腿 / 书架搁板 / 立柱 / 出线孔）拆分为 ParametricDesk：
+ * - deskMode='parametric'（默认）：与既有一致（空间配置预览 / 交付页三维视图沿用）；
+ * - deskMode='none'：工作台视口使用，桌体由 DormDeskModel 决策渲染 GLB 或回退参数化几何。
+ * 所有部件使用共享几何体 / 材质缓存（横梁、梯子横档等重复件只创建一次）。
  */
 export function RoomShell({
   room,
+  deskMode = 'parametric',
 }: {
   room: RoomConfig
+  /** 'parametric' 渲染参数化桌体（默认）；'none' 不渲染桌体（由 DormDeskModel 接管） */
+  deskMode?: 'parametric' | 'none'
 }) {
   const L = room.length
   const D = room.width
   const H = room.height
-  const desk = room.desk
-  const deskCZ = desk.depth / 2 + 0.05
   const postH = 1.68
 
   // 床架随立柱布置自适应（立柱即床架支点；不足四根时退回示例跨度 1.9 × 0.9）
@@ -70,67 +74,8 @@ export function RoomShell({
         fadeStrength={1.4}
       />
 
-      {/* 桌面与桌腿 */}
-      <mesh
-        castShadow
-        receiveShadow
-        position={[0, desk.height - desk.thickness / 2, deskCZ]}
-        geometry={boxGeometry(desk.width, desk.thickness, desk.depth)}
-        material={standardMaterial(WOOD, { roughness: 0.65 })}
-      />
-      {[
-        [-1, -1],
-        [1, -1],
-        [-1, 1],
-        [1, 1],
-      ].map(([sx, sz]) => (
-        <mesh
-          key={`${sx}${sz}`}
-          castShadow
-          position={[
-            sx * (desk.width / 2 - 0.05),
-            (desk.height - desk.thickness) / 2,
-            deskCZ + sz * (desk.depth / 2 - 0.05),
-          ]}
-          geometry={boxGeometry(0.04, desk.height - desk.thickness, 0.04)}
-          material={frameMat}
-        />
-      ))}
-
-      {/* 书架（床板下沿的搁板） */}
-      {room.shelf.enabled ? (
-        <group>
-          <mesh
-            castShadow
-            position={[0, desk.height + room.shelf.heightAboveDesk, 0.05 + room.shelf.depth / 2]}
-            geometry={boxGeometry(desk.width - 0.2, 0.018, room.shelf.depth)}
-            material={standardMaterial(WOOD, { roughness: 0.65 })}
-          />
-          {[-1, 1].map((sx) => (
-            <mesh
-              key={sx}
-              position={[
-                sx * (desk.width / 2 - 0.12),
-                desk.height + room.shelf.heightAboveDesk / 2,
-                0.05 + room.shelf.depth / 2,
-              ]}
-              geometry={boxGeometry(0.016, room.shelf.heightAboveDesk, room.shelf.depth)}
-              material={standardMaterial('#C9A06A', { roughness: 0.7 })}
-            />
-          ))}
-        </group>
-      ) : null}
-
-      {/* 四根立柱（截面相同则复用同一几何体与材质） */}
-      {room.posts.map((post) => (
-        <mesh
-          key={post.id}
-          castShadow
-          position={[post.position[0], postH / 2, post.position[2]]}
-          geometry={boxGeometry(post.section, postH, post.section)}
-          material={standardMaterial(METAL, { metalness: 0.55, roughness: 0.4 })}
-        />
-      ))}
+      {/* 桌体（参数化简化几何）：工作台由 DormDeskModel 接管；桌面 / 桌腿 / 书架 / 立柱 / 出线孔见 ParametricDesk */}
+      {deskMode === 'parametric' ? <ParametricDesk room={room} /> : null}
 
       {/* 床架横梁（位于床板下方，跨度随立柱位置自适应） */}
       {[bedZ0 + 0.02, bedZ1 - 0.02].map((z) => (
@@ -199,16 +144,6 @@ export function RoomShell({
         />
       ))}
 
-      {/* 桌面出线孔 */}
-      {room.cableHoles.map((hole) => (
-        <mesh
-          key={hole.id}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={hole.position}
-          geometry={torusGeometry(hole.diameter / 2, 0.004, 10, 24)}
-          material={standardMaterial(METAL, { metalness: 0.4, roughness: 0.5 })}
-        />
-      ))}
 
       {/* 墙面电源插座 */}
       {room.outlets.map((outlet) => (

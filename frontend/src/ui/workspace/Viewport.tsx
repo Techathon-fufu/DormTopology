@@ -12,11 +12,13 @@ import { CameraRig } from '@/scene/CameraRig'
 import { CablePlanningOverlay } from '@/scene/CablePlanningOverlay'
 import { CablesLayer } from '@/scene/CablesLayer'
 import { PortMarkers } from '@/scene/PortMarkers'
+import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
 import { SceneObjectMesh } from '@/scene/SceneObjectMesh'
 import { ZoneOverlay } from '@/scene/ZoneOverlay'
 import { basicMaterial, ringGeometry } from '@/scene/resources'
 import { detectWebGL } from '@/lib/webgl'
+import { DeskModelNotice } from '@/ui/workspace/DeskModelNotice'
 
 /** 三维渲染错误边界：渲染失败时给出重试入口，不影响左右面板继续工作 */
 class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -96,59 +98,65 @@ export function Viewport({
   }
 
   return (
-    <SceneErrorBoundary>
-      <Canvas
-        shadows
-        dpr={[1, 2]}
-        camera={{ position: [1.9, 1.6, 2.6], fov: 42 }}
-        onPointerMissed={() => {
-          select(null)
-          if (mode === 'cable') useCableStore.getState().selectCable(null)
-        }}
-      >
-        <color attach="background" args={['#F4F1EA']} />
-        <fog attach="fog" args={['#F4F1EA', 9, 20]} />
-        <ambientLight intensity={0.55} />
-        <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.45]} />
-        <directionalLight
-          position={[2.5, 4, 3]}
-          intensity={1.1}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-left={-3}
-          shadow-camera-right={3}
-          shadow-camera-top={3}
-          shadow-camera-bottom={-3}
-          shadow-camera-near={0.5}
-          shadow-camera-far={14}
-        />
-        <Suspense fallback={null}>
-          <RoomShell room={project.room} />
-          {organizeZonesVisible ? (
-            <ZoneOverlay room={project.room} preferences={resolveOrganizationPreferences(project)} />
-          ) : null}
-          {project.objects.map((object) => (
-            <SceneObjectMesh
-              key={object.id}
-              project={project}
-              object={object}
-              selected={object.id === selectedId}
-              issues={issuesById.get(object.id)}
-              onSelect={select}
-            />
-          ))}
-          {mode === 'cable' ? (
-            <>
-              <CablePlanningOverlay project={project} />
-              <CablesLayer project={project} />
-              <PortMarkers project={project} />
-            </>
-          ) : null}
-        </Suspense>
-        <DragIndicator />
-        <CameraRig preset={viewPreset} />
-      </Canvas>
-    </SceneErrorBoundary>
+    <div className="relative h-full w-full">
+      <SceneErrorBoundary>
+        <Canvas
+          shadows
+          dpr={[1, 2]}
+          camera={{ position: [1.9, 1.6, 2.6], fov: 42 }}
+          onPointerMissed={() => {
+            select(null)
+            if (mode === 'cable') useCableStore.getState().selectCable(null)
+          }}
+        >
+          <color attach="background" args={['#F4F1EA']} />
+          <fog attach="fog" args={['#F4F1EA', 9, 20]} />
+          <ambientLight intensity={0.55} />
+          <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.45]} />
+          <directionalLight
+            position={[2.5, 4, 3]}
+            intensity={1.1}
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-left={-3}
+            shadow-camera-right={3}
+            shadow-camera-top={3}
+            shadow-camera-bottom={-3}
+            shadow-camera-near={0.5}
+            shadow-camera-far={14}
+          />
+          <Suspense fallback={null}>
+            {/* 房间外壳与桌体分离：桌体优先加载 dorm_desk_assembled.glb，失败 / 未就绪回退参数化几何 */}
+            <RoomShell room={project.room} deskMode="none" />
+            <DormDeskModel room={project.room} />
+            {organizeZonesVisible ? (
+              <ZoneOverlay room={project.room} preferences={resolveOrganizationPreferences(project)} />
+            ) : null}
+            {project.objects.map((object) => (
+              <SceneObjectMesh
+                key={object.id}
+                project={project}
+                object={object}
+                selected={object.id === selectedId}
+                issues={issuesById.get(object.id)}
+                onSelect={select}
+              />
+            ))}
+            {mode === 'cable' ? (
+              <>
+                <CablePlanningOverlay project={project} />
+                <CablesLayer project={project} />
+                <PortMarkers project={project} />
+              </>
+            ) : null}
+          </Suspense>
+          <DragIndicator />
+          <CameraRig preset={viewPreset} />
+        </Canvas>
+      </SceneErrorBoundary>
+      {/* 桌体模型状态提示（加载中 / 失败重试 / 简化几何恢复）：不遮挡三维操作 */}
+      <DeskModelNotice />
+    </div>
   )
 }
