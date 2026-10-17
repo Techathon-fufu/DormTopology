@@ -9,7 +9,7 @@ import { useOrganizeStore } from '@/state/organizeStore'
 import { useCableStore } from '@/state/cableStore'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { services } from '@/api'
+import { isMockMode, services } from '@/api'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { validateScene, type SceneIssue } from '@/scene/sceneValidation'
 import { cn } from '@/lib/utils'
@@ -229,7 +229,15 @@ export function WorkspacePage() {
     const job = createJob({
       projectId: p.id,
       type: 'cable',
-      title: targetIds && targetIds.length > 0 ? '更新走线（演示）' : '规划走线（演示）',
+      title:
+        targetIds && targetIds.length > 0
+          ? isMockMode
+            ? '更新走线（演示）'
+            : '更新走线（真实后端）'
+          : isMockMode
+            ? '规划走线（演示）'
+            : '规划走线（真实后端）',
+      mock: isMockMode,
     })
     setBusy('cable')
     updateJob(job.id, { status: 'running', progress: 0.05, stageLabel: '准备中' })
@@ -254,12 +262,22 @@ export function WorkspacePage() {
       const summary = `规划 ${result.plannedCount} 条${
         result.conflictCount > 0 ? `，${result.conflictCount} 条存在障碍（见右侧路径检查）` : ''
       }`
+      const warnCount = result.warnings?.length ?? 0
+      const verifyNote = isMockMode
+        ? '规则式演示，未经真实算法验证'
+        : `真实后端算法结果${result.algorithmVerified ? '（后端已标记 verified）' : '（后端未标记 verified）'}${
+            warnCount > 0 ? `，本地校验未采用 ${warnCount} 条路径` : ''
+          }`
       updateJob(job.id, {
         status: result.conflictCount > 0 ? 'partial' : 'success',
         progress: 1,
-        resultNote: `${summary} · 规则式演示，未经真实算法验证`,
+        resultNote: `${summary} · ${verifyNote}`,
       })
-      showFlash(`${summary}：路径为规则式演示（未经真实算法验证，可撤销）${result.plannedCount > 0 ? '。可在左侧播放「收拢动画」查看原始 → 建议对比' : ''}`)
+      showFlash(
+        `${summary}：路径来自${
+          isMockMode ? '规则式演示（未经真实算法验证）' : '真实后端算法（经本地校验）'
+        }${result.plannedCount > 0 ? '，可在左侧播放「收拢动画」查看原始 → 建议对比' : ''}（可撤销）`,
+      )
     } catch (err) {
       updateJob(job.id, {
         status: 'failed',
@@ -277,8 +295,9 @@ export function WorkspacePage() {
     const job = createJob({
       projectId: p.id,
       type: 'model',
-      title: `生成模型：${object.name}`,
+      title: `生成模型：${object.name}${isMockMode ? '' : '（真实后端）'}`,
       itemIds: [object.id],
+      mock: isMockMode,
     })
     updateJob(job.id, { status: 'running', progress: 0.05, attempts: attempt + 1 })
     useWorkspaceStore
@@ -297,9 +316,10 @@ export function WorkspacePage() {
         object.id,
         {
           model: {
-            status: 'placeholder',
+            status: res.assetUrl ? 'ready' : 'placeholder',
             source: 'generated',
-            format: 'placeholder-box',
+            format: res.format ?? (res.assetUrl ? 'glb' : 'placeholder-box'),
+            assetUrl: res.assetUrl,
             note: res.note,
           },
         },

@@ -148,7 +148,26 @@ npm run build        # tsc --noEmit && vite build
 
 **未完成（如实声明）**：`dorm_desk_assembled.glb` 真实文件不在仓库，视觉验收（桌面比例、地面高度、真实吸附）需资产入库后复核；独立单品 GLB 与 Rodin 未接入。
 
-## 9. 剩余限制（如实声明）
+## 9. 后端服务适配层（第 06 阶段）
+
+结论口径：代码路径 + 类型检查 / 构建 + **本地假 HTTP 服务器冒烟**（客户端 / 轮询 / 校验 / 存储 / 模式）；
+真实后端未实现，**未做真实联调**（契约与缺口见 [api-integration.md](api-integration.md)）。
+
+| 验收要求（任务清单口径） | 结论 | 说明与依据 |
+| --- | --- | --- |
+| mock 模式原有流程完全可用 | 通过 | 五个 mock 服务与演示流程零改动；`VITE_API_MODE` 默认 `mock`；加速 / 减少动态仅在 mock 生效 |
+| real 模式读取配置并调用后端 | 通过（接口层，未联调） | `VITE_API_MODE=real` + `VITE_API_BASE_URL`；四项能力（识别 multipart / 模型 / 整理 / 走线，另含遗留布局）统一 `POST → jobId → 轮询` |
+| 后端失败显示明确错误 | 通过 | `ApiError` 分类（network / timeout / http / malformed / not-found / job / input）；界面展示真实原因 + 重试 + 「切换到演示模式」入口；不静默降级 |
+| 长任务刷新页面后能继续查询状态 | 通过 | `dormtopology.remote-jobs` 持久化；`ApiRuntime` 每 10 s + focus / online 恢复查询；**如实限制**：只更新状态 / 摘要，不自动重放结果 |
+| 不暴露任何服务密钥 | 通过 | 前端无任何 token / apiKey；仅模式偏好与任务元数据入库；第三方密钥由后端持有 |
+| typecheck + build | 通过 | `npm run typecheck` / `npm run build`（本轮实跑） |
+| 取消 / 重试 / 加载状态 | 通过（接口层） | 任务面板取消（`POST /jobs/{id}/cancel`）、重查；失败任务沿用既有重试入口；后端未提供进度时只显示阶段文字 |
+| 数据真实性标注 | 通过 | 模拟 / 真实服务 / 计算值 / 未接入徽标；走线仅 `verified=true` 标注后端已验证；识别估计尺寸保持「待确认」 |
+
+**未完成（如实声明）**：后端 FastAPI 未实现 → 无真实联调与视觉验收；字段缺口（坐标原点、regions / obstacles /
+routing_graph、线径预设等）待确认；恢复查询不重放结果；后端资产 `asset_url` 未接入三维渲染（仍为占位几何）。
+
+## 10. 剩余限制（如实声明）
 
 - 无自动化浏览器 E2E：以上交互项依赖手动验证；本仓库环境仅能跑类型检查 / 构建 / 状态层冒烟（见验证记录）。
 - 走线为规则式演示（非寻路算法），整理为可解释规则（非优化算法）；均未经真实算法验证。
@@ -156,3 +175,4 @@ npm run build        # tsc --noEmit && vite build
 - 配件几何为外观预览，不可直接打印；STL 未接入（需封闭几何 / 布尔合并能力）。
 - 手机端上传、预览与场景查看未做实测记录。
 - 演示加速与减少动态均为本机行为开关，不影响真实服务接入后的交互。
+- 第 06 阶段新增（如实声明）：real 模式未经真实后端联调（后端 FastAPI 未实现）；恢复查询不重放结果；后端资产 `asset_url` 未接入三维渲染；wire 字段缺口（坐标原点、regions / obstacles / routing_graph、线径预设等）见 [api-integration.md](api-integration.md) 第 6 节。

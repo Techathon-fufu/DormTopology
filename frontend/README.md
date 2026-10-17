@@ -1,6 +1,6 @@
 # DormTopology 3D 前端（成员 A）
 
-React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线演示应用。当前为**本地演示模式**：照片识别、模型生成、布局整理与走线规划均由本地 Mock 适配器与规则式演示实现，尚未接入后端 FastAPI 服务、真实算法与 Rodin 生成；界面已就地标注各处数据的真实来源（演示数据 / 模拟 / 计算值 / 未接入）。
+React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线演示应用。默认为**本地演示模式**（`VITE_API_MODE=mock`）：照片识别、模型生成、布局整理与走线规划由本地 Mock 适配器与规则式演示实现；`VITE_API_MODE=real` 时切换为真实后端适配层（统一 HTTP 客户端 + jobId 长任务轮询 + 结果本地校验，契约见 [docs/api-integration.md](docs/api-integration.md)），后端 FastAPI 服务尚未实现、暂无法联调。界面已就地标注各处数据的真实来源（演示数据 / 模拟 / 计算值 / 真实服务 / 未接入）。
 
 本目录的设计基线见 [docs/design-spec.md](docs/design-spec.md)；仓库级约定以 [实施方案](../docs/implementation_roadmap.md) 与 [数据契约](../docs/data_contract.md) 为准。
 
@@ -15,7 +15,7 @@ npm run build      # tsc --noEmit && vite build
 ```
 
 - Node.js ≥ 18（开发验证使用 Node 24 / npm 11），依赖版本已固定（`package.json` 无 `^` 范围）。
-- 环境变量见 `.env.example`：`VITE_SERVICE_MODE=mock`（默认，本地模拟）或 `service`（调用应用后端）；`VITE_API_BASE_URL` 仅 service 模式使用。Rodin 等第三方凭证只在后端持有，前端不配置、不直接调用供应商接口。
+- 环境变量见 `.env.example`（契约与字段缺口见 [docs/api-integration.md](docs/api-integration.md)）：`VITE_API_MODE=mock`（默认，本地模拟）或 `real`（调用应用后端）；兼容旧变量 `VITE_SERVICE_MODE=mock|service`；`VITE_API_BASE_URL` / `VITE_API_TIMEOUT_MS` 仅 real 模式使用。Rodin 等第三方凭证只在后端持有，前端不配置、不直接调用供应商接口。
 
 ## 已实现的流程（演示数据 + 本地规则）
 
@@ -37,16 +37,16 @@ npm run build      # tsc --noEmit && vite build
   - 未解决的问题清单：摆放校验（越界 / 相交 / 悬空）、走线检查（边界 / 避让区 / 端点，含障碍位置坐标）、线长核对（实际线长缺失 / 不足）与供电未接线，均可点击定位。
   - 导出项目 JSON（含场景、指南、配件参数与诚实标注）；浏览器打印 / 保存 PDF 版式（标题 + 生成信息 + 场景截图，步骤避免跨页切断）；工作台方案修改后以方案指纹检测并提示「重新生成指南」。
 
-不伪造精确比例与算法结论：规则式演示结果不标注为「真实算法验证」，未接入能力显示为「未接入」。
+不伪造精确比例与算法结论：规则式演示结果不标注为「真实算法验证」，未接入能力显示为「未接入」。0.6.0 起服务适配层支持真实后端（`VITE_API_MODE=real`）：结果经本地校验后标注「真实服务」，后端失败显示真实原因并提供「切换到演示模式」入口（契约与限制见 [docs/api-integration.md](docs/api-integration.md)）。
 
 ## 目录结构
 
 ```text
 frontend/src/
-  api/      HTTP 客户端与 Mock 适配器（服务契约、模式切换与数据来源）
-  state/    Zustand 状态（项目、工作台、线缆、整理、任务、交付、导览、演示加速、桌体模型）与 IndexedDB 存取
+  api/      服务适配层（types 契约 / mock / http 真实实现；core：统一 HTTP 客户端、jobId 长任务轮询、wire 映射与本地校验、健康检查）
+  state/    Zustand 状态（项目、工作台、线缆、整理、任务、交付、导览、演示加速、桌体模型、远任务留痕、后端健康）与 IndexedDB 存取
   scene/    Three.js/R3F 场景与本地几何规则（场景校验、走线规划、路径节点、模型资源、桌体 GLB 加载/归一化/动态导入）
-  ui/       页面与组件（pages / workspace / setup / deliver / tour / kit / layout / brand / jobs）
+  ui/       页面与组件（pages / workspace / setup / deliver / tour / kit / layout / brand / jobs / service）
   lib/      通用纯函数（单位换算、工具、指南生成、布局方案辅助、WebGL 检测、模拟等待节奏、减少动态偏好）
   types/    领域类型（与数据契约的对应关系见下）
   data/     演示项目与示例照片

@@ -258,6 +258,8 @@ export function CablePanel({
           <Badge variant={status.tone}>{status.label}</Badge>
           {cable.planSource === 'demo-rule' ? (
             <DataBadge kind="computed" label="规则式演示" />
+          ) : cable.planSource === 'algorithm' ? (
+            <DataBadge kind="real" label="后端算法路径" />
           ) : null}
         </div>
 

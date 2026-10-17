@@ -10,15 +10,20 @@ import type {
 import type { OrganizationPlan, OrganizationPreferences } from '@/types/organization'
 
 /**
- * 服务接口层：识别 / 模型生成 / 布局规划 / 走线规划。
+ * 服务接口层：识别 / 模型生成 / 布局规划 / 走线规划 / 空间整理。
  *
- * - mock 实现（src/services/mock）：本地模拟等待、成功、失败与部分成功
- * - service 实现（src/services/http）：调用应用后端；Rodin 等第三方密钥由后端持有，前端不配置
- * - 界面必须区分数据来源：mock 结果标注「模拟」，计算结果标注「计算值」，未实现能力标注「未接入」
+ * - mock 实现（src/api/mock）：本地模拟，界面标注「模拟」
+ * - real 实现（src/api/http）：调用应用后端（VITE_API_MODE=real），统一经
+ *   src/api/core 的 HTTP 客户端与 jobId 长任务轮询；Rodin 等第三方密钥由后端持有，前端不配置
+ * - 界面必须区分数据来源：mock 结果标注「模拟」，本地计算标注「计算值」，真实后端标注「真实后端」
  */
 
 export type ServiceProgress = (progress: number, stageLabel?: string) => void
 
+/**
+ * @deprecated 旧桩实现的占位错误（服务层已接入真实适配器）。
+ * 保留导出以兼容旧引用；新代码不应再抛出该错误。
+ */
 export class ServiceNotImplementedError extends Error {
   readonly api: string
   constructor(api: string) {
@@ -51,6 +56,8 @@ export interface RecognitionResult {
   /** 低置信度（< 0.75）数量，界面按「部分成功」提示待确认 */
   lowConfidence: number
   note?: string
+  /** 结果本地校验提示（不合格条目被显式丢弃的原因） */
+  warnings?: string[]
 }
 
 export interface RecognitionService {
@@ -60,6 +67,8 @@ export interface RecognitionService {
     /** mock 专用：强制模拟失败，用于演示识别失败 / 重试流程 */
     simulateFailure?: boolean
     onProgress?: ServiceProgress
+    /** 调用方中止（组件卸载 / 用户离开） */
+    signal?: AbortSignal
   }): Promise<RecognitionResult>
 }
 
@@ -70,8 +79,12 @@ export interface ModelGenerationResult {
   status: 'ready' | 'failed'
   /** 写入 IndexedDB modelFiles 表的资产 id（mock 不产生真实文件） */
   assetId?: string
+  /** 真实后端生成的资产 URL（三维渲染接入 URL 模型前仅记录，界面仍为占位几何） */
+  assetUrl?: string
+  format?: 'glb' | 'gltf'
   error?: string
   note?: string
+  warnings?: string[]
 }
 
 export interface ModelGenerationService {
@@ -81,6 +94,7 @@ export interface ModelGenerationService {
     /** 第几次尝试，从 0 开始（mock 用首次失败、重试成功演示失败/重试状态） */
     attempt?: number
     onProgress?: ServiceProgress
+    signal?: AbortSignal
   }): Promise<ModelGenerationResult>
 }
 
@@ -98,6 +112,7 @@ export interface LayoutPlanningService {
     objects: SceneObject[]
     room: RoomConfig
     onProgress?: ServiceProgress
+    signal?: AbortSignal
   }): Promise<LayoutPlanningResult>
 }
 
@@ -108,16 +123,18 @@ export interface CablePlanningResult {
   cables: CableConnection[]
   plannedCount: number
   conflictCount: number
-  /** 是否经过真实算法验证（演示实现恒为 false，不得显示为已验证） */
+  /** 是否经过真实算法验证（mock 恒为 false；real 仅在后端回报 verified=true 时为 true） */
   algorithmVerified: boolean
   notes: string[]
+  /** 本地校验提示（不合格路径被丢弃的原因） */
+  warnings?: string[]
 }
 
 /**
  * 走线规划服务：接口 → 场景路径节点（桌边 / 桌底 / 立柱 / 出线孔）→ 平滑曲线 → 障碍检查。
  *
  * - mock 实现：本地「规则式演示规划」（候选节点链 + 平滑采样障碍检查），可解释、演示用；
- * - service 实现：真实走线求解算法入口（当前为桩，未接入时抛 ServiceNotImplementedError）。
+ * - real 实现：调用后端走线算法服务（jobId 长任务），结果经本地校验后采用。
  */
 export interface CablePlanningService {
   planCables(input: {
@@ -129,6 +146,7 @@ export interface CablePlanningService {
     targetIds?: string[]
     preferences: OrganizationPreferences
     onProgress?: ServiceProgress
+    signal?: AbortSignal
   }): Promise<CablePlanningResult>
 }
 
@@ -136,10 +154,10 @@ export interface CablePlanningService {
 
 /**
  * 空间整理服务：三区（桌面常用区 / 书架收纳区 / 桌下隐藏区）+ 偏好（打字活动区、
- * 水杯活动区、偏好收纳分区）→ 可解释的整理方案（含未放置物品与原因、指标、动画批次）。
+ * 水杯活动区、偏好收纳分区）→ 整理方案（含未放置物品与原因、指标、动画批次）。
  *
  * - mock 实现：本地「规则式演示方案」（可解释规则计算，演示用）
- * - service 实现：真实布局 / 搬运优化算法入口（当前为桩，未接入时抛 ServiceNotImplementedError）
+ * - real 实现：调用后端布局算法服务（jobId 长任务），结果经本地校验后采用
  */
 export interface OrganizationPlanningService {
   planOrganization(input: {
@@ -148,13 +166,14 @@ export interface OrganizationPlanningService {
     room: RoomConfig
     preferences: OrganizationPreferences
     onProgress?: ServiceProgress
+    signal?: AbortSignal
   }): Promise<OrganizationPlan>
 }
 
 // ── 服务集合 ─────────────────────────────────────────────────────────────
 
 export interface AppServices {
-  mode: 'mock' | 'service'
+  mode: 'mock' | 'real'
   meta: {
     label: string
     description: string

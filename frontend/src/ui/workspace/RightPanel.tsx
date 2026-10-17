@@ -512,7 +512,7 @@ function ObjectInspector({
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <Label>3D 模型</Label>
-          {isMockMode ? <DataBadge kind="mock" /> : null}
+          {isMockMode ? <DataBadge kind="mock" /> : <DataBadge kind="real" label="真实后端" />}
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={MODEL_BADGE[status]}>{MODEL_STATUS_LABELS[status]}</Badge>

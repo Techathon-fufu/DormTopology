@@ -3,6 +3,26 @@
 本文件记录 DormTopology 3D 已交付版本的功能更新与已知限制，按发布时间倒序排列。
 版本号自首个可运行交付起使用 0.x；每次交付轮次合并 `main` 时更新本文件。
 
+## [0.6.0] - 2026-10-17（前端：后端服务适配层）
+
+### 新增
+
+- 后端服务适配层（`frontend/src/api/core`）：统一 HTTP 客户端（超时 / 网络 / 非 2xx / JSON 格式 / 任务不存在，错误分类明确）、jobId 长任务轮询（queued / running / succeeded / failed / cancelled；退避轮询、瞬时抖动容忍、可取消）、契约映射与本地校验（`wire.ts`）、健康检查；`VITE_API_MODE=mock|real` 切换（兼容旧 `VITE_SERVICE_MODE`），环境变量见 `.env.example`。
+- 四项能力真实实现：照片识别（multipart 上传）、3D 模型生成、空间整理、走线规划（另含遗留布局规划）均支持 real 模式，全部经 jobId 轮询与本地校验；mock 模式与既有演示流程完整保留。
+- 任务留痕与刷新恢复：`dormtopology.remote-jobs` 持久化任务号 / 状态 / 算法版本 / 请求参数摘要 / 创建时间；`ApiRuntime` 刷新后自动继续查询非终态任务（结果不自动重放，限制已文档化）。
+- 服务状态集群（模式徽标 / 后端健康点 / 任务面板：重查 / 取消 / 移除）；失败提示附「切换到演示模式」入口（显式操作、持久化、可恢复真实模式）。
+- 文档：`frontend/docs/api-integration.md`（wire 契约 / 字段缺口 / 联调清单）。
+
+### 变更
+
+- 界面文案按数据来源条件化：任务标题、徽标、提示语区分「模拟」/「真实后端」；识别尺寸估计值保持「待确认」，走线仅在 `verified=true` 时标注后端已验证。
+- `AppServices.mode`：`'mock' | 'service'` → `'mock' | 'real'`；走线 `planSource` 新增 `'algorithm'`；整理方案新增 `kind: 'algorithm'` 与 `serviceMeta`；`ModelRef` 新增 `assetUrl`（记录后端资产 URL；渲染仍为占位几何，URL 模型未接入）。
+
+### 已知限制
+
+- 后端 FastAPI 服务尚未实现：契约由前端依据 `docs/data_contract.md` 自定稿，**未与真实后端联调**（冒烟验证使用本地假 HTTP 服务器）；坐标原点、regions / obstacles / routing_graph 等字段缺口见 `frontend/docs/api-integration.md` 第 6 节。
+- 恢复查询仅更新任务状态与摘要，不自动重放结果；真实资产 URL 未渲染；真实识别视觉质量未验收。
+
 ## [0.5.1] - 2026-10-17（前端：桌体 GLB 加载管线）
 
 > 与 0.5.0（后端域层打包 / 走线重构）并行开发、同日合并，前端本轮顺延为 0.5.1。

@@ -123,8 +123,8 @@ export interface PlanMetrics {
 export interface OrganizationPlan {
   id: string
   projectId: string
-  /** rule-demo = 规则式演示方案（本地规则计算，不是真实搬运 / 碰撞规划） */
-  kind: 'rule-demo'
+  /** rule-demo = 规则式演示方案（本地规则计算）；algorithm = 真实后端布局算法结果（经本地校验） */
+  kind: 'rule-demo' | 'algorithm'
   createdAt: number
   preferences: OrganizationPreferences
   assignments: PlanAssignment[]
@@ -134,4 +134,14 @@ export interface OrganizationPlan {
   rules: string[]
   metrics: PlanMetrics
   summary: string
+  /** 真实后端结果的留痕（算法版本 / 后端状态 / 本地校验提示）；规则式演示方案没有该字段 */
+  serviceMeta?: OrganizationServiceMeta
+}
+
+/** 真实后端整理方案的服务元数据（来源、后端状态、算法版本、本地校验提示） */
+export interface OrganizationServiceMeta {
+  source: 'real'
+  status: 'success' | 'partial' | 'infeasible'
+  algorithmVersion?: string
+  warnings?: string[]
 }

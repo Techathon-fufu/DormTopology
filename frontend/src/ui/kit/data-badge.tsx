@@ -11,7 +11,7 @@ const META: Record<DataKind, { label: string; className: string; title: string }
   mock: {
     label: '模拟',
     className: 'border-border bg-muted text-muted-foreground',
-    title: '该结果由本地模拟服务生成（VITE_SERVICE_MODE=mock）',
+    title: '该结果由本地模拟服务生成（VITE_API_MODE=mock）',
   },
   computed: {
     label: '计算值',
@@ -26,7 +26,7 @@ const META: Record<DataKind, { label: string; className: string; title: string }
   real: {
     label: '真实服务',
     className: 'border-success/30 bg-success/10 text-success',
-    title: '数据来自应用后端/真实服务',
+    title: '数据来自应用后端（VITE_API_MODE=real），已通过前端本地校验',
   },
 }
 

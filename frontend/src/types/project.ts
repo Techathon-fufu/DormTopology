@@ -183,6 +183,8 @@ export interface ModelRef {
   source: 'demo' | 'generated' | 'library'
   /** IndexedDB 中的资产 id（modelFiles 表） */
   assetId?: string
+  /** 真实后端返回的资产 URL（三维渲染接入 URL 模型前仅记录，界面仍为占位几何） */
+  assetUrl?: string
   /** 渲染用法说明（占位盒 / glb 等） */
   format?: 'placeholder-box' | 'glb' | 'gltf'
   /** 占位渲染使用的语义几何体（模型未完成时统一用匹配尺寸的几何占位物） */
@@ -281,7 +283,7 @@ export const CABLE_STATUS_META: Record<
   { label: string; tone: 'default' | 'primary' | 'warning' | 'danger' | 'success' }
 > = {
   existing: { label: '原始走线', tone: 'default' },
-  planned: { label: '已规划（演示）', tone: 'primary' },
+  planned: { label: '已规划', tone: 'primary' },
   adjusted: { label: '已手动调整', tone: 'success' },
   stale: { label: '需重新计算', tone: 'warning' },
   conflict: { label: '存在障碍', tone: 'danger' },
@@ -316,8 +318,8 @@ export interface CableConnection {
   /** 用户填写的预留长度（米；undefined = 按 0 处理） */
   reserveLengthM?: number
   status: CableRouteStatus
-  /** 规划来源：demo-rule = 规则式演示路径规划（非真实算法验证） */
-  planSource?: 'demo-rule' | 'manual'
+  /** 规划来源：demo-rule = 规则式演示路径规划（非真实算法验证）；algorithm = 真实后端算法结果（经本地校验） */
+  planSource?: 'demo-rule' | 'manual' | 'algorithm'
   accessories: CableAccessory[]
   note?: string
   updatedAt?: number

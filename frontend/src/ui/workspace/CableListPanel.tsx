@@ -22,6 +22,7 @@ import { useCableLink } from '@/lib/useCableLink'
 import { formatMm } from '@/lib/units'
 import { startCollectAnim } from '@/lib/collectAnim'
 import { useCableStore } from '@/state/cableStore'
+import { isMockMode } from '@/api'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
@@ -31,7 +32,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * 走线模式·左侧面板：线缆列表（状态 / 长度不足提示）+ 设备与接口浏览（点击两个接口建立连接）。
- * 所有规划结果均为「规则式演示」，界面就地标注。
+ * 演示模式结果为「规则式演示」，真实模式为「后端算法路径」，界面就地标注数据来源。
  */
 export function CableListPanel({
   project,
@@ -166,7 +167,7 @@ export function CableListPanel({
             onClick={() => onPlanCables()}
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-            {busy ? '规划走线中…' : '规划全部走线（演示）'}
+            {busy ? '规划走线中…' : `规划全部走线${isMockMode ? '（演示）' : '（真实后端）'}`}
           </Button>
           {staleIds.length > 0 ? (
             <Button

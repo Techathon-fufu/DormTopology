@@ -9,6 +9,8 @@ import { useProjectJobs } from '@/state/jobsStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { FastForwardToggle } from '@/ui/kit/fast-forward'
+import { ServiceStatusCluster } from '@/ui/service/ServiceStatusCluster'
+import { SwitchToDemoButton } from '@/ui/service/SwitchToDemoButton'
 
 /**
  * 底部任务状态区：模式提示 / 任务阶段 / 失败重试 / 模型状态汇总 / 位置校验警示 / 物品与线缆计数。
@@ -64,6 +66,7 @@ export function StatusBar({
       {flash ? <span className="font-medium text-primary">{flash}</span> : null}
 
       <span className="ml-auto inline-flex items-center gap-3">
+        <ServiceStatusCluster placement="up" />
         {active.length > 0 ? (
           <span className="inline-flex items-center gap-2">
             <span className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
@@ -96,6 +99,7 @@ export function StatusBar({
             >
               重试
             </Button>
+            <SwitchToDemoButton />
           </span>
         ) : null}
       </span>
