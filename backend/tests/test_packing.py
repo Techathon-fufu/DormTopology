@@ -4,16 +4,17 @@ import math
 import unittest
 from collections import deque
 
-from algorithm.cable_routing import plan_routes, resolve_port_world
-from algorithm.cable_routing.geometry import AABB as RoutingAABB
 from backend.app.domain.geometry import (
     AABB,
     aabb_from_item,
     direction_to_local,
     direction_to_world,
+    fits_region,
+    footprints_overlap,
     item_intersects_box,
     items_overlap,
     local_to_world,
+    rectangle,
     world_to_local,
 )
 from backend.app.domain.packing import (
@@ -23,6 +24,8 @@ from backend.app.domain.packing import (
     validate_layout,
 )
 from backend.app.domain.packing.area import DesktopGrid
+from backend.app.domain.routing import plan_routes, resolve_port_world
+from backend.app.domain.routing.geometry import AABB as RoutingAABB
 from backend.examples.packing_demo import (
     cases,
     demo_scene,
@@ -90,8 +93,68 @@ class GeometryTests(unittest.TestCase):
         self.assertFalse(item_intersects_box(a, AABB((0, 0.70, 0), (1, 0.77, 0.6))))
         self.assertTrue(item_intersects_box(a, AABB((0, 0.70, 0), (1, 0.7705, 0.6))))
 
+    def test_sat_rejects_collapsed_footprints_explicitly(self):
+        valid = rectangle((0, 1, 0, 1))
+        for polygon in (
+            ((0, 0), (0, 0), (1, 1), (0, 1)),
+            ((0, 0), (1, 0), (2, 0), (1, 0)),
+        ):
+            with self.subTest(polygon=polygon):
+                with self.assertRaisesRegex(ValueError, "footprint"):
+                    footprints_overlap(polygon, valid)
+                with self.assertRaisesRegex(ValueError, "footprint"):
+                    footprints_overlap(valid, polygon)
+
+    def test_support_tolerance_does_not_expand_region_volume(self):
+        support = region("desktop", (0, 1, 0, 0.6), 0.77, 0.2)
+        obj = item("box", "box", (0.2, 0.1, 0.2), (0.5, 0.7705, 0.3), ["desktop"])
+        self.assertTrue(fits_region(obj, support))
+        for position, size in (
+            ((0.0995, 0.77, 0.3), (0.2, 0.1, 0.2)),
+            ((0.9005, 0.77, 0.3), (0.2, 0.1, 0.2)),
+            ((0.5, 0.77, 0.0995), (0.2, 0.1, 0.2)),
+            ((0.5, 0.77, 0.5005), (0.2, 0.1, 0.2)),
+            ((0.5, 0.77, 0.3), (0.2, 0.2005, 0.2)),
+            ((0.5, 0.7695, 0.3), (0.2, 0.2005, 0.2)),
+            ((0.5, 0.7705, 0.3), (0.2, 0.2, 0.2)),
+        ):
+            with self.subTest(position=position, size=size):
+                self.assertFalse(
+                    fits_region({**obj, "position": position, "size_m": size}, support)
+                )
+
 
 class LayoutTests(unittest.TestCase):
+    def test_submillimetre_overhang_is_not_legal_support(self):
+        for position in (
+            (0.0995, 0.77, 0.3),
+            (0.9005, 0.77, 0.3),
+            (0.5, 0.77, 0.0995),
+            (0.5, 0.77, 0.5005),
+        ):
+            with self.subTest(position=position):
+                scene = simple_scene()
+                scene["items"] = [
+                    item(
+                        "box", "box", (0.2, 0.1, 0.2), position, ["desktop"], fixed=True
+                    )
+                ]
+                self.assertFalse(validate_layout(scene)["geometry_valid"])
+                self.assertEqual(plan_packing(scene)["status"], "infeasible")
+
+    def test_overheight_original_pose_cannot_be_reported_success(self):
+        scene = simple_scene()
+        scene["regions"][0]["clearance_height_m"] = 0.2
+        scene["items"] = [
+            item("tall", "box", (0.2, 0.2005, 0.2), (0.4, 0.77, 0.3), ["desktop"])
+        ]
+        self.assertFalse(validate_layout(scene)["geometry_valid"])
+        result = plan_packing(scene)
+        self.assertEqual(result["status"], "infeasible")
+        self.assertEqual(
+            result["items"][0]["target_pos"], scene["items"][0]["position"]
+        )
+
     def test_geometry_and_storage_goal_are_separate(self):
         scene = simple_scene()
         scene["regions"].append(region("storage", (0, 0.1, 0, 0.1), 1.2, 0.1))
@@ -175,6 +238,18 @@ class LayoutTests(unittest.TestCase):
 
 
 class PackingTests(unittest.TestCase):
+    def test_collapsed_candidate_is_skipped_without_rejecting_valid_input(self):
+        scene = simple_scene()
+        scene["regions"].append(region("storage", (0.5, 0.8, 0.1, 0.5), 1.2, 0.2))
+        obj = item("tiny", "box", (1e-20, 0.1, 0.1), (0, 0.77, 0.3), ["storage"])
+        obj["allowed_rotations_y_rad"] = [0]
+        scene["items"] = [obj]
+        self.assertTrue(validate_layout(scene)["geometry_valid"])
+        result = plan_packing(scene)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["items"][0]["placement_status"], "unplaced")
+        self.assertEqual(result["items"][0]["target_pos"], obj["position"])
+
     def test_eight_items_shelves_drawer_and_all_result_fields(self):
         scene = demo_scene()
         snapshot = copy.deepcopy(scene)
@@ -426,6 +501,51 @@ class PackingTests(unittest.TestCase):
 
 
 class AreaTests(unittest.TestCase):
+    def test_grid_capacity_is_rejected_with_a_typed_input_error(self):
+        for width, depth in ((1e308, 0.6), (1, 1e308), (20, 20)):
+            with self.subTest(width=width, depth=depth):
+                scene = simple_scene()
+                scene["desk"].update(width_m=width, depth_m=depth)
+                for operation in (plan_packing, measure_free_area):
+                    with self.assertRaises(PackingInputError) as caught:
+                        operation(scene)
+                    self.assertEqual(caught.exception.code, "invalid_input")
+                    self.assertEqual(caught.exception.field, "desk")
+                    self.assertIn("grid", str(caught.exception))
+
+    def test_huge_representable_items_outside_desktop_do_not_overflow(self):
+        for x, z in ((1e308, 0.3), (-1e308, 0.3), (0.5, 1e308), (0.5, -1e308)):
+            with self.subTest(x=x, z=z):
+                scene = simple_scene()
+                scene["items"] = [
+                    item(
+                        "far",
+                        "box",
+                        (
+                            1e293 if abs(x) > 1 else 0.2,
+                            0.03,
+                            1e293 if abs(z) > 1 else 0.14,
+                        ),
+                        (x, 0.77, z),
+                        ["desktop"],
+                    )
+                ]
+                self.assertEqual(measure_free_area(scene), 0.6)
+
+    def test_huge_reserved_zones_are_clipped_before_grid_conversion(self):
+        for low, high, expected in (
+            ((1e308, 0.77, 0), (1.1e308, 1, 0.6), 0.6),
+            ((-1.1e308, 0.77, 0), (-1e308, 1, 0.6), 0.6),
+            ((0, 0.77, 1e308), (1, 1, 1.1e308), 0.6),
+            ((0, 0.77, -1.1e308), (1, 1, -1e308), 0.6),
+            ((-1e308, 0.77, -1e308), (1e308, 1, 1e308), 0),
+            ((-1e308, 0.77, -1e308), (0.5, 1, 1e308), 0.3),
+        ):
+            with self.subTest(low=low, high=high):
+                scene = simple_scene()
+                scene["reserved_zones"] = [zone("huge", low, high)]
+                self.assertEqual(measure_free_area(scene), expected)
+
     def test_largest_component_not_total_free_area(self):
         scene = simple_scene()
         scene["desk"].update(width_m=0.1, depth_m=0.1)
@@ -494,6 +614,25 @@ class AreaTests(unittest.TestCase):
 
 
 class InputTests(unittest.TestCase):
+    def test_unrepresentable_item_geometry_is_invalid_input(self):
+        for size, position, rotation in (
+            ((1e-20, 0.1, 0.1), (0.5, 0.77, 0.3), 0),
+            ((1e-20, 0.1, 0.1), (0.5, 0.77, 0.3), math.pi / 4),
+            ((0.1, 1e-20, 0.1), (0.5, 0.77, 0.3), 0),
+            ((0.1, 1e308, 0.1), (0.5, 1e308, 0.3), 0),
+            ((1e308, 0.1, 1e308), (1.7e308, 0.77, 1.7e308), math.pi / 4),
+        ):
+            with self.subTest(size=size, position=position, rotation=rotation):
+                scene = simple_scene()
+                obj = item("bad", "box", size, position, ["desktop"])
+                obj["rotation_y_rad"] = rotation
+                scene["items"] = [obj]
+                for operation in (plan_packing, validate_layout, measure_free_area):
+                    with self.assertRaises(PackingInputError) as caught:
+                        operation(scene)
+                    self.assertEqual(caught.exception.code, "invalid_input")
+                    self.assertEqual(caught.exception.field, "items[0].collision")
+
     def test_malformed_and_unconfirmed_inputs_fail_before_planning(self):
         mutations = [
             lambda s: s.update(schema_version="2.0"),

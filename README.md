@@ -8,7 +8,7 @@
 
 仓库已有可运行的前端演示应用（`frontend/`，React + R3F，本地 Mock 与规则式演示，尚未与后端和算法联调），覆盖“空间配置 → 照片与物品 → 三维工作台 → 方案交付（执行指南）”流程，并提供首页“一键演示”6 步导览；演示脚本、验收结论与能力边界见 [frontend/docs/demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)。
 
-物品布局算法已在 `backend/app/domain/` 实现，包含共享几何、多平面贪心摆放、布局复查和连续可用面积，并通过 31 项算法测试。走线算法已有独立 Python 实现和 14 项算法级测试，基础几何现复用领域模块；后端 FastAPI 服务、真实场景通道、物品布局接入、完整前后端联调与 Rodin 接入尚未完成。前端演示不代表这些集成验收已通过，各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+物品布局与走线核心现统一位于 `backend/app/domain/`，包含共享几何、多平面贪心摆放、布局复查、连续可用面积、双策略走线搜索与曲线验证；已有算法回归和仅加载领域目录的隔离测试。`algorithm/cable_routing/` 保留兼容导入。后端 FastAPI 服务、真实场景通道、完整前后端联调与 Rodin 接入尚未完成，前端演示不代表这些集成验收已通过；各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 现有文件 | 状态与用途 |
 | --- | --- |
@@ -16,8 +16,8 @@
 | `objects/dorm_desk.blend` | 桌体 Blender 源文件；尺寸、原点、轴向与网格仍需核验 |
 | `objects/tissue_box.obj` | 纸巾盒 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `objects/杯子.obj` | 杯子 OBJ 资产；运行时导入前需校正尺寸与轴向 |
-| `algorithm/cable_routing/` | 已交付的纯 Python 走线规划模块，包含输入校验、双策略搜索、曲线验证和测试 |
-| `backend/app/domain/` | C 的纯 Python 物品布局、共享几何与领域类型；含独立布局复查和连续面积评估，调用与验收记录见[布局算法交接](docs/packing_algorithm.md) |
+| `algorithm/cable_routing/` | 旧走线模块的兼容导出，不再承载业务实现 |
+| `backend/app/domain/` | C/D 的纯 Python 布局与走线算法、共享几何、输入校验及领域类型；调用与证据见[布局算法交接](docs/packing_algorithm.md)和[走线算法说明](docs/routing_algorithm_plan.md) |
 
 当前没有 `models/` 目录，也没有已导出的桌体 GLB。开发先用参数化简化几何跑通闭环，最终验收需加载 `models/dorm_desk_assembled.glb`，并按数据契约导出和接入独立单品资产。
 
@@ -58,7 +58,7 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 
 ## 开发入口
 
-当前可复用的算法入口包括 `backend.app.domain.packing` 的 `plan_packing(scene)`、`validate_layout(scene)`、`measure_free_area(scene)`，以及 `algorithm.cable_routing.plan_routes(scene)`。布局算法的调用、测试和四类 JSON 样例生成命令见[交接说明](docs/packing_algorithm.md)。下一步需实现后端编排和前端接入，再用 8 件待整理物品及 3 根线完成集成验收；具体任务见[任务清单](docs/project_tasks.md)。
+当前可复用的算法入口包括 `backend.app.domain.packing` 的 `plan_packing(scene)`、`validate_layout(scene)`、`measure_free_area(scene)`，以及 `backend.app.domain.routing.plan_routing(scene)`（保留同一函数的 `plan_routes` 别名和旧包入口）。调用、测试和四类 JSON 样例生成命令见[布局交接说明](docs/packing_algorithm.md)，走线参数见[走线算法说明](docs/routing_algorithm_plan.md)。下一步需实现后端编排和前端接入，再用 8 件待整理物品及 3 根线完成集成验收；具体任务见[任务清单](docs/project_tasks.md)。
 
 算法分为两个独立任务：[C：物品布局算法](docs/project_tasks.md#4-成员-c物品布局算法)与[D：走线算法](docs/project_tasks.md#5-成员-d走线算法)。两人使用共同场景样例并行实现，分别交付整理与走线结果；集成时走线使用已应用布局后的当前场景。
 

@@ -10,6 +10,7 @@ from ..geometry import (
     fits_region,
     items_overlap,
     support_region,
+    validate_item_geometry,
 )
 from ..models import PackingResult, Scene
 from ..rules import validate_scene
@@ -85,6 +86,10 @@ def _candidates(scene: Scene, original: dict, region: dict, placed: list[dict]):
             if z < z0 + hd - 1e-10 or z > z1 - hd + 1e-10:
                 continue
             candidate = _pose(original, (x, y, z), angle)
+            try:
+                validate_item_geometry(candidate)
+            except (OverflowError, ValueError):
+                continue
             if (
                 fits_region(candidate, region)
                 and not item_geometry_issues(scene, candidate)

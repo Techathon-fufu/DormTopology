@@ -106,3 +106,37 @@ class PackingResult(TypedDict):
     status: Literal["success", "partial", "infeasible"]
     items: list[PackingItem]
     issues: list[Issue]
+
+
+class CurveSegment(TypedDict):
+    control_points: list[Vec3]
+
+
+class CableRoute(TypedDict):
+    id: str
+    start_port_id: str
+    end_port_id: str
+    cable_type: str
+    thickness: str
+    mode: str
+    diameter_m: float
+    status: Literal["valid", "failed"]
+    curve_segments: list[CurveSegment]
+    path_points: list[Vec3]
+    path_length_m: float | None
+    reason_code: str | None
+
+
+class RoutingMetrics(TypedDict):
+    exposed_length_m: float | None
+    baseline_exposed_length_m: float | None
+
+
+class RoutingResult(TypedDict):
+    schema_version: str
+    scene_id: str
+    scene_revision: int
+    status: Literal["success", "partial", "infeasible"]
+    cables: list[CableRoute]
+    metrics: RoutingMetrics
+    issues: list[Issue]

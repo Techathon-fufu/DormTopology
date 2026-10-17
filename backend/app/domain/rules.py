@@ -3,6 +3,7 @@
 import math
 
 from .errors import SceneInputError
+from .geometry import validate_item_geometry
 
 
 def _fail(field: str, message: str):
@@ -73,7 +74,7 @@ def _nullable_string(value, path: str) -> None:
 def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
     """No mutation. Draft geometry checks permit unconfirmed dimensions/baseline.
 
-    Packing requires a confirmed baseline and every item's dimensions. Port
+    Planning requires a confirmed baseline and every item's dimensions. Port
     confirmation is a routing prerequisite, not a packing prerequisite.
     """
     _object(
@@ -91,7 +92,7 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
         _fail("scene_revision", "must be a positive integer")
     _nullable_string(scene["baseline_id"], "baseline_id")
     if for_planning and scene["baseline_id"] is None:
-        _fail("baseline_id", "confirm the original snapshot before packing")
+        _fail("baseline_id", "confirm the original snapshot before planning")
     desk = _object(scene["desk"], "width_m depth_m top_height_m", "desk")
     for key in ("width_m", "depth_m", "top_height_m"):
         _number(desk[key], f"desk.{key}", positive=True)
@@ -145,6 +146,10 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _fail(path + ".size_m", "dimensions must be positive")
         _vector(item["position"], 3, path + ".position")
         _number(item["rotation_y_rad"], path + ".rotation_y_rad")
+        try:
+            validate_item_geometry(item)
+        except (OverflowError, ValueError) as error:
+            _fail(path + ".collision", f"cannot represent box geometry: {error}")
         _enum(
             item["dimensions_source"],
             {"user", "template", "estimated"},
@@ -153,7 +158,7 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
         _boolean(item["dimensions_confirmed"], path + ".dimensions_confirmed")
         _boolean(item["fixed"], path + ".fixed")
         if for_planning and not item["dimensions_confirmed"]:
-            _fail(path + ".dimensions_confirmed", "confirm dimensions before packing")
+            _fail(path + ".dimensions_confirmed", "confirm dimensions before planning")
         _enum(
             item["usage_frequency"],
             {"high", "medium", "low"},
@@ -229,7 +234,9 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
     for i, value in enumerate(_array(graph["nodes"], "routing_graph.nodes")):
         path = f"routing_graph.nodes[{i}]"
         node = entity(value, "position kind", path)
-        _vector(node["position"], 3, path + ".position")
+        position = _vector(node["position"], 3, path + ".position")
+        if any(math.dist(position, n["position"]) <= 1e-9 for n in nodes.values()):
+            _fail(path + ".position", "routing graph nodes need distinct positions")
         _enum(
             node["kind"], {"corner", "slot", "fixing_point", "endpoint"}, path + ".kind"
         )

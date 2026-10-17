@@ -123,18 +123,40 @@ def rectangle(bounds: Sequence[float]) -> Footprint:
     return ((x0, z0), (x1, z0), (x1, z1), (x0, z1))
 
 
+def _footprint_axes(polygon: Footprint) -> tuple[tuple[float, float], ...]:
+    if len(polygon) != 4 or any(
+        len(p) != 2 or not all(math.isfinite(v) for v in p) for p in polygon
+    ):
+        raise ValueError("footprint must have four finite coordinate pairs")
+    axes = []
+    for i, p in enumerate(polygon):
+        q = polygon[(i + 1) % 4]
+        nx, nz = -(q[1] - p[1]), q[0] - p[0]
+        norm = math.hypot(nx, nz)
+        if not math.isfinite(norm) or norm == 0:
+            raise ValueError("footprint edges must have finite nonzero length")
+        axes.append((nx / norm, nz / norm))
+    if axes[0][0] * axes[1][1] - axes[0][1] * axes[1][0] == 0:
+        raise ValueError("footprint must have nonzero area")
+    return tuple(axes[:2])
+
+
+def validate_item_geometry(item: dict) -> None:
+    """Reject boxes whose world geometry collapses or overflows float precision."""
+    _footprint_axes(footprint(item))
+    bottom = float(item["position"][1])
+    top = bottom + float(item["size_m"][1])
+    if not math.isfinite(top) or top <= bottom:
+        raise ValueError("item height must have finite nonzero world extent")
+
+
 def footprints_overlap(a: Footprint, b: Footprint) -> bool:
     """SAT for convex rectangles; touching edges do not occupy shared area."""
-    for polygon in (a, b):
-        for i in (0, 1):
-            p, q = polygon[i], polygon[i + 1]
-            nx, nz = -(q[1] - p[1]), q[0] - p[0]
-            norm = math.hypot(nx, nz)
-            nx, nz = nx / norm, nz / norm
-            pa = [x * nx + z * nz for x, z in a]
-            pb = [x * nx + z * nz for x, z in b]
-            if min(max(pa), max(pb)) - max(min(pa), min(pb)) <= NUMERIC_EPSILON:
-                return False
+    for nx, nz in _footprint_axes(a) + _footprint_axes(b):
+        pa = [x * nx + z * nz for x, z in a]
+        pb = [x * nx + z * nz for x, z in b]
+        if min(max(pa), max(pb)) - max(min(pa), min(pb)) <= NUMERIC_EPSILON:
+            return False
     return True
 
 
@@ -163,12 +185,13 @@ def fits_region(item: dict, region: dict) -> bool:
     x0, x1, z0, z1 = region["bounds_xz_m"]
     return (
         abs(item["position"][1] - region["surface_y_m"]) <= EPSILON + NUMERIC_EPSILON
-        and box.minimum[0] >= x0 - EPSILON
-        and box.maximum[0] <= x1 + EPSILON
-        and box.minimum[2] >= z0 - EPSILON
-        and box.maximum[2] <= z1 + EPSILON
+        and box.minimum[0] >= x0 - NUMERIC_EPSILON
+        and box.maximum[0] <= x1 + NUMERIC_EPSILON
+        and box.minimum[2] >= z0 - NUMERIC_EPSILON
+        and box.maximum[2] <= z1 + NUMERIC_EPSILON
+        and item["size_m"][1] <= region["clearance_height_m"] + NUMERIC_EPSILON
         and box.maximum[1]
-        <= region["surface_y_m"] + region["clearance_height_m"] + EPSILON
+        <= region["surface_y_m"] + region["clearance_height_m"] + NUMERIC_EPSILON
     )
 
 

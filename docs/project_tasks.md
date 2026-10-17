@@ -6,9 +6,9 @@
 
 团队共 4 人：A 负责前端，B 负责后端，C 独立负责物品布局算法，D 独立负责走线算法。第 4、5 节为两个独立开发任务，各自交付算法函数、结果样例和验收记录；两人先用共同场景并行开发，实际流程按已应用布局的当前版本进行走线。
 
-截至 2026-10-17，D 的走线算法已合并到 `main`（提交 `09ac65c`，算法提交 `ee52f40`）。`algorithm/cable_routing/` 提供纯 Python 的 `plan_routes(scene)`，并通过 14 项单元测试、`ruff check algorithm` 和 `py_compile`；以下 D 模块中已勾选项仅表示算法层证据，B/A 接入、真实演示场景、桌体资产和 Rodin 验收仍保持未完成。
+截至 2026-10-17，D 的走线算法此前已合并到 `main`（提交 `09ac65c`，算法提交 `ee52f40`），本轮将业务核心迁入 `backend/app/domain/routing/`。规范入口为 `plan_routing(scene)`，`plan_routes` 保留为同一函数的兼容名称，旧 `algorithm/cable_routing/` 仅重新导出领域对象。以下 D 模块中已勾选项仅表示算法层证据，B/A 接入、真实演示场景、桌体资产和 Rodin 验收仍保持未完成。
 
-C 的物品布局实现位于 `backend/app/domain/`，31 项算法测试通过；共享变换、容差和基础包围盒已由 D 复用，其 14 项测试保持通过。可重现输入、结果样例和边界说明见[布局算法交接](packing_algorithm.md)。本轮 C 的勾选只代表简化几何上的算法证据，前端结果解析与后端原子应用未验收。
+C 的物品布局实现位于 `backend/app/domain/packing/`，C、D 共用 `domain/geometry/` 与 `domain/rules.py` 的结构、数值和 ID 引用校验。领域隔离回归在无旧算法包、Web、数据库和供应商依赖的子进程中运行完整共同场景，检查无 I/O、输入不变和兼容导出一致。复核覆盖布局边界/净高与不可表示几何，以及走线完整终点代价、汇聚切向连续性、缺字段和极端数值拒绝。可重现输入、结果样例和边界说明见[布局算法交接](packing_algorithm.md)与[走线算法规划](routing_algorithm_plan.md)。本轮勾选只代表简化几何上的算法证据，前端结果解析与后端原子应用未验收；独立的 `validate_routing`、`measure_exposed_length` 入口仍未实现。
 
 ## 1. 共同前置任务（H0–H4）
 
@@ -119,8 +119,9 @@ C 的物品布局实现位于 `backend/app/domain/`，31 项算法测试通过�
 
 独立任务负责人：D。输入为当前场景、已确认接口与线缆，输出为 `cable_routing.json`、暴露线长和走线问题。依赖共同场景、通道配置及与 C 约定的共享几何接口；从共同场景独立开发，不等待 C 的布局算法完成或 Rodin 外观资产。实际联调输入必须是 A、B 应用有效布局后的当前场景。
 
-- [x] 以 Python 模块交付走线算法，提供可供 B 的 FastAPI 后端直接调用的纯函数接口；基础共享几何现位于 `backend/app/domain/geometry/`，`algorithm/cable_routing/geometry.py` 保留兼容导入及 D 的曲线工具，走线整体归入 domain 仍待后端接入。
-- [ ] 将走线算法归入实施方案规定的 `domain` 边界并接入后端装配；当前实现已可在无 FastAPI、SQLite、文件存储或供应商凭证的环境中独立运行，且不修改输入场景。
+- [x] 以 Python 模块交付走线算法，规范入口为 `backend.app.domain.routing.plan_routing`，`plan_routes` 为兼容名称；核心算法和曲线工具位于 `domain/routing/`，基础几何复用 `domain/geometry/`，旧 `algorithm/cable_routing/` 仅兼容导出。
+- [x] 将走线核心归入实施方案规定的 `domain` 边界，复用 `domain/rules.py` 的结构校验；通过隔离共同场景运行和兼容入口对象一致性测试，不依赖旧算法包、Web、SQLite 或供应商，不进行文件/网络 I/O，不修改输入场景。
+- [ ] 将领域走线函数接入后端 service 和统一装配，完成保存结果与指南使用的独立 `validate_routing`、`measure_exposed_length` 接口；当前规划内部的复查和指标不替代这两个入口。
 - [ ] 建立并核验真实桌沿、穿线孔、背板后通道、线槽和固定点网络；当前实现消费配置化稀疏走线图，并已实现两种策略的算法路径搜索。
 - [ ] 完成从前端合法表面取点到算法的完整链路和粗/细线预设验收；当前实现已校验局部接口坐标、旋转后的真实世界端点、确认线径和最小弯曲半径。
 - [x] 按接口类型和插孔占用情况检查连接，提供 A* 和 Dijkstra 搜索路径。

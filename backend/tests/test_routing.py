@@ -1,9 +1,36 @@
 import copy
 import math
 import unittest
+from itertools import pairwise
 
-from algorithm.cable_routing import RoutingInputError, plan_routes, resolve_port_world
-from algorithm.cable_routing.geometry import beziers_arc_length, polyline_length
+from backend.app.domain.routing import (
+    RoutingInputError,
+    plan_routes,
+    resolve_port_world,
+)
+from backend.app.domain.routing.geometry import (
+    AABB,
+    BEZIER_SAMPLE_ERROR,
+    bezier_point,
+    beziers_arc_length,
+    dot,
+    normalize,
+    obb_from_item,
+    polyline_length,
+    rotate_y,
+    sample_beziers,
+    sub,
+)
+from backend.app.domain.routing.planner import (
+    CableSpec,
+    ResolvedEndpoint,
+    _curve_collides,
+    _endpoint_exit,
+    _line_control_points,
+    _point_on_polyline,
+    _search_path,
+    _validate_curve,
+)
 
 
 def scene_for(mode: str = "slot") -> dict:
@@ -24,6 +51,14 @@ def scene_for(mode: str = "slot") -> dict:
                 "position": [0.05, 0.1, 0.1],
                 "rotation_y_rad": math.pi / 2,
                 "dimensions_confirmed": True,
+                "dimensions_source": "user",
+                "fixed": True,
+                "usage_frequency": "high",
+                "allowed_region_ids": [],
+                "allowed_rotations_y_rad": [0.0, math.pi / 2],
+                "image_url": None,
+                "model_url": None,
+                "generation": {"task_id": None, "status": "not_requested", "source": "placeholder", "error": None},
                 "collision": {"type": "box"},
                 "ports": [
                     {
@@ -44,6 +79,14 @@ def scene_for(mode: str = "slot") -> dict:
                 "position": [0.8, 0.1, 0.1],
                 "rotation_y_rad": 0.0,
                 "dimensions_confirmed": True,
+                "dimensions_source": "user",
+                "fixed": True,
+                "usage_frequency": "high",
+                "allowed_region_ids": [],
+                "allowed_rotations_y_rad": [0.0, math.pi / 2],
+                "image_url": None,
+                "model_url": None,
+                "generation": {"task_id": None, "status": "not_requested", "source": "placeholder", "error": None},
                 "collision": {"type": "box"},
                 "ports": [
                     {
@@ -140,6 +183,145 @@ class CableRoutingTests(unittest.TestCase):
         samples = [tuple(point) for point in astar["cables"][0]["path_points"]]
         self.assertAlmostEqual(astar["cables"][0]["path_length_m"], beziers_arc_length(segments), places=7)
         self.assertGreaterEqual(astar["cables"][0]["path_length_m"], polyline_length(samples))
+
+    def test_search_includes_final_connection_in_shortest_path_cost(self):
+        box = AABB((-2.0, -2.0, -2.0), (-1.0, -1.0, -1.0))
+        start = ResolvedEndpoint("start", "source", (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), box)
+        end = ResolvedEndpoint("end", "sink", (10.0, 0.0, 0.0), (-1.0, 0.0, 0.0), box)
+        nodes = {
+            "a": ((1.0, 0.0, 0.0), "corner"),
+            "b": ((1.0, 0.0, 1.0), "slot"),
+            "c": ((9.0, 0.0, 0.0), "corner"),
+            "d": ((9.1, 0.0, 0.0), "slot"),
+        }
+        edges = [
+            {
+                "id": edge_id,
+                "from_node_id": first,
+                "to_node_id": last,
+                "modes": ["slot"],
+                "clearance_radius_m": 1.0,
+                "exposed": False,
+            }
+            for edge_id, first, last in (("detour", "a", "b"), ("direct", "c", "d"))
+        ]
+        spec = CableSpec({"id": "test"}, 0.002, "slot", 0.02)
+        for use_dijkstra in (False, True):
+            path, _, _ = _search_path(
+                nodes, edges, start, end, spec, [], [], {}, set(), use_dijkstra
+            )
+            self.assertIsNotNone(path)
+            self.assertEqual(path.edge_ids, ("direct",))
+            self.assertAlmostEqual(polyline_length(path.points), 10.0)
+
+    def test_straight_segments_with_a_sharp_join_are_invalid(self):
+        box = AABB((-2.0, -2.0, -2.0), (-1.0, -1.0, -1.0))
+        start = ResolvedEndpoint("start", "source", (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), box)
+        end = ResolvedEndpoint("end", "sink", (1.0, 0.0, 1.0), (0.0, 0.0, -1.0), box)
+        segments = [
+            _line_control_points(start.position, (1.0, 0.0, 0.0)),
+            _line_control_points((1.0, 0.0, 0.0), end.position),
+        ]
+        spec = CableSpec({"id": "test", "length_m": 10.0, "slack_m": 0.0}, 0.002, "slot", 0.02)
+        reason, _ = _validate_curve(
+            segments,
+            sample_beziers(segments, spec.min_bend_radius),
+            spec,
+            start,
+            end,
+            [],
+            [],
+            {"source": box, "sink": box},
+            [],
+        )
+        self.assertEqual(reason, "no_path")
+
+    def test_self_collision_exemption_is_only_the_finite_leadout(self):
+        source_box = AABB((0.0, -0.05, -0.05), (0.1, 0.05, 0.05))
+        sink_box = AABB((0.9, -0.05, -0.05), (1.0, 0.05, 0.05))
+        start = ResolvedEndpoint("start", "source", (0.1, 0.0, 0.0), (1.0, 0.0, 0.0), source_box)
+        end = ResolvedEndpoint("end", "sink", (0.9, 0.0, 0.0), (-1.0, 0.0, 0.0), sink_box)
+        boxes = {"source": source_box, "sink": sink_box}
+        start_exit, end_exit = _endpoint_exit(start, 0.002), _endpoint_exit(end, 0.002)
+        valid = [start.position, start_exit, end_exit, end.position]
+        self.assertFalse(_curve_collides(valid, 0.002, [], [], boxes, start, end))
+        invalid = [
+            [start.position, (0.08, 0.02, 0.0), start_exit, end_exit, end.position],
+            valid + [(1.1, 0.0, 0.0), (1.1, 0.0, 0.2), (0.9, 0.0, 0.2), end.position],
+            [start.position, start_exit, (0.5, 0.0, 0.0), start_exit] + valid,
+        ]
+        for samples in invalid:
+            self.assertTrue(_curve_collides(samples, 0.002, [], [], boxes, start, end))
+        # The centreline misses this obstacle, but the swept cable does not.
+        nearby_obstacle = AABB((0.101, 0.0025, -0.001), (0.102, 0.004, 0.001))
+        self.assertTrue(_curve_collides(valid, 0.002, [nearby_obstacle], [], boxes, start, end))
+
+    def test_rotated_endpoint_exits_the_oriented_box(self):
+        item = scene_for()["items"][0]
+        item.update(size_m=[1.0, 0.1, 0.1], rotation_y_rad=math.pi / 4)
+        port = item["ports"][0]
+        position, direction = resolve_port_world(item, port)
+        endpoint = ResolvedEndpoint(port["id"], item["id"], position, direction, obb_from_item(item))
+        exit_position = _endpoint_exit(endpoint, 0.002)
+        self.assertAlmostEqual(math.dist(position, exit_position), 0.004)
+        self.assertAlmostEqual(dot(normalize(sub(exit_position, position)), direction), 1.0)
+
+        # A rigid scene rotation preserves the known valid route, including
+        # the parts outside the OBB but inside its world AABB.
+        scene = scene_for()
+        for item in scene["items"]:
+            item["position"] = list(rotate_y(tuple(item["position"]), math.pi / 4))
+            item["rotation_y_rad"] += math.pi / 4
+        for node in scene["routing_graph"]["nodes"]:
+            node["position"] = list(rotate_y(tuple(node["position"]), math.pi / 4))
+        result = plan_routes(scene)
+        self.assertEqual(result["status"], "success")
+        self.assertAlmostEqual(result["cables"][0]["path_length_m"], 0.65)
+
+    def test_external_port_requires_its_analytic_tangent(self):
+        box = AABB((-2.0, -2.0, -2.0), (-1.0, -1.0, -1.0))
+        start = ResolvedEndpoint("start", "source", (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), box)
+        end = ResolvedEndpoint("end", "sink", (1.0, 0.0, 0.0), (-1.0, 0.0, 0.0), box)
+        segments = [_line_control_points(start.position, end.position)]
+        spec = CableSpec({"id": "test", "length_m": 10.0, "slack_m": 0.0}, 0.002, "slot", 0.02)
+        reason, _ = _validate_curve(
+            segments,
+            sample_beziers(segments, spec.min_bend_radius),
+            spec,
+            start,
+            end,
+            [],
+            [],
+            {"source": box, "sink": box},
+            [],
+        )
+        self.assertEqual(reason, "endpoint_blocked")
+
+    def test_sampler_bounds_s_curve_and_rejects_exhausted_budget(self):
+        segment = ((0.0, 0.0, 0.0), (0.0, 0.1, 0.0), (0.001, -0.1, 0.0), (0.001, 0.0, 0.0))
+        samples = sample_beziers([segment], 0.02)
+        self.assertGreater(len(samples), 2)
+        for index in range(1001):
+            self.assertTrue(_point_on_polyline(bezier_point(segment, index / 1000), samples, BEZIER_SAMPLE_ERROR))
+        self.assertLessEqual(max(math.dist(a, b) for a, b in pairwise(samples)), 0.02 / 8 + 1e-12)
+        huge_line = _line_control_points((0.0, 0.0, 0.0), (1e6, 0.0, 0.0))
+        self.assertEqual(sample_beziers([huge_line], 0.02), [])
+
+    def test_invalid_contract_fields_raise_routing_input_error(self):
+        for key in ("length_m", "diameter_m", "min_bend_radius_m", "slack_m"):
+            with self.subTest(missing=key):
+                scene = scene_for()
+                del scene["cables"][0][key]
+                with self.assertRaises(RoutingInputError):
+                    plan_routes(scene)
+        scene = scene_for()
+        scene["cables"][0]["length_m"] = 10**1000
+        with self.assertRaises(RoutingInputError):
+            plan_routes(scene)
+        scene = scene_for()
+        scene["items"][0]["allowed_region_ids"] = ["unknown"]
+        with self.assertRaises(RoutingInputError):
+            plan_routes(scene)
 
     def test_length_failure_has_no_geometry(self):
         scene = scene_for()
@@ -287,6 +469,15 @@ class CableRoutingTests(unittest.TestCase):
         result = plan_routes(scene)
         self.assertEqual(result["status"], "success")
         self.assertTrue(all(cable["status"] == "valid" for cable in result["cables"]))
+        for cable in result["cables"]:
+            segments = [entry["control_points"] for entry in cable["curve_segments"]]
+            for previous, following in pairwise(segments):
+                incoming = normalize(sub(previous[3], previous[2]))
+                outgoing = normalize(sub(following[1], following[0]))
+                self.assertGreater(dot(incoming, outgoing), 1.0 - 1e-9)
+            # Finite endpoint lead-outs remain on the confirmed port normal.
+            for segment in (segments[0], segments[-1]):
+                self.assertTrue(all(abs(p[2] - 0.1) < 1e-12 for p in segment))
         self.assertGreater(
             min(
                 math.dist(first, second)

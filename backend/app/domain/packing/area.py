@@ -2,6 +2,7 @@
 
 import math
 
+from ..errors import SceneInputError
 from ..geometry import (
     EPSILON,
     NUMERIC_EPSILON,
@@ -13,14 +14,26 @@ from ..models import Scene
 from ..rules import validate_scene
 
 GRID_CELL_M = 0.01
+# Computational budget for this prototype's 1 cm grid, not a physical-size limit.
+MAX_GRID_CELLS = 1_000_000
 
 
 class DesktopGrid:
     def __init__(self, scene: Scene):
         desk = scene["desk"]
         self.height = desk["top_height_m"]
-        self.nx = math.floor(desk["width_m"] / GRID_CELL_M + NUMERIC_EPSILON)
-        self.nz = math.floor(desk["depth_m"] / GRID_CELL_M + NUMERIC_EPSILON)
+        dimensions = (
+            desk["width_m"] / GRID_CELL_M,
+            desk["depth_m"] / GRID_CELL_M,
+        )
+        capacity_error = (
+            f"desk: 1 cm grid exceeds prototype capacity of {MAX_GRID_CELLS} cells"
+        )
+        if not all(math.isfinite(value) for value in dimensions):
+            raise SceneInputError(capacity_error, field="desk")
+        self.nx, self.nz = (math.floor(value + NUMERIC_EPSILON) for value in dimensions)
+        if max(self.nx, self.nz, self.nx * self.nz) > MAX_GRID_CELLS:
+            raise SceneInputError(capacity_error, field="desk")
         self.all_cells = (1 << (self.nx * self.nz)) - 1
         self.left = sum(1 << (z * self.nx) for z in range(self.nz)) if self.nx else 0
         self.right = self.left << (self.nx - 1) if self.nx else 0
@@ -38,8 +51,13 @@ class DesktopGrid:
         key = tuple(polygon)
         if key in self._cache:
             return self._cache[key]
-        x0, x1 = min(p[0] for p in polygon), max(p[0] for p in polygon)
-        z0, z1 = min(p[1] for p in polygon), max(p[1] for p in polygon)
+        x0 = max(0.0, min(p[0] for p in polygon))
+        x1 = min(self.nx * GRID_CELL_M, max(p[0] for p in polygon))
+        z0 = max(0.0, min(p[1] for p in polygon))
+        z1 = min(self.nz * GRID_CELL_M, max(p[1] for p in polygon))
+        if x1 <= x0 or z1 <= z0:
+            self._cache[key] = 0
+            return 0
         ix0 = max(0, math.floor(x0 / GRID_CELL_M + NUMERIC_EPSILON))
         ix1 = min(self.nx, math.ceil(x1 / GRID_CELL_M - NUMERIC_EPSILON))
         iz0 = max(0, math.floor(z0 / GRID_CELL_M + NUMERIC_EPSILON))
