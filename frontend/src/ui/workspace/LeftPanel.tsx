@@ -73,7 +73,7 @@ function ItemRow({
       }}
       title={hasIssues ? issues!.map((i) => i.message).join('\n') : undefined}
       className={cn(
-        'group relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+        'group relative flex min-h-9 [@media(pointer:coarse)]:min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
         selected ? 'bg-primary-soft' : 'hover:bg-muted',
         !object.visible && 'opacity-55',
       )}
@@ -239,9 +239,9 @@ export function LeftPanel({
   }
 
   return (
-    <aside className={cn('flex flex-col border-border bg-surface', className)}>
+    <aside className={cn('flex min-h-0 flex-col border-border bg-surface', className)}>
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
-        <h2 className="text-sm font-semibold">物品面板</h2>
+        <h2 className="text-sm font-semibold">场景物体</h2>
         <span className="flex items-center gap-2 text-[11px] tabular-nums text-faint">
           {project.objects.length} 件{hiddenCount > 0 ? `（隐藏 ${hiddenCount}）` : ''}
           {onClose ? (
@@ -258,13 +258,13 @@ export function LeftPanel({
         </span>
       </div>
 
-      <div className="flex gap-1.5 px-3 pb-2">
+      <div className="grid grid-cols-[1fr_auto] gap-1.5 px-3 pb-2">
         <Button variant="outline" size="sm" className="flex-1" disabled={previewBlocking} onClick={loadDemoObjects}>
           <Upload className="h-3.5 w-3.5" />
-          载入示例物品库
+          示例物品库
         </Button>
-        <Button variant="ghost" size="icon" title="添加自定义物品" disabled={previewBlocking} onClick={addCustomObject}>
-          <Plus className="h-4 w-4" />
+        <Button variant="outline" size="sm" title="添加自定义物品" aria-label="添加物体" disabled={previewBlocking} onClick={addCustomObject}>
+          <Plus className="h-4 w-4" />添加
         </Button>
       </div>
 
@@ -287,7 +287,7 @@ export function LeftPanel({
             type="button"
             onClick={() => setCategory(c)}
             className={cn(
-              'rounded-full border px-2 py-0.5 text-[11px] transition-colors',
+              'min-h-7 rounded-full border px-2 py-0.5 text-xs transition-colors [@media(pointer:coarse)]:min-h-11',
               category === c
                 ? 'border-primary bg-primary-soft font-medium text-primary'
                 : 'border-border text-muted-foreground hover:bg-muted',
@@ -311,7 +311,7 @@ export function LeftPanel({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {project.objects.length === 0 ? (
           <EmptyState
             className="mx-1 mt-2"

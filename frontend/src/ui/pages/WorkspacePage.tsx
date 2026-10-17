@@ -16,13 +16,10 @@ import { validateScene, type SceneIssue } from '@/scene/sceneValidation'
 import { cn } from '@/lib/utils'
 import { DEMO_PROJECT_ID } from '@/data/demoProject'
 import { Toolbar } from '@/ui/workspace/Toolbar'
-import { LeftPanel } from '@/ui/workspace/LeftPanel'
-import { CableListPanel } from '@/ui/workspace/CableListPanel'
-import { CablePanel } from '@/ui/workspace/CablePanel'
-import { WorkspaceOverview } from '@/ui/workspace/WorkspaceOverview'
+import { WorkspaceToolPanel } from '@/ui/workspace/WorkspaceToolPanel'
+import { WorkspaceGuide } from '@/ui/workspace/WorkspaceGuide'
 import { OrganizePanel } from '@/ui/workspace/OrganizePanel'
 import { PlanPanel } from '@/ui/workspace/PlanPanel'
-import { RightPanel } from '@/ui/workspace/RightPanel'
 import { StatusBar } from '@/ui/workspace/StatusBar'
 import { Viewport } from '@/ui/workspace/Viewport'
 import { DemoTour } from '@/ui/tour/DemoTour'
@@ -84,13 +81,13 @@ export function WorkspacePage() {
   const saveCandidate = usePlansStore((s) => s.saveCandidate)
   const resetHistory = useWorkspaceStore((s) => s.resetHistory)
   const mode = useWorkspaceStore((s) => s.mode)
+  const selectedId = useWorkspaceStore((s) => s.selectedId)
+  const selectedCableId = useCableStore((s) => s.selectedCableId)
   const createJob = useJobsStore((s) => s.create)
   const updateJob = useJobsStore((s) => s.update)
   const panelVisible = useOrganizeStore((s) => s.panelVisible)
-  const selectedId = useWorkspaceStore((s) => s.selectedId)
   const organizeOpen = useOrganizeStore((s) => s.open)
   const organizeStatus = useOrganizeStore((s) => s.status)
-  const selectedCableId = useCableStore((s) => s.selectedCableId)
   const cableNotice = useCableStore((s) => s.notice)
   const cableAnimStatus = useCableStore((s) => s.animStatus)
   const deskMetrics = useDeskModelStore((s) => s.metrics)
@@ -121,6 +118,14 @@ export function WorkspacePage() {
     const current = useProjectsStore.getState().projects[project.id]
     setRoutingConfirmation(`${current.id}:${routingConfirmationSignature(current)}`)
   }
+
+  // Small screens edit selected scene entities in the left tools drawer.
+  useEffect(() => {
+    if ((!selectedId && !selectedCableId) || window.matchMedia('(min-width: 1024px)').matches) return
+    if (useOrganizeStore.getState().applying) return
+    setRightOpen(false)
+    setLeftOpen(true)
+  }, [selectedId, selectedCableId])
 
   // 场景摆放校验（越界 / 相交 / 悬空）：随项目数据变化实时重算
   const issuesById = useMemo(
@@ -269,6 +274,7 @@ export function WorkspacePage() {
     useOrganizeStore.getState().openPanel()
     // 宽屏为右侧停靠面板；窄屏同步打开右侧抽屉展示整理面板
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
+      setLeftOpen(false)
       setRightOpen(true)
     }
   }
@@ -278,6 +284,7 @@ export function WorkspacePage() {
     setPlansOpen((v) => !v)
     // 宽屏为右侧停靠面板（优先于整理面板展示）；窄屏同步打开右侧抽屉
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
+      setLeftOpen(false)
       setRightOpen(true)
     }
   }
@@ -450,28 +457,22 @@ export function WorkspacePage() {
         onOpenPlans={handleOpenPlans}
         plansOpen={plansOpen}
         busy={busy}
-        onToggleLeftPanel={() => setLeftOpen((v) => !v)}
-        onToggleRightPanel={() => setRightOpen((v) => !v)}
+        onToggleLeftPanel={() => { setRightOpen(false); setLeftOpen((v) => !v) }}
+        onToggleRightPanel={() => { setLeftOpen(false); setRightOpen((v) => !v) }}
       />
 
       <div className="relative flex min-h-0 flex-1">
-        {mode === 'cable' ? (
-          <CableListPanel
+        <WorkspaceToolPanel
             project={project}
+            issuesById={issuesById}
             routingConfirmed={routingConfirmed}
             onConfirmRouting={confirmRouting}
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
-            className="hidden w-60 shrink-0 border-r lg:flex"
+            onGenerateModel={(o) => void handleGenerateModel(o)}
+            className="hidden w-[264px] shrink-0 border-r lg:flex"
           />
-        ) : (
-          <LeftPanel
-            project={project}
-            issuesById={issuesById}
-            className="hidden w-[216px] shrink-0 border-r lg:flex"
-          />
-        )}
 
         <div className="relative min-w-0 flex-1">
           <Viewport project={project} issuesById={issuesById} />
@@ -519,28 +520,15 @@ export function WorkspacePage() {
             onClose={() => useOrganizeStore.getState().hidePanel()}
             className="hidden w-72 shrink-0 border-l xl:flex"
           />
-        ) : mode === 'cable' && selectedCableId ? (
-          <CablePanel
+        ) : (
+          <WorkspaceGuide
             project={project}
+            routingConfirmed={routingConfirmed}
+            onConfirmRouting={confirmRouting}
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
-            onFlash={showFlash}
-            className="hidden w-72 shrink-0 border-l xl:flex"
-          />
-        ) : organizeOpen || !selectedId ? (
-          <WorkspaceOverview
-            project={project}
-            onOrganize={handleOpenOrganize}
-            onCables={() => { useWorkspaceStore.getState().setMode('cable'); setRightOpen(false) }}
+            onOpenOrganize={handleOpenOrganize}
             onGuide={() => navigate(`/projects/${project.id}/guide`)}
-            onImport={() => navigate(`/projects/${project.id}/import`)}
-            className="hidden w-72 shrink-0 border-l xl:flex"
-          />
-        ) : (
-          <RightPanel
-            project={project}
-            issuesById={issuesById}
-            onGenerateModel={(o) => void handleGenerateModel(o)}
             className="hidden w-72 shrink-0 border-l xl:flex"
           />
         )}
@@ -558,29 +546,20 @@ export function WorkspacePage() {
         open={leftOpen}
         side="left"
         onClose={() => setLeftOpen(false)}
-        className="w-72 max-w-[85vw]"
+        className="w-80 max-w-[90vw]"
       >
-        {mode === 'cable' ? (
-          <CableListPanel
+        <WorkspaceToolPanel
             project={project}
+            issuesById={issuesById}
             routingConfirmed={routingConfirmed}
             onConfirmRouting={confirmRouting}
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
+            onGenerateModel={(o) => void handleGenerateModel(o)}
             className="h-full w-full border-r"
             onClose={() => setLeftOpen(false)}
-            onAfterSelect={() => { setLeftOpen(false); setRightOpen(true) }}
           />
-        ) : (
-          <LeftPanel
-            project={project}
-            issuesById={issuesById}
-            className="h-full w-full border-r"
-            onClose={() => setLeftOpen(false)}
-            onAfterSelect={() => setLeftOpen(false)}
-          />
-        )}
       </Drawer>
       <Drawer
         open={rightOpen}
@@ -611,30 +590,15 @@ export function WorkspacePage() {
               setRightOpen(false)
             }}
           />
-        ) : mode === 'cable' && selectedCableId ? (
-          <CablePanel
+        ) : (
+          <WorkspaceGuide
             project={project}
+            routingConfirmed={routingConfirmed}
+            onConfirmRouting={confirmRouting}
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
-            onFlash={showFlash}
-            className="h-full w-full border-l"
-            onClose={() => setRightOpen(false)}
-          />
-        ) : organizeOpen || !selectedId ? (
-          <WorkspaceOverview
-            project={project}
-            onOrganize={handleOpenOrganize}
-            onCables={() => { useWorkspaceStore.getState().setMode('cable'); setRightOpen(false) }}
+            onOpenOrganize={handleOpenOrganize}
             onGuide={() => navigate(`/projects/${project.id}/guide`)}
-            onImport={() => navigate(`/projects/${project.id}/import`)}
-            className="h-full w-full border-l"
-            onClose={() => setRightOpen(false)}
-          />
-        ) : (
-          <RightPanel
-            project={project}
-            issuesById={issuesById}
-            onGenerateModel={(o) => void handleGenerateModel(o)}
             className="h-full w-full border-l"
             onClose={() => setRightOpen(false)}
           />
