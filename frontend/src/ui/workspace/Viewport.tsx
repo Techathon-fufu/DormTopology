@@ -176,7 +176,7 @@ export function Viewport({
             shadow-camera-far={14}
           />
           <Suspense fallback={null}>
-            {/* 房间外壳与桌体分离：桌体优先加载 dorm_desk_assembled.glb，失败 / 未就绪回退参数化几何 */}
+            {/* 房间外壳与桌体分离：桌体优先加载 dormdesk_body.glb，失败 / 未就绪回退参数化几何 */}
             <RoomShell room={project.room} deskMode="none" showBed={viewPreset !== 'top'} />
             <DormDeskModel room={project.room} />
             {organizeZonesVisible ? (

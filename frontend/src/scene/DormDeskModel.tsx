@@ -7,7 +7,7 @@ import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
 
 /**
- * 桌体渲染：优先加载 dorm_desk_assembled.glb（GLTFLoader + 归一化），
+ * 桌体渲染：优先加载 dormdesk_body.glb（GLTFLoader + 归一化），
  * 加载完成前 / 加载失败 / 用户选择简化几何时回退参数化桌体（ParametricDesk，与逻辑尺寸一致）。
  *
  * GLB 相关逻辑集中在 scene / state 层，不散落到工作台页面：

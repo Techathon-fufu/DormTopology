@@ -3,7 +3,7 @@ import type { RoomConfig, Vec3 } from '@/types/project'
 import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
 
 /**
- * 桌体 GLB 模型（models/dorm_desk_assembled.glb）接入：配置、归一化与实测锚点。
+ * 桌体 GLB 模型（models/dormdesk_body.glb）接入：配置、归一化与实测锚点。
  *
  * 口径说明（与 sceneValidation / deskModelStore 的分工）：
  * - 逻辑坐标（吸附面 / 碰撞边界 / 校验）仍以 RoomConfig 为单一事实来源；
@@ -41,15 +41,19 @@ export interface DeskModelConfig {
 }
 
 /**
- * 默认配置。仓库当前未包含 dorm_desk_assembled.glb（资产缺失时工作台自动回退参数化桌体并给出提示）；
- * 将文件放入 frontend/public/models/ 后即按本配置自动生效（单位 / 朝向 / 命名建议见 docs/desk-model.md）。
+ * 默认配置。资产位于 `Prefabmodel/dormdesk_parts/dormdesk_body.glb`，放入
+ * frontend/public/models/ 后即按本配置生效（单位 / 朝向 / 命名建议见 docs/desk-model.md）。
+ *
+ * `centerXZ: false`：该模型的 `x` 最小与 `y` 最小均为 0，已符合数据契约第 1 节原点，
+ * 无需再居中。桌体与抽屉共用同一原点，抽屉是独立的绝对坐标文件，居中桌体会使两者错位
+ * （见 docs/data_contract.md 第 1.1 节）。
  */
 export const DORM_DESK_MODEL_CONFIG: DeskModelConfig = {
-  url: 'models/dorm_desk_assembled.glb',
+  url: 'models/dormdesk_body.glb',
   unitScale: 1,
   axisRotationY: 0,
   fitWidthM: null,
-  centerXZ: true,
+  centerXZ: false,
   verticalAlign: 'bottom',
   offset: [0, 0, 0],
   anchorPatterns: {

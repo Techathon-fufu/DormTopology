@@ -104,7 +104,7 @@
 ### 新增
 
 - 桌体 GLB 加载管线：`frontend/src/scene/deskModel.ts`（单位换算 / 坐标轴校正 / 等比缩放 / 居中 / 底部或桌面锚点对齐 / 命名节点锚点实测）、`scene/modelLoader.ts`（GLTFLoader 按需加载 + 可读错误 + 几何/材质释放）、`scene/DormDeskModel.tsx`（GLB 优先；未就绪 / 失败 / 用户跳过时回退参数化简化几何）、`state/deskModelStore.ts`（加载中 / 失败 / 重试 / 跳过状态；偏好 `forceFallback`、`showDesk` 持久化到 `dormtopology.desk-model`）。
-- 资产路径 `frontend/public/models/dorm_desk_assembled.glb`（`import.meta.env.BASE_URL` 解析，开发与构建后均正确）；放置说明见 `frontend/public/models/README.md`，模型约定与已知限制见 `frontend/docs/desk-model.md`。
+- 资产路径 `frontend/public/models/dormdesk_body.glb`（`import.meta.env.BASE_URL` 解析，开发与构建后均正确）；放置说明见 `frontend/public/models/README.md`，模型约定与已知限制见 `frontend/docs/desk-model.md`。
 - 交互层支撑面优先采用模型实测锚点（桌面 / 搁板），未加载或无锚点时回退 RoomConfig：拖拽吸附、摆放校验（悬空）、「吸附到支撑面」、射线命中统一经 `sceneValidation` 的可选 `metrics` 参数。
 - 动态导入接口 `importModel(url, name, position)`（底面中心锚点对齐 + dispose，供后续生成的物品模型复用；当前物品渲染仍为参数化占位几何）。
 - 工作台工具栏新增桌体显示 / 隐藏开关；视口右下角状态提示（加载中 / 加载失败含「重试」与「改用简化几何」/ 恢复加载）。
@@ -116,7 +116,7 @@
 
 ### 已知限制
 
-- **仓库仍不包含 `dorm_desk_assembled.glb` 实际文件**（未伪造模型内容）：桌体视觉验收需资产入库后进行；期间工作台自动回退参数化简化几何，演示流程不受影响。
+- **`dormdesk_body.glb` 已入库**（`Prefabmodel/dormdesk_parts/`，无抽屉桌体 + 三个抽屉，含各自碰撞体）：当时尚未复制到 `frontend/public/models/`，桌体视觉验收需复制后进行；期间工作台自动回退参数化简化几何，演示流程不受影响。
 - 整理分区计算（`organizationZones.ts`）与规则式布局仍按 RoomConfig 计算，未接入模型锚点；出线孔 / 电源锚点暂为诊断记录，未进入走线计算（见 `frontend/docs/desk-model.md`）。
 - 运行时交互为浏览器手动验证（本仓库无自动化浏览器测试）；headless 冒烟 33 项覆盖归一化 / 锚点 / 校验指标 / 状态机与持久化 / 释放 / 最小 GLB 端到端。
 

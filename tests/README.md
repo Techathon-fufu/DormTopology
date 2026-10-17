@@ -36,7 +36,7 @@ tests/
 
 ## 模型资产布局（`Prefabmodel/`）
 
-Git 跟踪的归档 GLB 资产集中存放在仓库根的 `Prefabmodel/` 下，其中包含两类保真度层级，**共处一个平面目录**。前端部署用的运行时 GLB 可放在 `frontend/public/` 下，例如 `frontend/public/models/dorm_desk_assembled.glb`：
+Git 跟踪的归档 GLB 资产集中存放在仓库根的 `Prefabmodel/` 下，其中包含两类保真度层级，**共处一个平面目录**。前端部署用的运行时 GLB 可放在 `frontend/public/` 下，例如 `frontend/public/models/dormdesk_body.glb`：
 
 | 类别 | 文件 | 是否参与 prefab 路由 |
 | --- | --- | --- |

@@ -22,7 +22,7 @@
 | `algorithm/cable_routing/` | 旧走线模块的兼容导出，不再承载业务实现 |
 | `backend/app/domain/` | C/D 的纯 Python 布局与走线算法、共享几何、输入校验及领域类型；调用与证据见[布局算法交接](docs/packing_algorithm.md)和[走线算法说明](docs/routing_algorithm_plan.md) |
 
-`objects/` 现仅保留 Blender 与 OBJ 源文件（`.blend` / `.obj`），**不再存放 GLB**；全部 GLB 资产已统一到 `Prefabmodel/` 下。仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dorm_desk_assembled.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
+`objects/` 现仅保留 Blender 与 OBJ 源文件（`.blend` / `.obj`），**不再存放 GLB**；全部 GLB 资产已统一到 `Prefabmodel/` 下。仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dormdesk_body.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
 
 ## 首版目标
 
