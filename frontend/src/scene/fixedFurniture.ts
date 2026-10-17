@@ -16,11 +16,7 @@ export interface FurnitureSurface {
 
 export function hasFixedFurniture(room: RoomConfig): boolean { return room.furnitureModel === 'dormdesk-v1' }
 const translate = (v: number[]): Vec3 => v.map((n, i) => +(n + FURNITURE_OFFSET[i]).toFixed(6)) as Vec3
-export const fixedFurnitureBoxes: FurnitureBox[] = [
-  ...asset.parts.map((p) => ({ name: p.name, min: translate(p.min), max: translate(p.max) })),
-  // Door stays a conservative closed obstacle for planning; opening is a viewing interaction.
-  { name: 'Cabinet_Door', min: [.601, .04, .138], max: [.619, .707, .481] },
-]
+export const fixedFurnitureBoxes: FurnitureBox[] = asset.parts.map((p) => ({ name: p.name, min: translate(p.min), max: translate(p.max) }))
 
 /** Cut an inscribed square tunnel: conservative clearance for the configured circular grommet. */
 export function furnitureBoxes(room: RoomConfig): FurnitureBox[] {
