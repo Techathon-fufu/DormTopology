@@ -28,7 +28,9 @@ import { computeCableAvoidZones, computeRouteNodes, routeNodeMap } from '@/scene
 import { PORT_TYPE_COLORS } from '@/scene/ports'
 import { formatMm, formatMeters } from '@/lib/units'
 import { useCableStore } from '@/state/cableStore'
+import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
+import { usePrefersReducedMotion } from '@/lib/motion'
 import { Badge } from '@/ui/kit/badge'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
@@ -66,6 +68,7 @@ export function CablePanel({
   const animStatus = useCableStore((s) => s.animStatus)
   const updateCable = useWorkspaceStore((s) => s.updateCable)
   const removeCable = useWorkspaceStore((s) => s.removeCable)
+  const reducedMotion = usePrefersReducedMotion()
 
   const cable = project.cables.find((c) => c.id === selectedCableId) ?? null
   const routeNodes = useMemo(() => computeRouteNodes(project.room), [project.room])
@@ -526,7 +529,10 @@ export function CablePanel({
             <Segmented
               size="sm"
               value={routeView}
-              onChange={setRouteView}
+              onChange={(v) => {
+                setRouteView(v)
+                useTourStore.getState().signal(project.id, 'compare')
+              }}
               options={[
                 { value: 'original', label: '原始', disabled: !cable.originalRoute, title: '首次规划前保留的走线' },
                 { value: 'suggested', label: '建议', title: '规划 / 调整后的走线' },
@@ -564,6 +570,11 @@ export function CablePanel({
           <p className="text-[11px] leading-relaxed text-faint">
             收拢动画仅用于展示（原始走线 → 当前走线平滑过渡），不代表真实收拢过程经过碰撞验证。
           </p>
+          {reducedMotion ? (
+            <p className="rounded-md bg-info/10 px-2 py-1.5 text-[11px] leading-relaxed text-info">
+              已检测到系统「减少动态效果」偏好：播放时直接显示收拢后的走线。
+            </p>
+          ) : null}
         </section>
 
         <Separator />

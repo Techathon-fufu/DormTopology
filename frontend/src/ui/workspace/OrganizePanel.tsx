@@ -29,9 +29,12 @@ import {
 import { services } from '@/api'
 import { useJobsStore } from '@/state/jobsStore'
 import { useOrganizeStore } from '@/state/organizeStore'
+import { usePlansStore } from '@/state/plansStore'
 import { useProjectsStore } from '@/state/projectsStore'
+import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { cn, formatDateTime } from '@/lib/utils'
+import { usePrefersReducedMotion } from '@/lib/motion'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
 import { Segmented } from '@/ui/kit/segmented'
@@ -121,6 +124,10 @@ export function OrganizePanel({
   const updateJob = useJobsStore((s) => s.update)
   const applyAssignments = useWorkspaceStore((s) => s.applyAssignments)
   const updateObject = useWorkspaceStore((s) => s.updateObject)
+  const resetToBaseline = useWorkspaceStore((s) => s.resetToBaseline)
+  const recaptureBaseline = usePlansStore((s) => s.recaptureBaseline)
+  const baseline = usePlansStore((s) => s.baselines[project.id])
+  const reducedMotion = usePrefersReducedMotion()
 
   const [stage, setStage] = useState('')
 
@@ -185,6 +192,7 @@ export function OrganizePanel({
       true,
     )
     closePanel()
+    useTourStore.getState().signal(project.id, 'organize')
     onFlash(
       `已应用整理方案：${plan.metrics.placedCount} 件归位（可撤销；线缆仍为现状示意，可在走线模式重新规划）`,
     )
@@ -358,6 +366,54 @@ export function OrganizePanel({
               </div>
             </section>
 
+            {/* 整理前状态快照：接受方案后可一键恢复（“再恢复整理前状态”流程） */}
+            <section className="space-y-2 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[13px] font-semibold">整理前状态（快照）</h3>
+                {baseline ? (
+                  <span className="text-[11px] text-faint">{formatDateTime(baseline.createdAt)}</span>
+                ) : null}
+              </div>
+              {baseline ? (
+                <>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    接受整理方案后，可一键恢复到进入工作台时采集的整理前状态（一次记录，可撤销）。
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        resetToBaseline(project.id)
+                        useTourStore.getState().signal(project.id, 'compare')
+                        onFlash('已恢复到整理前状态（可撤销；相关线缆标记为需重算）')
+                      }}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      恢复整理前状态
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="把当前布局记录为新的「整理前状态」快照（演示可重新开始对比）"
+                      onClick={() => {
+                        if (!window.confirm('将当前布局记录为新的「整理前状态」快照？')) return
+                        const p = useProjectsStore.getState().projects[project.id]
+                        if (!p) return
+                        recaptureBaseline(p)
+                        onFlash('已重新采集整理前状态快照')
+                      }}
+                    >
+                      重新采集
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-[11px] text-faint">尚未采集：进入工作台时自动采集。</p>
+              )}
+            </section>
+
             {error ? (
               <div className="flex items-start gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -502,6 +558,11 @@ export function OrganizePanel({
                 <Info className="mt-0.5 h-3 w-3 shrink-0" />
                 动画仅用于方案展示，按物品组分批近似移动，不代表真实搬运路径已经过碰撞验证。
               </p>
+              {reducedMotion ? (
+                <p className="rounded-md bg-info/10 px-2 py-1.5 text-[11px] leading-relaxed text-info">
+                  已检测到系统「减少动态效果」偏好：播放时直接显示目标布局，不做分批动画。
+                </p>
+              ) : null}
             </section>
 
             {/* 对比 */}
@@ -511,7 +572,10 @@ export function OrganizePanel({
                 size="sm"
                 className="w-full"
                 value={compare}
-                onChange={(v) => setCompare(v)}
+                onChange={(v) => {
+                  setCompare(v)
+                  useTourStore.getState().signal(project.id, 'compare')
+                }}
                 options={[
                   { value: 'before', label: '查看整理前' },
                   { value: 'after', label: '查看整理后' },

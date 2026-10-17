@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { FolderOpen, Plus, Trash2 } from 'lucide-react'
+import { FolderOpen, Plus, Sparkles, Trash2 } from 'lucide-react'
 import type { Project } from '@/types/project'
 import { DEMO_PROJECT_ID } from '@/data/demoProject'
 import { useProjectsStore } from '@/state/projectsStore'
+import { useTourStore } from '@/state/tourStore'
 import { formatDateTime } from '@/lib/utils'
 import { formatMm } from '@/lib/units'
 import { Badge } from '@/ui/kit/badge'
@@ -79,6 +80,12 @@ export function ProjectsPage() {
   const projects = useProjectsStore((s) => s.projects)
   const list = Object.values(projects).sort((a, b) => b.updatedAt - a.updatedAt)
 
+  /** 一键演示：重置示例项目数据 → 启动 6 步导览 → 进入工作台（可重复播放） */
+  const startDemoTour = () => {
+    useTourStore.getState().reset()
+    navigate(`/projects/${DEMO_PROJECT_ID}/workspace`)
+  }
+
   return (
     <div className="space-y-6">
       <section className="flex flex-wrap items-start justify-between gap-3">
@@ -88,10 +95,17 @@ export function ProjectsPage() {
             为宿舍「上床下桌」创建桌面整理与理线方案：空间配置 → 识别物品 → 三维整理 → 输出执行指南。
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={() => navigate('/projects/new')}>
             <Plus className="h-4 w-4" />
             创建项目
+          </Button>
+          <Button
+            onClick={startDemoTour}
+            title="重置示例项目并开始 6 步演示导览（查看凌乱桌面 → 确认识别物品 → 自动整理 → 规划走线 → 对比前后 → 查看执行指南）"
+          >
+            <Sparkles className="h-4 w-4" />
+            一键演示
           </Button>
           <Button variant="outline" onClick={() => navigate(`/projects/${DEMO_PROJECT_ID}/workspace`)}>
             <FolderOpen className="h-4 w-4" />
@@ -104,7 +118,7 @@ export function ProjectsPage() {
         <EmptyState
           icon={<FolderOpen />}
           title="还没有项目"
-          description="创建一个新项目，或直接打开内置示例项目体验完整流程。"
+          description="创建一个新项目，或点击「一键演示」按导览体验完整流程（查看凌乱桌面 → 确认识别 → 自动整理 → 规划走线 → 对比前后 → 执行指南）。"
           action={
             <Button onClick={() => navigate('/projects/new')}>
               <Plus className="h-4 w-4" />

@@ -16,6 +16,8 @@ interface PlansState {
   recaptureBaseline: (project: Project) => void
   saveCandidate: (project: Project, name?: string) => LayoutPlan
   removeCandidate: (projectId: string, planId: string) => void
+  /** 清空项目的整理前快照与候选方案（演示重置 / 删除项目时使用） */
+  clearProject: (projectId: string) => void
 }
 
 export const usePlansStore = create<PlansState>()(
@@ -65,6 +67,15 @@ export const usePlansStore = create<PlansState>()(
             [projectId]: (s.candidates[projectId] ?? []).filter((p) => p.id !== planId),
           },
         }))
+      },
+      clearProject(projectId) {
+        set((s) => {
+          const baselines = { ...s.baselines }
+          const candidates = { ...s.candidates }
+          delete baselines[projectId]
+          delete candidates[projectId]
+          return { baselines, candidates }
+        })
       },
     }),
     { name: 'dormtopology.plans', version: 1 },

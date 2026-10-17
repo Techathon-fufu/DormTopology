@@ -12,6 +12,8 @@ interface JobsState {
   update: (id: string, patch: Partial<GenerationJob>) => void
   remove: (id: string) => void
   clearFinished: (projectId: string) => void
+  /** 删除项目的全部任务记录（演示重置时使用） */
+  dropProject: (projectId: string) => void
 }
 
 export const useJobsStore = create<JobsState>()((set) => ({
@@ -51,6 +53,9 @@ export const useJobsStore = create<JobsState>()((set) => ({
           !['success', 'failed', 'partial', 'canceled'].includes(j.status),
       ),
     }))
+  },
+  dropProject(projectId) {
+    set((s) => ({ jobs: s.jobs.filter((j) => j.projectId !== projectId) }))
   },
 }))
 

@@ -23,6 +23,7 @@ import {
 } from '@/scene/accessoryGeometry'
 import { useProject } from '@/state/projectsStore'
 import { useDeliverStore } from '@/state/deliverStore'
+import { useTourStore } from '@/state/tourStore'
 import { buildGuideBundle, type GuideIssue, type GuideStep, type StepTarget } from '@/lib/guide'
 import { cn, downloadJson, formatDateTime } from '@/lib/utils'
 import { formatMeters, mToMm } from '@/lib/units'
@@ -273,6 +274,11 @@ export function GuidePage() {
   useEffect(() => {
     if (project && bundle) ensureEntry(project.id, bundle.stamp, defaultAccessory)
   }, [project, bundle, ensureEntry, defaultAccessory])
+
+  // 演示导览信号：进入方案交付页即视为完成「查看执行指南」步骤
+  useEffect(() => {
+    if (project) useTourStore.getState().signal(project.id, 'guide')
+  }, [project])
 
   const checkedSet = useMemo(() => new Set(entry?.checked ?? []), [entry])
   const allSteps = useMemo(

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ImagePlus,
+  Info,
   Loader2,
   Pin,
   Plus,
@@ -21,15 +22,18 @@ import type { ObjectCategory } from '@/types/project'
 import { createDemoCables, createDemoSceneObjects } from '@/data/demoProject'
 import { initialDeskPlacement } from '@/scene/geometry'
 import { createSamplePhotos } from '@/data/samplePhotos'
-import { cn, sleep, uid } from '@/lib/utils'
+import { cn, uid } from '@/lib/utils'
+import { mockSleep } from '@/lib/mockPacing'
 import { deleteFile, putFile } from '@/state/storage/idb'
 import { isMockMode, services, type RecognizedItem } from '@/api'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
 import { useJobsStore, useProjectJobs } from '@/state/jobsStore'
+import { useTourStore } from '@/state/tourStore'
 import { Badge } from '@/ui/kit/badge'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
 import { EmptyState } from '@/ui/kit/empty-state'
+import { FastForwardToggle } from '@/ui/kit/fast-forward'
 import { Input, Label, Select } from '@/ui/kit/primitives'
 import { MmInput } from '@/ui/kit/mm-input'
 import { JobList } from '@/ui/jobs/JobList'
@@ -160,6 +164,13 @@ export function ImportPage() {
   const [generating, setGenerating] = useState(false)
   const [lastBatch, setLastBatch] = useState<{ ok: number; failed: number; total: number } | null>(null)
 
+  // 演示导览信号：进入「③ 生成 3D 资产」即视为完成「确认识别物品」步骤
+  const tourProjectId = project?.id
+  useEffect(() => {
+    if (step !== 3 || !tourProjectId) return
+    useTourStore.getState().signal(tourProjectId, 'confirm-items')
+  }, [step, tourProjectId])
+
   if (!project) {
     return (
       <EmptyState
@@ -204,7 +215,13 @@ export function ImportPage() {
     const next: PhotoEntry[] = []
     for (const file of accepted) {
       const photoId = uid('photo')
-      await putFile('photos', photoId, file)
+      try {
+        await putFile('photos', photoId, file)
+      } catch {
+        // IndexedDB 写入失败（隐私模式 / 存储不可用）：给出可重试的明确提示
+        issues.push(`${file.name}：保存到本地失败（浏览器存储不可用），请重新选择该照片再试`)
+        continue
+      }
       next.push({ id: photoId, name: file.name, url: URL.createObjectURL(file) })
     }
     if (next.length > 0) setPhotos((prev) => [...prev, ...next])
@@ -234,7 +251,7 @@ export function ImportPage() {
     setRecogJobId(job.id)
     setPhase('waiting')
     updateJob(job.id, { status: 'waiting', stageLabel: '已加入队列，等待处理' })
-    await sleep(600)
+    await mockSleep(600)
     setPhase('analyzing')
     updateJob(job.id, { status: 'running', stageLabel: '正在分析照片' })
     try {
@@ -522,6 +539,27 @@ export function ImportPage() {
             可选择真实照片，也可直接使用示例照片或开始识别。
           </p>
 
+          {project.isDemo ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] leading-relaxed text-warning">
+              <Info className="h-4 w-4 shrink-0" />
+              <span className="flex-1">
+                示例项目已内置 9 件已确认物品（演示数据）：可运行一次模拟识别体验流程（含失败 / 重试），或直接查看「③ 生成 3D 资产」。
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-warning/50 text-warning"
+                onClick={() => {
+                  setLastBatch(null)
+                  setStep(3)
+                }}
+              >
+                直接查看 3D 资产
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : null}
+
           <label
             className={cn(
               'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center transition-colors',
@@ -652,6 +690,7 @@ export function ImportPage() {
                 强制模拟识别失败（演示失败 / 重试流程）
               </label>
             ) : null}
+            <FastForwardToggle />
           </div>
         </section>
       ) : null}
@@ -847,6 +886,7 @@ export function ImportPage() {
               <Badge variant="danger">失败 {failedObjects.length} 件</Badge>
             ) : null}
             {isMockMode ? <DataBadge kind="mock" label="生成为模拟" /> : null}
+            <FastForwardToggle compact />
             <span className="text-xs text-faint">
               演示：台灯首次生成会失败，重试后成功（用于演示失败 / 重试 / 部分成功）
             </span>

@@ -1,4 +1,4 @@
-import { sleep } from '@/lib/utils'
+import { mockSleep } from '@/lib/mockPacing'
 import type { ModelGenerationService } from '../types'
 
 /**
@@ -9,18 +9,18 @@ import type { ModelGenerationService } from '../types'
 export const mockModelGenerationService: ModelGenerationService = {
   async generateObject({ object, attempt = 0, onProgress }) {
     onProgress?.(0.1, '准备参考照片')
-    await sleep(300)
+    await mockSleep(300)
     onProgress?.(0.45, '几何重建（模拟）')
-    await sleep(500)
+    await mockSleep(500)
 
     if (object.name.includes('台灯') && attempt === 0) {
       onProgress?.(0.7, '几何重建失败')
-      await sleep(300)
+      await mockSleep(300)
       throw new Error('模拟失败：参考照片不清晰，几何重建超时。可点击「重试」重新生成。')
     }
 
     onProgress?.(0.9, '导出模型')
-    await sleep(400)
+    await mockSleep(400)
     onProgress?.(1, '完成')
 
     return {

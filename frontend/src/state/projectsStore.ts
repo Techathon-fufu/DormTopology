@@ -11,6 +11,8 @@ import { createDemoProject, DEMO_PROJECT_ID } from '@/data/demoProject'
 interface ProjectsState {
   projects: Record<string, Project>
   ensureDemo: () => void
+  /** 重新种入内置示例项目（回到凌乱初始状态，供「一键演示 / 重置重播」使用） */
+  resetDemo: () => void
   upsert: (project: Project) => void
   update: (id: string, updater: (p: Project) => Project) => void
   remove: (id: string) => void
@@ -24,6 +26,11 @@ export const useProjectsStore = create<ProjectsState>()(
         if (!get().projects[DEMO_PROJECT_ID]) {
           set((s) => ({ projects: { ...s.projects, [DEMO_PROJECT_ID]: createDemoProject() } }))
         }
+      },
+      resetDemo() {
+        set((s) => ({
+          projects: { ...s.projects, [DEMO_PROJECT_ID]: createDemoProject() },
+        }))
       },
       upsert(project) {
         set((s) => ({
