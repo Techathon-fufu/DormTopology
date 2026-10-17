@@ -4,7 +4,7 @@ import { Edges, Html, Line, OrbitControls } from '@react-three/drei'
 import { Box3, Vector3 } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { detectWebGL } from '@/lib/webgl'
-import type { BoxZone, Scene, RoutingResult, RoutingSupport, Vec3 } from './contract'
+import type { BoxZone, Item, Scene, RoutingResult, RoutingSupport, Vec3 } from './contract'
 
 export type Layers = { regions: boolean; collisions: boolean; network: boolean; cables: boolean; reserved: boolean; supports: boolean; trayCandidates: boolean }
 export type CameraView = 'perspective' | 'top' | 'front' | 'underside'
@@ -63,6 +63,52 @@ function Zone({ zone, color, opacity = 0.12 }: { zone: BoxZone; color: string; o
       <Edges color={color} transparent opacity={0.5} />
     </mesh>
   )
+}
+
+function VisualBox({ size, position, color }: { size: Vec3; position: Vec3; color: string }) {
+  return <mesh position={position}>
+    <boxGeometry args={size} />
+    <meshStandardMaterial color={color} roughness={0.65} />
+  </mesh>
+}
+
+function ItemGeometry({ item, color, selected, showBounds }: { item: Item; color: string; selected: boolean; showBounds: boolean }) {
+  const [width, height, depth] = item.size_m
+  const bodyColor = selected ? '#e9b548' : color
+  const special = ['monitor', 'printer', 'power_adapter'].includes(item.category)
+  return <>
+    {item.category === 'monitor' ? <>
+      <VisualBox size={[width * 0.50, height * 0.07, depth * 0.90]} position={[0, height * 0.035, 0]} color={bodyColor} />
+      <VisualBox size={[width * 0.08, height * 0.40, depth * 0.16]} position={[0, height * 0.26, -depth * 0.18]} color={bodyColor} />
+      <VisualBox size={[width * 0.96, height * 0.60, depth * 0.20]} position={[0, height * 0.68, 0]} color={bodyColor} />
+      <VisualBox size={[width * 0.88, height * 0.49, depth * 0.015]} position={[0, height * 0.69, depth * 0.109]} color="#263b47" />
+      <VisualBox size={[width * 0.026, height * 0.007, depth * 0.016]} position={[width * 0.39, height * 0.40, depth * 0.110]} color="#b3ddda" />
+    </> : item.category === 'printer' ? <>
+      {[-1, 1].flatMap(x => [-1, 1].map(z => <VisualBox key={`${x}-${z}`} size={[width * 0.08, height * 0.055, depth * 0.08]}
+        position={[x * width * 0.35, height * 0.0275, z * depth * 0.25]} color="#25343d" />))}
+      <VisualBox size={[width * 0.94, height * 0.73, depth * 0.73]} position={[0, height * 0.42, -depth * 0.08]} color={bodyColor} />
+      <VisualBox size={[width * 0.96, height * 0.10, depth * 0.78]} position={[0, height * 0.82, -depth * 0.04]} color={selected ? '#e9b548' : '#dce2e4'} />
+      <VisualBox size={[width * 0.65, height * 0.13, depth * 0.06]} position={[0, height * 0.935, -depth * 0.32]} color="#35454d" />
+      <VisualBox size={[width * 0.58, height * 0.008, depth * 0.40]} position={[0, height * 0.884, -depth * 0.08]} color="#f9fbfc" />
+      <VisualBox size={[width * 0.75, height * 0.04, depth * 0.25]} position={[0, height * 0.10, depth * 0.35]} color="#35454d" />
+      <VisualBox size={[width * 0.60, height * 0.008, depth * 0.22]} position={[0, height * 0.128, depth * 0.35]} color="#f9fbfc" />
+      <VisualBox size={[width * 0.74, height * 0.07, depth * 0.01]} position={[0, height * 0.26, depth * 0.291]} color="#25343d" />
+      <VisualBox size={[width * 0.20, height * 0.055, depth * 0.025]} position={[-width * 0.28, height * 0.70, depth * 0.29]} color="#25343d" />
+    </> : item.category === 'power_adapter' ? <>
+      <VisualBox size={[width * 0.75, height * 0.08, depth * 0.75]} position={[0, height * 0.04, 0]} color={bodyColor} />
+      <VisualBox size={[width * 0.94, height * 0.92, depth * 0.94]} position={[0, height * 0.54, 0]} color={selected ? '#e9b548' : '#313d45'} />
+      <VisualBox size={[width * 0.40, height * 0.10, depth * 0.01]} position={[0, height * 0.65, depth * 0.475]} color="#7f9198" />
+    </> : <mesh position={[0, height / 2, 0]}>
+      <boxGeometry args={item.size_m} />
+      <meshStandardMaterial color={bodyColor} roughness={0.65} />
+      <Edges color={selected ? '#704a08' : '#344c53'} />
+    </mesh>}
+    {special && (showBounds || selected) && <mesh position={[0, height / 2, 0]}>
+      <boxGeometry args={item.size_m} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      <Edges color={selected ? '#704a08' : '#59717b'} transparent opacity={selected ? 0.9 : 0.45} />
+    </mesh>}
+  </>
 }
 
 function Camera({ bounds, view, reset, onMove }: {
@@ -140,6 +186,7 @@ export function AlgorithmScene({ scene, routing, layers, selected, onSelect, vie
   }, [scene, routing])
   const span = Math.max(...bounds.getSize(new Vector3()).toArray(), 1)
   const nodes = new Map(scene.routing_graph.nodes.map(node => [node.id, node]))
+  const mountedPorts = new Set(scene.items.flatMap(item => item.plug_mount ? [item.plug_mount.socket_port_id, item.plug_mount.plug_port_id] : []))
   if (!webgl) return <div className="lab-render-error" role="alert">WebGL 不可用，三维视图无法加载。</div>
   return <RenderBoundary>
     <Canvas dpr={[1, 1.5]} camera={{ fov: 40 }} gl={{ preserveDrawingBuffer: true }}
@@ -164,21 +211,18 @@ export function AlgorithmScene({ scene, routing, layers, selected, onSelect, vie
           <Edges color="#31a296" />
         </mesh>
       })}
-      {scene.items.map((item, index) => <group key={item.id} position={item.position} rotation={[0, item.rotation_y_rad, 0]}>
-        <mesh position={[0, item.size_m[1] / 2, 0]} onClick={event => { event.stopPropagation(); onSelect(item.id) }}>
-          <boxGeometry args={item.size_m} />
-          <meshStandardMaterial color={selected === item.id ? '#e9b548' : itemColors[index % itemColors.length]} roughness={0.65} />
-          <Edges color={selected === item.id ? '#704a08' : '#344c53'} />
-        </mesh>
+      {scene.items.map((item, index) => <group key={item.id} position={item.position} rotation={[0, item.rotation_y_rad, 0]}
+        onClick={event => { event.stopPropagation(); onSelect(item.id) }}>
+        <ItemGeometry item={item} color={itemColors[index % itemColors.length]} selected={selected === item.id || item.ports.some(port => port.id === selected)} showBounds={layers.collisions} />
         {item.ports.map(port => <group key={port.id}>
-          <mesh position={port.local_position}>
+          <mesh position={port.local_position} onClick={event => { event.stopPropagation(); onSelect(port.id) }}>
             <sphereGeometry args={[Math.max(0.006, span * 0.003), 12, 8]} />
-            <meshBasicMaterial color="#202e3a" />
+            <meshBasicMaterial color={selected === port.id ? '#e9b548' : mountedPorts.has(port.id) ? '#087f70' : '#202e3a'} />
           </mesh>
           <Line points={[port.local_position, port.local_position.map((v, i) => v + port.local_direction[i] * 0.04) as Vec3]} color="#202e3a" lineWidth={1.5} />
         </group>)}
-        {selected === item.id && <Html center position={[0, item.size_m[1] + 0.04, 0]} style={{ pointerEvents: 'none' }}>
-          <span className="lab-object-label">{item.name}</span>
+        {(selected === item.id || item.ports.some(port => port.id === selected)) && <Html center position={[0, item.size_m[1] + 0.04, 0]} style={{ pointerEvents: 'none' }}>
+          <span className="lab-object-label">{item.name}{selected !== item.id ? ` · ${selected}` : ''}</span>
         </Html>}
       </group>)}
       {layers.network && scene.routing_graph.edges.map(edge => <Line key={edge.id}

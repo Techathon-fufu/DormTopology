@@ -17,6 +17,16 @@ function readFixture<T = Record<string, unknown>>(caseId: string, name: string):
   return JSON.parse(readFileSync(new URL(`${caseId}/${name}`, fixtureRoot), 'utf8'))
 }
 
+function directPlugScene(): Scene {
+  const scene = readFixture<Scene>('packing-success', 'scene.json')
+  const adapter = scene.items.find(item => item.id === 'charger')!
+  adapter.category = 'power_adapter'
+  adapter.fixed = true
+  adapter.placement_priority = 100
+  adapter.plug_mount = { socket_port_id: 'strip_socket_1', plug_port_id: 'charger_port' }
+  return scene
+}
+
 async function importJson(page: Page, documents: Record<string, unknown>) {
   await page.locator('input[type=file]').setInputFiles(Object.entries(documents).map(([name, value]) => ({
     name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(value)),
@@ -49,7 +59,7 @@ async function expectNonblankCanvas(page: Page) {
 
 async function attachScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`${name}.png`)
-  await page.screenshot({ path, fullPage: true, animations: 'disabled' })
+  await page.screenshot({ path, fullPage: true, scale: 'css', animations: 'disabled' })
   await testInfo.attach(name, { path, contentType: 'image/png' })
 }
 
@@ -454,6 +464,104 @@ test('accepts the combined mounted and candidate tray result budget and rejects 
   expect(parseBundle(scene, undefined, result).routingResult!.underside_tray_optimizations).toHaveLength(512)
   result.underside_tray_optimizations.push({ ...optimizations[0], id: 'overflow_optimization' })
   expect(() => parseBundle(scene, undefined, result)).toThrow('viewer limit is 512 entries')
+})
+
+test('validates confirmed direct plug references and optional placement priorities without mutating input', () => {
+  const scene = directPlugScene()
+  const original = structuredClone(scene)
+  const parsed = parseBundle(scene).scene
+  expect(parsed.items.find(item => item.id === 'charger')!.placement_priority).toBe(100)
+  expect(parsed.items.find(item => item.id === 'keyboard')!.placement_priority).toBeUndefined()
+  expect(scene).toEqual(original)
+  const mutations: Array<(candidate: Scene) => void> = [
+    candidate => { candidate.items.find(item => item.id === 'charger')!.fixed = false },
+    candidate => { candidate.items.find(item => item.id === 'charger')!.category = 'device' },
+    candidate => { candidate.items.find(item => item.id === 'charger')!.plug_mount!.socket_port_id = 'wall_power_port' },
+    candidate => { candidate.items.find(item => item.id === 'charger')!.plug_mount!.plug_port_id = 'keyboard_port' },
+    candidate => { candidate.items.find(item => item.id === 'strip')!.fixed = false },
+    candidate => { candidate.items.find(item => item.id === 'strip')!.dimensions_confirmed = false },
+    candidate => { candidate.items.find(item => item.id === 'charger')!.dimensions_confirmed = false },
+    candidate => { candidate.items.find(item => item.id === 'strip')!.ports[0].confirmed = false },
+    candidate => { candidate.items.find(item => item.id === 'charger')!.ports[0].confirmed = false },
+    candidate => {
+      const adapter = structuredClone(candidate.items.find(item => item.id === 'charger')!)
+      adapter.id = 'duplicate_adapter'
+      adapter.ports[0].id = 'duplicate_plug'
+      adapter.plug_mount!.plug_port_id = 'duplicate_plug'
+      candidate.items.push(adapter)
+    },
+    ...[-1, 101, 0.5, true].map(value => (candidate: Scene) => { Reflect.set(candidate.items[0], 'placement_priority', value) }),
+  ]
+  for (const mutate of mutations) {
+    const candidate = structuredClone(scene)
+    mutate(candidate)
+    expect(() => parseBundle(candidate)).toThrow()
+  }
+})
+
+test('preserves direct plug mounting and priorities when validating an applied layout', () => {
+  const scene = directPlugScene()
+  const packing: PackingResult = {
+    schema_version: '1.0', scene_id: scene.scene_id, scene_revision: scene.scene_revision, status: 'success', issues: [],
+    items: scene.items.map(item => ({
+      item_id: item.id, name: item.name, model_url: item.model_url, current_pos: item.position,
+      target_pos: item.position, target_rotation_y_rad: item.rotation_y_rad, target_region_id: null,
+      placement_status: 'unchanged', reason_code: null,
+    })),
+  }
+  const applied = { ...structuredClone(scene), scene_revision: scene.scene_revision + 1 }
+  expect(parseBundle(scene, packing, undefined, applied).routingScene).toEqual(applied)
+  for (const mutate of [
+    (candidate: Scene) => { candidate.items.find(item => item.id === 'charger')!.placement_priority = 99 },
+    (candidate: Scene) => { candidate.items.find(item => item.id === 'charger')!.plug_mount!.socket_port_id = 'strip_socket_2' },
+  ]) {
+    const candidate = structuredClone(applied)
+    mutate(candidate)
+    expect(() => parseBundle(scene, packing, undefined, candidate)).toThrow('only change item positions, rotations and scene_revision')
+  }
+})
+
+test('renders the integrated equipment layout and confirmed direct plug connection', async ({ page }, testInfo) => {
+  await openLab(page)
+  await page.getByLabel('测试场景').selectOption('packing-integrated-desk')
+  const scene = readFixture<Scene>('packing-integrated-desk', 'scene.json')
+  const applied = readFixture<Scene>('packing-integrated-desk', 'applied_scene.json')
+  const routing = readFixture<RoutingResult>('packing-integrated-desk', 'cable_routing.json')
+  const viewport = page.getByTestId('algorithm-viewport')
+  await expect(viewport).toHaveAttribute('data-case-id', 'packing-integrated-desk')
+  await expect(viewport).toHaveAttribute('data-scene-revision', String(applied.scene_revision))
+  expect(scene.items.filter(item => !item.fixed)).toHaveLength(8)
+  const monitor = applied.items.find(item => item.category === 'monitor')!
+  const printer = applied.items.find(item => item.category === 'printer')!
+  const adapter = applied.items.find(item => item.plug_mount)!
+  expect(monitor.placement_priority).toBe(100)
+  expect(printer.placement_priority).toBe(90)
+  await page.getByTestId('item-list').getByRole('button').filter({ hasText: monitor.id }).click()
+  await expect(page.getByTestId('inspector').locator('dd').filter({ hasText: /^100$/ })).toBeVisible()
+  await page.getByRole('button', { name: '正视图', exact: true }).click()
+  await expectNonblankCanvas(page)
+  await attachScreenshot(page, testInfo, 'integrated-monitor-front')
+  await page.getByTestId('item-list').getByRole('button').filter({ hasText: printer.id }).click()
+  await expect(page.getByTestId('inspector').locator('dd').filter({ hasText: /^90$/ })).toBeVisible()
+  await page.getByRole('button', { name: '透视图', exact: true }).click()
+  await attachScreenshot(page, testInfo, 'integrated-equipment-after')
+  const viewportPath = testInfo.outputPath('integrated-equipment-viewport.png')
+  await viewport.screenshot({ path: viewportPath, animations: 'disabled' })
+  await testInfo.attach('integrated-equipment-viewport', { path: viewportPath, contentType: 'image/png' })
+  const mount = adapter.plug_mount!
+  await expect(page.getByTestId('plug-mount-panel')).toContainText('接口已确认')
+  await page.getByRole('button', { name: `查看直插插孔 ${mount.socket_port_id}`, exact: true }).click()
+  await expect(page.getByTestId('inspector')).toContainText(mount.socket_port_id)
+  await page.getByRole('button', { name: `查看适配器插头 ${mount.plug_port_id}`, exact: true }).click()
+  await expect(page.getByTestId('inspector')).toContainText(mount.plug_port_id)
+  await expect(page.getByTestId('inspector')).toContainText(mount.socket_port_id)
+  await attachScreenshot(page, testInfo, 'integrated-direct-plug')
+  await page.getByRole('button', { name: '整理前', exact: true }).click()
+  await expect(viewport).toHaveAttribute('data-rendered-cables', '0')
+  await page.getByRole('button', { name: '整理后', exact: true }).click()
+  await expect(viewport).toHaveAttribute('data-rendered-cables', String(routing.cables.filter(cable => cable.status === 'valid').length))
+  expect(await downloadJson(page, '导出应用场景')).toEqual(applied)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false)
 })
 
 test('shows the real composite route tray proposal as a separate installation suggestion', async ({ page }, testInfo) => {

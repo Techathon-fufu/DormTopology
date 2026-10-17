@@ -45,6 +45,8 @@ export interface Item {
     error: string | null;
   };
   socket_count?: 4 | 6 | 8;
+  placement_priority?: number;
+  plug_mount?: { socket_port_id: string; plug_port_id: string };
 }
 
 export interface Region {
@@ -405,6 +407,10 @@ function parseScene(value: unknown, path: string): Scene {
     choice(item.dimensions_source, ['user', 'template', 'estimated'], `${entryPath}.dimensions_source`);
     boolean(item.dimensions_confirmed, `${entryPath}.dimensions_confirmed`);
     boolean(item.fixed, `${entryPath}.fixed`);
+    if (item.placement_priority !== undefined) {
+      integer(item.placement_priority, `${entryPath}.placement_priority`, 0);
+      if ((item.placement_priority as number) > 100) invalid(`${entryPath}.placement_priority`, 'priority must not exceed 100');
+    }
     choice(item.usage_frequency, ['high', 'medium', 'low'], `${entryPath}.usage_frequency`);
     const regions = array(item.allowed_region_ids, `${entryPath}.allowed_region_ids`, VISUALIZATION_LIMITS.regions);
     if (!item.fixed && regions.length === 0) invalid(entryPath, 'movable items require an allowed region');
@@ -449,6 +455,33 @@ function parseScene(value: unknown, path: string): Scene {
       const itemPorts = item.ports as Port[];
       if (itemPorts.filter((port) => port.type === 'power_source').length !== item.socket_count
         || itemPorts.filter((port) => port.type === 'power_sink').length !== 1) invalid(entryPath, 'power strip ports do not match socket_count');
+    }
+  });
+  const items = scene.items as unknown as Item[];
+  const portOwners = new Map(items.flatMap((item) => item.ports.map((port) => [port.id, item] as const)));
+  const mountedPorts = new Set<string>();
+  items.forEach((item, index) => {
+    if (item.plug_mount === undefined) return;
+    const mountPath = `${path}.items[${index}].plug_mount`;
+    const mount = object(item.plug_mount, mountPath);
+    if (item.category !== 'power_adapter' || !item.fixed) invalid(mountPath, 'plug mounts require a fixed power_adapter');
+    const socketId = string(mount.socket_port_id, `${mountPath}.socket_port_id`);
+    const plugId = string(mount.plug_port_id, `${mountPath}.plug_port_id`);
+    const socket = ports.get(socketId);
+    const plug = ports.get(plugId);
+    const strip = portOwners.get(socketId);
+    if (!socket || strip?.category !== 'power_strip' || !strip.fixed || socket.type !== 'power_source') {
+      invalid(`${mountPath}.socket_port_id`, 'socket must belong to a fixed power_strip power_source');
+    }
+    if (!plug || portOwners.get(plugId)?.id !== item.id || plug.type !== 'power_sink') {
+      invalid(`${mountPath}.plug_port_id`, 'plug must belong to this power_adapter power_sink');
+    }
+    if (!item.dimensions_confirmed || !strip!.dimensions_confirmed || !socket!.confirmed || !plug!.confirmed) {
+      invalid(mountPath, 'plug mount dimensions and ports must be confirmed');
+    }
+    for (const portId of [socketId, plugId]) {
+      if (mountedPorts.has(portId)) invalid(mountPath, 'port already used by another plug mount');
+      mountedPorts.add(portId);
     }
   });
   const graph = object(scene.routing_graph, `${path}.routing_graph`);

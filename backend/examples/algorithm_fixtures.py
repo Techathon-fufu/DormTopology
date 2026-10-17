@@ -7,6 +7,7 @@ from pathlib import Path
 
 from backend.app.domain.packing import measure_free_area, plan_packing, validate_layout
 from backend.app.domain.routing import plan_routing
+from backend.examples.integrated_desk import integrated_desk_scene
 from backend.examples.packing_demo import (
     cable,
     cases,
@@ -367,17 +368,20 @@ def generate(output_dir: Path) -> dict:
         "partial": "Packing partial",
         "infeasible": "Packing infeasible",
         "revision_2": "Packing revision 2",
+        "integrated_desk": "Integrated desk with monitor, printer, and mounted adapter",
     }
     descriptions = {
         "success": "Eight movable items, four shelf cells, and a fixed drawer.",
         "partial": "The storage box cannot fit its assigned region and stays in place.",
         "infeasible": "An invalid fixed wall socket prevents the layout being applied.",
         "revision_2": "A second input revision exercises source and applied result versions.",
+        "integrated_desk": "Prioritize major devices, store small items, then route three cables after applying the layout; the adapter plugs directly into the strip.",
     }
-    for name, scene in cases().items():
+    packing_cases = {**cases(), "integrated_desk": integrated_desk_scene()}
+    for name, scene in packing_cases.items():
         identifier = f"packing-{name.replace('_', '-')}"
         result = plan_packing(scene)
-        expected_status = "success" if name == "revision_2" else name
+        expected_status = "success" if name in {"revision_2", "integrated_desk"} else name
         if result["status"] != expected_status:
             raise AssertionError(
                 f"{identifier}: expected {expected_status}, got {result['status']}"
@@ -391,6 +395,15 @@ def generate(output_dir: Path) -> dict:
                 raise AssertionError(f"{identifier}: applied layout is invalid")
         routing = plan_routing(applied)
         _assert_version(applied, routing)
+        if name == "integrated_desk":
+            if not validate_layout(scene)["geometry_valid"]:
+                raise AssertionError("integrated baseline contains invalid geometry")
+            if len([value for value in scene["items"] if not value["fixed"]]) != 8:
+                raise AssertionError("integrated desk must contain eight movable items")
+            if len(routing["cables"]) != 3 or routing["status"] != "success":
+                raise AssertionError("integrated desk requires three valid cable routes")
+            if any(value["support_check"]["status"] != "verified" for value in routing["cables"]):
+                raise AssertionError("integrated routes require verified support")
         for filename, payload in (
             ("scene.json", scene),
             ("packing_result.json", result),

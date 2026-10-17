@@ -14,6 +14,7 @@ const labels: Record<string, string> = {
   'routing-supported-edge': '走线 · 桌面与孔边固定', 'routing-underdesk-ties': '走线 · 桌下扎带',
   'routing-underdesk-tray': '走线 · 桌下集线槽', 'routing-unsupported-span': '走线 · 悬空段过长',
   'routing-underdesk-composite': '走线 · 多线合流优化',
+  'packing-integrated-desk': '综合 · 设备整理与直插供电',
 }
 const statusLabels = { success: '全部完成', partial: '部分完成', infeasible: '不可行' }
 const placementLabels = { placed: '已归位', unchanged: '保持原位', unplaced: '未收纳' }
@@ -139,12 +140,14 @@ export function AlgorithmLabPage() {
     && bundle.packingResult.status !== 'infeasible' && !bundle.routingScene
   const routeVisible = !isUnappliedPreview && bundle?.routingResult?.scene_revision === shown?.scene_revision
     ? bundle?.routingResult : undefined
-  const item = shown?.items.find(current => current.id === selected)
+  const item = shown?.items.find(current => current.id === selected || current.ports.some(port => port.id === selected))
+  const selectedPort = item?.ports.find(port => port.id === selected)
   const support = shown?.routing_graph.supports?.find(current => current.id === selected)
   const trayCandidate = shown?.routing_graph.tray_candidates?.find(current => current.id === selected)
   const supports = shown?.routing_graph.supports ?? []
   const supportPolicy = shown?.routing_graph.support_policy
-  const resultItem = bundle?.packingResult?.items.find(current => current.item_id === selected)
+  const resultItem = bundle?.packingResult?.items.find(current => current.item_id === item?.id)
+  const plugMounts = shown?.items.filter(current => current.plug_mount) ?? []
   const issues: Issue[] = [...(bundle?.packingResult?.issues ?? []), ...(bundle?.routingResult?.issues ?? [])]
   const packing = bundle?.packingResult
   const routing = bundle?.routingResult
@@ -223,18 +226,23 @@ export function AlgorithmLabPage() {
           <div className="lab-section-title"><h2>物品</h2><span>{shown?.items.length ?? 0}</span></div>
           <div className="lab-item-list" data-testid="item-list">{shown?.items.map((current, index) => {
             const target = packing?.items.find(value => value.item_id === current.id)
-            return <button key={current.id} aria-pressed={selected === current.id} onClick={() => setSelected(current.id)}>
+            return <button key={current.id} aria-pressed={item?.id === current.id} onClick={() => setSelected(current.id)}>
               <i style={{ background: itemColors[index % itemColors.length] }} /><span>{current.name}<small>{current.id}</small></span>
               <em className={target?.placement_status === 'unplaced' ? 'lab-unplaced' : ''}>{target ? placementLabels[target.placement_status] : current.fixed ? '固定' : '可移动'}</em>
             </button>
           })}</div>
         </section>
         <section className="lab-section" data-testid="inspector">
-          <div className="lab-section-title"><h2>{trayCandidate ? '集线槽建议详情' : support ? '支撑详情' : '物品详情'}</h2><span>{item?.fixed ? '固定物品' : trayCandidate ? '待安装' : ''}</span></div>
+          <div className="lab-section-title"><h2>{trayCandidate ? '集线槽建议详情' : support ? '支撑详情' : selectedPort ? '接口详情' : '物品详情'}</h2><span>{item?.fixed ? '固定物品' : trayCandidate ? '待安装' : ''}</span></div>
           {item ? <><p className="lab-detail-name">{item.name} <code>{item.id}</code></p><dl className="lab-details">
             <dt>底面中心 (m)</dt><dd>{position(item.position)}</dd><dt>尺寸 (m)</dt><dd>{position(item.size_m)}</dd>
             <dt>绕 Y 轴 (rad)</dt><dd>{item.rotation_y_rad.toFixed(4)}</dd><dt>目标区域</dt><dd>{resultItem?.target_region_id ?? '—'}</dd>
             <dt>接口</dt><dd>{item.ports.length}</dd>
+            <dt>摆放优先级</dt><dd>{item.placement_priority ?? 0}</dd>
+            {item.plug_mount && <><dt>直插插孔</dt><dd>{item.plug_mount.socket_port_id}</dd><dt>适配器插头</dt><dd>{item.plug_mount.plug_port_id}</dd></>}
+            {selectedPort && <><dt>当前接口</dt><dd>{selectedPort.id}</dd><dt>接口类型</dt><dd>{selectedPort.type}</dd>
+              <dt>局部位置 (m)</dt><dd>{position(selectedPort.local_position)}</dd><dt>朝外方向</dt><dd>{position(selectedPort.local_direction)}</dd>
+              <dt>接口确认</dt><dd>{selectedPort.confirmed ? '已确认' : '未确认'}</dd></>}
           </dl></> : support ? <><p className="lab-detail-name">{supportLabels[support.kind]} <code>{support.id}</code></p><dl className="lab-details">
             <dt>安装物体</dt><dd>{support.obstacle_id}</dd><dt>安装面</dt><dd>{faceLabels[support.face]} · {support.face}</dd>
             <dt>面内范围 (m)</dt><dd>{position(support.bounds_uv_m)}</dd><dt>离面距离 (m)</dt><dd>{support.stand_off_m.toFixed(4)}</dd>
@@ -244,6 +252,19 @@ export function AlgorithmLabPage() {
             <dt>候选线缆</dt><dd>{trayCandidate.cable_ids.join(', ')}</dd>
           </dl></> : <p className="lab-empty">未选择物品</p>}
         </section>
+        {!!plugMounts.length && <section className="lab-section" data-testid="plug-mount-panel">
+          <div className="lab-section-title"><h2>直插连接</h2><span>{plugMounts.length} 组</span></div>
+          <div className="lab-plug-list">{plugMounts.map(adapter => {
+            const mount = adapter.plug_mount!
+            const strip = shown!.items.find(current => current.ports.some(port => port.id === mount.socket_port_id))!
+            return <div key={adapter.id} className="lab-plug-mount">
+              <strong>{adapter.name}<span>接口已确认</span></strong>
+              <button onClick={() => setSelected(mount.socket_port_id)} aria-label={`查看直插插孔 ${mount.socket_port_id}`}>{strip.name}<small>{mount.socket_port_id}</small></button>
+              <ChevronRight size={13} />
+              <button onClick={() => setSelected(mount.plug_port_id)} aria-label={`查看适配器插头 ${mount.plug_port_id}`}>{adapter.name}<small>{mount.plug_port_id}</small></button>
+            </div>
+          })}</div>
+        </section>}
         <section className="lab-section" data-testid="support-panel">
           <div className="lab-section-title"><h2>固定与支撑</h2><span>{supports.length}</span></div>
           <p className="lab-support-policy" data-testid="support-policy">{supportPolicy

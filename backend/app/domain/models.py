@@ -20,6 +20,11 @@ class Port(TypedDict):
     confirmed: bool
 
 
+class PlugMount(TypedDict):
+    socket_port_id: str
+    plug_port_id: str
+
+
 class Item(TypedDict):
     id: str
     name: str
@@ -39,6 +44,8 @@ class Item(TypedDict):
     model_url: str | None
     generation: dict
     socket_count: NotRequired[int]
+    plug_mount: NotRequired[PlugMount]
+    placement_priority: NotRequired[int]
 
 
 class Region(TypedDict):

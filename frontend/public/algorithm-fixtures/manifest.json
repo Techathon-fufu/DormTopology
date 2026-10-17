@@ -87,6 +87,25 @@
       }
     },
     {
+      "id": "packing-integrated-desk",
+      "label": "Integrated desk with monitor, printer, and mounted adapter",
+      "kind": "packing",
+      "description": "Prioritize major devices, store small items, then route three cables after applying the layout; the adapter plugs directly into the strip.",
+      "scene_url": "/algorithm-fixtures/packing-integrated-desk/scene.json",
+      "routing_result_url": "/algorithm-fixtures/packing-integrated-desk/cable_routing.json",
+      "packing_result_url": "/algorithm-fixtures/packing-integrated-desk/packing_result.json",
+      "applied_scene_url": "/algorithm-fixtures/packing-integrated-desk/applied_scene.json",
+      "expected": {
+        "packing_status": "success",
+        "routing_status": "success",
+        "reason_codes": []
+      },
+      "metrics": {
+        "before_free_area_m2": 0.8681,
+        "after_free_area_m2": 0.9387
+      }
+    },
+    {
       "id": "routing-slot",
       "label": "Slot route",
       "kind": "routing",
