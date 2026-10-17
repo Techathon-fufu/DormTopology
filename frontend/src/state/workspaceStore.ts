@@ -120,17 +120,17 @@ interface WorkspaceState {
   selectedId: string | null
   /** 拖拽预览（会话级，不持久化） */
   drag: DragState | null
-  notice: string | null
-  setNotice: (notice: string | null) => void
   past: HistorySnapshot[]
   future: HistorySnapshot[]
   lastScore: number | null
+  notice: string | null
   setMode: (mode: WorkspaceMode) => void
   setViewPreset: (p: ViewPreset) => void
   /** 应用视角预设并强制重新应用相机（重复进入同一预设也会生效；导览步骤切换用） */
   applyViewPreset: (p: ViewPreset) => void
   resetView: () => void
   setDrag: (drag: DragState | null) => void
+  setNotice: (notice: string | null) => void
   select: (id: string | null) => void
   resetHistory: () => void
   setLastScore: (score: number | null) => void
@@ -219,18 +219,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     viewNonce: 0,
     selectedId: null,
     drag: null,
-    notice: null,
-    setNotice: (notice) => set({ notice }),
     past: [],
     future: [],
     lastScore: null,
+    notice: null,
     setMode: (mode) => set({ mode }),
     setViewPreset: (viewPreset) => set({ viewPreset }),
     applyViewPreset: (viewPreset) => set((s) => ({ viewPreset, viewNonce: s.viewNonce + 1 })),
     resetView: () => set((s) => ({ viewPreset: 'persp', viewNonce: s.viewNonce + 1 })),
     setDrag: (drag) => set({ drag }),
+    setNotice: (notice) => set({ notice }),
     select: (selectedId) => set({ selectedId }),
-    resetHistory: () => set({ past: [], future: [], lastScore: null }),
+    resetHistory: () => set({ past: [], future: [], lastScore: null, notice: null }),
     setLastScore: (lastScore) => set({ lastScore }),
 
     undo(projectId) {

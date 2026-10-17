@@ -12,7 +12,6 @@ import { snapPlacement } from './placementEditing'
 
 /** 拖拽判定阈值（像素）：小于该位移视为点击选中 */
 const DRAG_THRESHOLD_PX = 4
-/** 位置网格吸附精度（米）：10 mm */
 
 export interface ObjectDragHandlers {
   onPointerDown: (e: ThreeEvent<PointerEvent>) => void
@@ -124,6 +123,9 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
           { transform: { position: commitPosition } },
           true,
         )
+        if (!lastPreviewValid) {
+          useWorkspaceStore.getState().setNotice(`已摆放「${object.name}」，注意存在干涉冲突（可撤销）`)
+        }
       }
     }
 

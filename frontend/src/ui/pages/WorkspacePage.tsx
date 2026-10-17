@@ -184,10 +184,12 @@ export function WorkspacePage() {
     flashTimer.current = window.setTimeout(() => setFlash(null), 3200)
   }
 
+  // 工作台操作提示（例如拖拽摆放干涉提示）→ 底部 flash
   useEffect(() => {
     if (!workspaceNotice) return
     showFlash(workspaceNotice)
     useWorkspaceStore.getState().setNotice(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceNotice])
 
   // 走线模式操作提示（连线 / 节点 / 规划结果）→ 底部 flash

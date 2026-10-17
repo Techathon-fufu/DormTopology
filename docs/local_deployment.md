@@ -286,3 +286,5 @@ tail -n 40 /private/tmp/dorm-monitor-placement/.work/local-demo-20261017/fronten
 最终构建产物 `index-BgqCsXwp.js` 已由 `5177` 服务提供，页面错误日志为 0，代理健康检查返回 `organization` / `cable` 能力。手机动画页 393×852 下内容宽度 393px，播放/暂停正常；更新的 8 份 Markdown 本地文件链接检查和 `git diff --check` 通过。临时 `5178` / `8004` 验收进程已停止，生产实例继续运行。
 
 截图：`project-home-mobile.png`（手机首页）、`project-workbench-desktop.png`（桌面工作台）、`project-result-desktop.png` 与 `project-result-mobile.png`（动画页）。构建仍有已有 Three.js 大包提示；未新增供应商接入或验证真实 Rodin。
+
+主分支合并复查：随后合入远端 `648d5a9`，保留拖动后干涉提示、历史重置时清除提示及其专项脚本，同时保留本轮吸附、取消拖动、缩放碰撞和按住对比。合并后 `npm run build`（含 TypeScript）、`check-drag-drop-interference.ts`、`check-placement-editing.ts`、`check-object-resize.ts` 与差异空白检查通过；新构建 `index-DAVW8YdI.js` 由原 `5177` 预览服务提供。`objects/dormdesk.blend`、`objects/dormdesk.glb` 的 SHA256 在合并前后保持一致，未纳入提交。
