@@ -1,5 +1,4 @@
 import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
-import { useCabinetStore } from '@/state/cabinetStore'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -426,7 +425,6 @@ function ObjectInspector({
         {hasFixedFurniture(project.room) && <div className="flex gap-2">
           {furnitureSurfaces(project.room).filter((s) => s.id.startsWith('support-cabinet')).map((s) => <Button key={s.id} size="sm" variant="outline" className="flex-1" disabled={locked} onClick={() => {
             patch({ transform: { position: [(s.rect.x0 + s.rect.x1) / 2, s.y, (s.rect.z0 + s.rect.z1) / 2] } })
-            if (!useCabinetStore.getState().open) useCabinetStore.getState().toggle()
             useWorkspaceStore.getState().setViewPreset('left')
           }}>{s.label}</Button>)}
         </div>}
