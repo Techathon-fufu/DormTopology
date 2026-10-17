@@ -1,17 +1,15 @@
 {
+ "schema": "dormtopology.colliders/1",
  "unit": "m",
  "up": "y",
- "shift_m": [
-  -0.55,
-  -0.0075,
-  0.84
- ],
- "note": "每个抽屉含 5 个原始部件（箱壳拆为底板+4壁以保内腔；面板/拉手槽/双滑轨取原网格）",
- "drawers": [
-  {
-   "name": "drawer_bottom",
-   "source_prefix": "Cabinet_Drawer_Bot_",
+ "anchor": "desk world coords (same as dormdesk_body.glb)",
+ "pull_axis": "-x",
+ "models": {
+  "drawer_bottom.glb": {
    "file": "drawer_bottom.glb",
+   "collision": "drawer_bottom.collision.json",
+   "strategy": "shell",
+   "collider_parts": 9,
    "parts": [
     "floor",
     "front",
@@ -23,23 +21,24 @@
     "wall_z0",
     "wall_z1"
    ],
-   "part_count": 9,
-   "cavity_size_m": [
-    0.28,
-    0.171,
-    0.293
+   "bounds_min": [
+    1.608,
+    0.0825,
+    -0.397
    ],
-   "cavity_empty": true,
-   "shift_m": [
-    -0.55,
-    -0.0075,
-    0.84
-   ]
+   "bounds_max": [
+    1.932,
+    0.3175,
+    -0.062
+   ],
+   "shift_applied": false,
+   "pull_axis": "-x"
   },
-  {
-   "name": "drawer_middle",
-   "source_prefix": "Cabinet_Drawer_Mid_",
+  "drawer_middle.glb": {
    "file": "drawer_middle.glb",
+   "collision": "drawer_middle.collision.json",
+   "strategy": "shell",
+   "collider_parts": 9,
    "parts": [
     "floor",
     "front",
@@ -51,23 +50,24 @@
     "wall_z0",
     "wall_z1"
    ],
-   "part_count": 9,
-   "cavity_size_m": [
-    0.28,
-    0.141,
-    0.293
+   "bounds_min": [
+    1.608,
+    0.335,
+    -0.397
    ],
-   "cavity_empty": true,
-   "shift_m": [
-    -0.55,
-    -0.0075,
-    0.84
-   ]
+   "bounds_max": [
+    1.932,
+    0.535,
+    -0.062
+   ],
+   "shift_applied": false,
+   "pull_axis": "-x"
   },
-  {
-   "name": "drawer_top",
-   "source_prefix": "Cabinet_Drawer_Top_",
+  "drawer_top.glb": {
    "file": "drawer_top.glb",
+   "collision": "drawer_top.collision.json",
+   "strategy": "shell",
+   "collider_parts": 11,
    "parts": [
     "floor",
     "front",
@@ -81,18 +81,18 @@
     "wall_z0",
     "wall_z1"
    ],
-   "part_count": 11,
-   "cavity_size_m": [
-    0.28,
-    0.121,
-    0.293
+   "bounds_min": [
+    1.604,
+    0.55,
+    -0.397
    ],
-   "cavity_empty": true,
-   "shift_m": [
-    -0.55,
-    -0.0075,
-    0.84
-   ]
+   "bounds_max": [
+    1.932,
+    0.725,
+    -0.062
+   ],
+   "shift_applied": false,
+   "pull_axis": "-x"
   }
- ]
+ }
 }
