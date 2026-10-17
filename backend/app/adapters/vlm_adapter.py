@@ -133,6 +133,22 @@ class VLMClient:
         return None
 
     @classmethod
+    def resolve_prefab_rel_path(cls, prefab_key: str) -> str:
+        """Finds matching model file in Prefabmodel directory supporting naming variations."""
+        prefab_dir = Path(__file__).resolve().parents[3] / "Prefabmodel"
+        candidates = [
+            f"{prefab_key}.glb",
+            f"{prefab_key.replace(' ', '_')}.glb",
+            f"{prefab_key.replace('_', '')}.glb",
+            f"{prefab_key.replace('expand', 'extend')}.glb",
+            f"{prefab_key.replace('extend', 'expand')}.glb",
+        ]
+        for c in candidates:
+            if (prefab_dir / c).exists():
+                return f"Prefabmodel/{c}"
+        return f"Prefabmodel/{prefab_key}.glb"
+
+    @classmethod
     def bbox_to_desk_coords(
         cls,
         bbox_1000: List[int],
@@ -265,7 +281,7 @@ class VLMClient:
             if prefab_key:
                 it["model_source"] = "prefab"
                 it["prefab_key"] = prefab_key
-                it["model_url"] = f"Prefabmodel/{prefab_key}.glb"
+                it["model_url"] = self.resolve_prefab_rel_path(prefab_key)
             else:
                 it["model_source"] = "rodin"
                 it["prefab_key"] = None
