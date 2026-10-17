@@ -21,7 +21,7 @@ export interface ObjectDragHandlers {
 /**
  * 物品拖拽：pointerdown 开始，指针射线投射到支撑面（桌面 / 书架搁板 / 地面）上取最近命中，
  * 位置吸附到 10mm 网格；拖动过程中仅写入会话级 drag 状态（不写项目库、不记录历史），
- * 松手时提交一次可撤销的移动（无效落点回退到上一次有效位置，不写无效数据）。
+ * 松手时提交一次可撤销的移动（取消碰撞体积拦截与强行弹回，直接提交落点并提示干涉）。
  * 拖拽期间 CameraRig 的轨道控制会被禁用，避免操作冲突。
  */
 export function useObjectDrag(project: Project, object: SceneObject): ObjectDragHandlers {
@@ -118,7 +118,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       useWorkspaceStore.getState().setDrag(null)
       if (!moved) return
       // 松手时一次性提交（一次可撤销的移动记录）：
-      // 无效落点（越界 / 相交）恢复到本次拖拽中最后一次有效预览位置；
+      // 拖拽摆放取消碰撞体积拦截，不弹回；保留落点并提示干涉；
       // 与起点一致时不提交，避免产生无变化的空历史记录。
       const commitPosition = resolveDropCommit(startPos, lastValidPos, lastPos, lastPreviewValid)
       if (commitPosition) {
@@ -128,6 +128,9 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
           { transform: { position: commitPosition } },
           true,
         )
+        if (!lastPreviewValid) {
+          useWorkspaceStore.getState().setNotice(`已摆放「${object.name}」，注意存在干涉冲突（可撤销）`)
+        }
       }
     }
 

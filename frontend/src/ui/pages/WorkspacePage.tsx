@@ -93,6 +93,7 @@ export function WorkspacePage() {
   const panelVisible = useOrganizeStore((s) => s.panelVisible)
   const organizeOpen = useOrganizeStore((s) => s.open)
   const organizeStatus = useOrganizeStore((s) => s.status)
+  const workspaceNotice = useWorkspaceStore((s) => s.notice)
   const cableNotice = useCableStore((s) => s.notice)
   const cableAnimStatus = useCableStore((s) => s.animStatus)
   const deskMetrics = useDeskModelStore((s) => s.metrics)
@@ -178,6 +179,14 @@ export function WorkspacePage() {
     if (flashTimer.current) window.clearTimeout(flashTimer.current)
     flashTimer.current = window.setTimeout(() => setFlash(null), 3200)
   }
+
+  // 工作台操作提示（例如拖拽摆放干涉提示）→ 底部 flash
+  useEffect(() => {
+    if (!workspaceNotice) return
+    showFlash(workspaceNotice)
+    useWorkspaceStore.getState().setNotice(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceNotice])
 
   // 走线模式操作提示（连线 / 节点 / 规划结果）→ 底部 flash
   useEffect(() => {
