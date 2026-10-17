@@ -9,3 +9,4 @@ charger
 monitor
 laptop_fold
 laptop_expand
+books_stack

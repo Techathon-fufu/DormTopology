@@ -28,10 +28,25 @@ PREFAB_KEYWORDS: Dict[str, List[str]] = {
     "monitor": ["显示器", "屏幕"],
     "laptop_fold": ["合盖笔记本", "闭合笔记本"],
     "laptop_expand": ["展开笔记本", "打开笔记本", "笔记本", "电脑"],
+    "books_stack": ["一摞书", "书堆", "书籍", "课本", "教材"],
 }
 
 # Standard parts managed by other teammates (completely excluded from recognition)
 EXCLUDED_STANDARD_PARTS = ["排插", "插排", "接线板"]
+
+# Keywords indicating books / textbooks
+BOOK_KEYWORDS = [
+    "书", "课本", "教材", "书籍", "书本", "读物", "册子", "练习册", "作业本", 
+    "本子", "记事本", "真题", "卷子", "试卷", "辅导", "字典", "杂志", "book"
+]
+
+
+def is_book_item(name: str) -> bool:
+    """Checks whether an item is a book/textbook (excluding laptop/computer)."""
+    name_lower = name.lower()
+    if any(k in name_lower for k in ["电脑", "laptop", "pc", "mac"]):
+        return False
+    return any(k in name_lower for k in BOOK_KEYWORDS)
 
 
 class VLMClient:
@@ -225,15 +240,27 @@ class VLMClient:
         raw_data = json.loads(clean_str)
         raw_items = raw_data.get("items", [])
 
-        processed_items = []
+        book_items = []
+        regular_items = []
+
         for it in raw_items:
             name = it.get("name", "")
             # 1. Skip excluded standard parts
             if any(k in name for k in EXCLUDED_STANDARD_PARTS):
                 continue
 
+            # 2. Check if item is a book/textbook
+            if is_book_item(name):
+                book_items.append(it)
+            else:
+                regular_items.append(it)
+
+        processed_items = []
+
+        # Process regular items
+        for it in regular_items:
+            name = it.get("name", "")
             pose = it.get("pose", "flat")
-            # 2. Check prefab model catalog
             prefab_key = self.match_prefab_model(name, pose=pose)
             if prefab_key:
                 it["model_source"] = "prefab"
@@ -244,10 +271,39 @@ class VLMClient:
                 it["prefab_key"] = None
                 it["model_url"] = f"objects/{it['id']}.glb"
 
-            # 3. Compute 3D desk coordinates
             bbox = it.get("bbox_2d", [0, 0, 0, 0])
             it["current_pos"] = self.bbox_to_desk_coords(bbox)
             processed_items.append(it)
+
+        # 3. User rule: 识别到是书统一不建模，无论有几本，最后都统一用一个一小摞书模型替代，绝不提交 Rodin
+        if book_items:
+            all_bboxes = [it.get("bbox_2d", [0, 0, 0, 0]) for it in book_items]
+            agg_bbox = [
+                min(b[0] for b in all_bboxes),
+                min(b[1] for b in all_bboxes),
+                max(b[2] for b in all_bboxes),
+                max(b[3] for b in all_bboxes),
+            ]
+            agg_pos = self.bbox_to_desk_coords(agg_bbox)
+            book_names = [it.get("name", "书") for it in book_items]
+            print(f"[*] 触发书籍合并规则：识别到 {len(book_items)} 本书 ({', '.join(book_names)})，全部合并为一小摞书预制件 [books_stack]，禁止提交 Rodin 建模。")
+
+            stack_item = {
+                "id": "item_books_stack",
+                "name": "一摞书",
+                "category": "scattered",
+                "usage_frequency": "medium",
+                "pose": "flat",
+                "facing": "user",
+                "bbox_2d": agg_bbox,
+                "estimated_size_m": [0.26, 0.19, 0.06],
+                "model_source": "prefab",
+                "prefab_key": "books_stack",
+                "model_url": "Prefabmodel/books_stack.glb",
+                "current_pos": agg_pos,
+                "book_count": len(book_items),
+            }
+            processed_items.append(stack_item)
 
         return {
             "image_path": str(image_path),
