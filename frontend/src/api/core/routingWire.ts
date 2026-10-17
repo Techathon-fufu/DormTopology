@@ -1,9 +1,10 @@
+import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 import { CABLE_THICKNESS_META, type CableConnection, type LayoutPlan, type Project, type Vec3 } from '@/types/project'
 import type { CablePlanningResult } from '../types'
 import type { OrganizationSceneRef } from '@/types/organization'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { isPowerSourcePort, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
-import { localDirVec, resolvePortOffset } from '@/scene/ports'
+import { resolvePortOffset } from '@/scene/ports'
 import { computeCableAvoidZones } from '@/scene/routeNodes'
 import { DESK_GAP } from '@/scene/sceneValidation'
 import { furnitureSurfaces, hasFixedFurniture, validFurnitureHole } from '@/scene/fixedFurniture'
@@ -136,7 +137,7 @@ export function toRoutingScene(input: { project: Project; confirmed: boolean; re
       if (!original) continue
       port.confirmed = original.confirmed === true
       port.local_position = resolvePortOffset(object, original)
-      port.local_direction = localDirVec(original.direction ?? 'back')
+      port.local_direction = resolvePortLocalDirection(original)
       if (original.type === 'power-ac' || original.type === 'dc') port.type = isPowerSourcePort(object, original) ? 'power_source' : 'power_sink'
     }
   }
