@@ -127,22 +127,29 @@ def items_overlap(a, b):
     return any(overlap(pa,pb) for pa in world_parts(a) for pb in world_parts(b))
 
 
+@lru_cache(maxsize=4096)
+def _support_slabs(vertices, normals):
+    slabs = []
+    for n in normals:
+        projections = [dot(n,v) for v in vertices]
+        slabs.append((n,min(projections),max(projections)))
+    return tuple(slabs)
+
+
 def segment_interval(start, direction, part, inflate=0.0):
-    """Line parameter interval in outward face halfspaces; conservative radius."""
+    """Clip a line to both support planes of every face axis."""
     vertices,normals,_edges = part
     lo,hi = -math.inf,math.inf
-    for n in normals:
-        limit = max(dot(n,v) for v in vertices)+inflate
-        origin, slope = dot(n,start)-limit, dot(n,direction)
+    # SAT axes discard orientation; both sides must bound the line interval.
+    for n,minimum,maximum in _support_slabs(vertices,normals):
+        lower, upper = minimum-inflate, maximum+inflate
+        origin, slope = dot(n,start), dot(n,direction)
         if abs(slope) < 1e-12:
-            if origin > 0:
+            if origin < lower or origin > upper:
                 return None
             continue
-        t = -origin/slope
-        if slope > 0:
-            hi = min(hi,t)
-        else:
-            lo = max(lo,t)
+        near, far = (lower-origin)/slope, (upper-origin)/slope
+        lo,hi = max(lo,min(near,far)), min(hi,max(near,far))
         if lo > hi:
             return None
     return lo,hi
