@@ -4,8 +4,10 @@ import type { Project, SceneObject } from '@/types/project'
 import type { SceneIssue } from '@/scene/sceneValidation'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
+import { useObjectResizeStore } from '@/state/objectResizeStore'
 import { CATEGORY_COLORS } from './models'
 import { ObjectModel } from './ObjectModel'
+import { ObjectResizeHandles } from './ObjectResizeHandles'
 import { basicMaterial, boxGeometry } from './resources'
 import { useObjectDrag } from './useObjectDrag'
 import { useSurfacePortPick } from '@/features/connections/useSurfacePortPick'
@@ -35,7 +37,11 @@ export function SceneObjectMesh({
   const [hovered, setHovered] = useState(false)
   const drag = useObjectDrag(project, object)
   const pick = useSurfacePortPick(project, object)
-  const { transform: t, dimensions: dims } = object
+  const resizePreview = useObjectResizeStore((s) =>
+    s.preview?.projectId === project.id && s.preview.objectId === object.id ? s.preview : null,
+  )
+  const { transform: t } = object
+  const dims = resizePreview?.dimensions ?? object.dimensions
 
   const dragPreview = useWorkspaceStore((s) =>
     s.drag && s.drag.objectId === object.id ? s.drag : null,
@@ -77,6 +83,8 @@ export function SceneObjectMesh({
             onContextMenu?.(object.id, e.nativeEvent.clientX, e.nativeEvent.clientY)
             return
           }
+          // Ctrl 角点缩放：不进入普通平移；缩放预览期间同样不响应拖动
+          if (e.ctrlKey || useObjectResizeStore.getState().preview) return
           const marking = useConnectionsStore.getState()
           if (marking.projectId === project.id && marking.pickingObjectId) {
             if (pick.active) pick.onPointerDown(e)
@@ -99,7 +107,7 @@ export function SceneObjectMesh({
         onPointerOut={() => { setHovered(false); pick.onPointerOut() }}
       >
         <ObjectModel
-          object={object}
+          object={resizePreview ? { ...object, dimensions: dims } : object}
           shape={modelDone ? object.model.shape : 'genericBox'}
           color={CATEGORY_COLORS[object.category]}
           sockets={object.powerStrip?.socketCount}
@@ -107,13 +115,14 @@ export function SceneObjectMesh({
       </group>
       {selected || hovered || dragging || activeOperation ? (
         <mesh
-          geometry={boxGeometry(dims.width * 1.06, dims.height * 1.08, dims.depth * 1.06)}
+          geometry={boxGeometry(dims.width, dims.height, dims.depth)}
           material={basicMaterial('#0F9D8A', {
             wireframe: true,
             opacity: selected || dragging || activeOperation ? 0.85 : 0.4,
           })}
         />
       ) : null}
+      <ObjectResizeHandles project={project} object={object} selected={selected} />
       {hasIssues || dragInvalid ? (
         <mesh
           geometry={boxGeometry(dims.width * 1.1, dims.height * 1.1, dims.depth * 1.1)}

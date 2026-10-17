@@ -1,10 +1,13 @@
 import { Dropdown } from '@/ui/kit/dropdown'
 import { ArrowUpRight, HelpCircle, Plus, ChevronDown } from 'lucide-react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { isMockMode } from '@/api'
 import { LogoMark } from '@/ui/brand/LogoMark'
 import { ServiceStatusCluster } from '@/ui/service/ServiceStatusCluster'
 import { DemoTour } from '@/ui/tour/DemoTour'
+import { HomeHeader } from '@/ui/home/HomeHeader'
+import { useHomeTheme } from '@/ui/home/useHomeTheme'
+import '@/ui/home/home.css'
 import { cn } from '@/lib/utils'
 import { DEMO_PROJECT_ID } from '@/data/demoProject'
 
@@ -12,7 +15,22 @@ function navClass({ isActive }: { isActive: boolean }) {
   return cn('rounded-lg px-3 py-2 text-[13px] transition-colors', isActive ? 'bg-primary-soft font-medium text-primary' : 'text-muted-foreground hover:bg-muted')
 }
 
+function HomeShell() {
+  const { theme } = useHomeTheme()
+  // 主题令牌定义在 .home-shell 上，header 与页面共享同一作用域，不触碰全局样式。
+  return (
+    <div className="home-shell" data-theme={theme}>
+      <HomeHeader />
+      <main className="home-main"><Outlet /></main>
+      <DemoTour />
+    </div>
+  )
+}
+
 export function AppShell() {
+  const location = useLocation()
+  if (location.pathname === '/') return <HomeShell />
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-surface print:hidden">
