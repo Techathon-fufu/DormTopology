@@ -145,24 +145,42 @@ export function RoomShell({
       ))}
 
 
-      {/* 墙面电源插座 */}
-      {room.outlets.map((outlet) => (
-        <group key={outlet.id} position={outlet.position}>
-          <mesh
-            castShadow
-            geometry={boxGeometry(0.086, 0.086, 0.018)}
-            material={standardMaterial('#F5F2EC', { roughness: 0.6 })}
-          />
-          {[-0.02, 0.02].map((dx) => (
+      {/* 墙面插座面板（固定模型）：一块 86 面板，含 slots 个双插孔插座（各 2 个插孔） */}
+      {room.outlets.map((outlet) => {
+        const sockets = Math.max(1, Math.min(4, outlet.slots))
+        const stepX = 0.038
+        return (
+          <group key={outlet.id} position={outlet.position}>
             <mesh
-              key={dx}
-              position={[dx, 0, 0.012]}
-              geometry={boxGeometry(0.014, 0.022, 0.004)}
-              material={standardMaterial('#4A5560')}
+              castShadow
+              geometry={boxGeometry(0.086, 0.086, 0.018)}
+              material={standardMaterial('#F5F2EC', { roughness: 0.6 })}
             />
-          ))}
-        </group>
-      ))}
+            {Array.from({ length: sockets }, (_, i) => {
+              const sx = (i - (sockets - 1) / 2) * stepX
+              return (
+                <group key={i} position={[sx, 0, 0]}>
+                  {/* 单个双插孔插座底板 */}
+                  <mesh
+                    position={[0, 0, 0.0105]}
+                    geometry={boxGeometry(0.034, 0.044, 0.003)}
+                    material={standardMaterial('#E7E1D4', { roughness: 0.7 })}
+                  />
+                  {/* 双插孔（两个插孔并排） */}
+                  {[-0.0065, 0.0065].map((dx) => (
+                    <mesh
+                      key={dx}
+                      position={[dx, -0.002, 0.0128]}
+                      geometry={boxGeometry(0.008, 0.02, 0.004)}
+                      material={standardMaterial('#4A5560')}
+                    />
+                  ))}
+                </group>
+              )
+            })}
+          </group>
+        )
+      })}
     </group>
   )
 }

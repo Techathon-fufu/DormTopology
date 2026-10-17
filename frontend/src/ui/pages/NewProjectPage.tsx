@@ -63,13 +63,12 @@ export function NewProjectPage() {
         <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] leading-relaxed text-warning">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            将先填充示例空间（桌面 <span className="font-semibold">1200 × 600 × 750 mm</span>
-            ，仅为演示默认值），可在下一步「空间配置」中按实际测量修改并实时预览。
+            将先填充固定标准空间（上床下桌标准款），可在下一步「空间配置」中调整书架、出线孔与插座位置并实时预览。
           </p>
         </div>
 
         <ol className="list-decimal space-y-1 pl-5 text-[13px] text-muted-foreground">
-          <li>空间配置：桌面 / 房间 / 书架 / 立柱 / 出线孔与电源，实时三维预览与冲突校验</li>
+          <li>空间配置：书架 / 出线孔 / 插座（床桌、房间与立柱为固定模型），实时三维预览与冲突校验</li>
           <li>照片与物品：上传或使用示例照片，确认识别物品（可编辑、可补充、可删除误识别）</li>
           <li>三维工作台：空间整理（分区归位）、规划走线、输出执行指南</li>
         </ol>
