@@ -30,10 +30,12 @@ export function MarkingPage({
   objectId,
   busy = false,
   onExit,
+  onTargetChange,
 }: {
   project: Project
   objectId: string | null
   busy?: boolean
+  onTargetChange: (id: string) => void
   onExit: () => void
 }) {
   const session = useConnectionsStore()
@@ -51,6 +53,8 @@ export function MarkingPage({
   const canUndo = useWorkspaceStore((s) => s.past.length > 0)
   const audit = useMemo(() => auditConnections(project), [project])
   const object = project.objects.find((o) => o.id === target)
+
+  useEffect(() => { onTargetChange(target) }, [target, onTargetChange])
 
   // 从右键菜单切换到另一件物品时同步目标；不重置已打开的草稿以外的东西。
   useEffect(() => {
@@ -256,7 +260,7 @@ export function MarkingPage({
       </aside>
 
       <p className="pointer-events-none absolute bottom-3 left-3 hidden max-w-[42%] rounded-full border border-border bg-surface/90 px-3 py-1 text-[11px] text-muted-foreground sm:block">
-        点击物品表面放置接口 · 拖动空白处旋转视角 · Esc 取消描点 · 右键可切换物品
+        点击物品表面放置接口 · 拖动空白处旋转视角 · Esc 取消描点 · 右侧切换物品
       </p>
 
       <dialog

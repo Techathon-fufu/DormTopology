@@ -7,7 +7,7 @@ interface MmInputProps {
   /** 当前值（米） */
   value: number
   /** 提交回调（米） */
-  onChange: (valueM: number) => void
+  onChange: (valueM: number) => void | boolean
   className?: string
   min?: number
   max?: number
@@ -32,7 +32,7 @@ export function MmInput({ value, onChange, className, min, max, disabled, label 
       let mm = n
       if (min !== undefined) mm = Math.max(min, mm)
       if (max !== undefined) mm = Math.min(max, mm)
-      onChange(mmToM(mm))
+      if (onChange(mmToM(mm)) === false) setDraft(String(Math.round(mToMm(value))))
     } else {
       setDraft(String(Math.round(mToMm(value))))
     }
@@ -50,7 +50,6 @@ export function MmInput({ value, onChange, className, min, max, disabled, label 
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            commit()
             ;(e.target as HTMLInputElement).blur()
           }
         }}

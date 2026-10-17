@@ -58,22 +58,29 @@ def run_check_balance(client: RodinClient):
     print(json.dumps(balance_info, indent=2, ensure_ascii=False))
 
 
+def build_generic_prompt(item_name: str) -> str:
+    """Universal generic prompt for any item from VLM detection."""
+    return f"A wholly white and simple 3D object of {item_name}, clean low poly geometry, single isolated game asset"
+
+
 def generate_single_item(
     client: RodinClient,
     item_id: str,
     image_path: Path,
-    prompt: str,
-    target_filename: str,
-    output_dir: Path,
-    tier: str = "standard",
-    use_agentic: bool = True,
+    prompt: Optional[str] = None,
+    target_filename: str = "model.glb",
+    output_dir: Path = None,
+    tier: str = "Gen-2.5-Low",
+    fast_mode: bool = True,
+    quality_override: int = 1500,
 ):
+    prompt_text = prompt or build_generic_prompt(item_id)
     print(f"\n==========================================", flush=True)
     print(f"Generating 3D asset for: {item_id} ({target_filename})", flush=True)
     print(f"Source Image: {image_path}", flush=True)
-    print(f"Prompt: {prompt}", flush=True)
+    print(f"Prompt: {prompt_text}", flush=True)
     print(f"Target Output: {output_dir / target_filename}", flush=True)
-    print(f"Tier: {tier}, Mode: {'Agentic' if use_agentic else 'Gen-2.5'}", flush=True)
+    print(f"Tier: {tier}, Fast Mode: {fast_mode}, Target Faces: {quality_override}", flush=True)
     print(f"==========================================", flush=True)
 
     def on_progress(msg: str):
@@ -82,9 +89,10 @@ def generate_single_item(
     result = client.generate_glb_from_image(
         image_path=image_path,
         output_dir=output_dir,
-        prompt=prompt,
-        use_agentic=use_agentic,
+        prompt=prompt_text,
+        fast_mode=fast_mode,
         tier=tier,
+        quality_override=quality_override,
         target_filename=target_filename,
         on_progress=on_progress,
     )

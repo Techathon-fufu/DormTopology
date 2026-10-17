@@ -6,10 +6,10 @@ import { NewProjectPage } from '@/ui/pages/NewProjectPage'
 import { SpaceSetupPage } from '@/ui/pages/SpaceSetupPage'
 import { ImportPage } from '@/ui/pages/ImportPage'
 import { WorkspacePage } from '@/ui/pages/WorkspacePage'
-import { PlanComparePage } from '@/ui/pages/PlanComparePage'
-import { GuidePage } from '@/ui/pages/GuidePage'
+import { ResultPage } from '@/ui/pages/ResultPage'
 import { ApiRuntime } from '@/ui/service/ApiRuntime'
 import { AlgorithmLabPage } from '@/algorithm-lab/AlgorithmLabPage'
+import { usePlansStore } from '@/state/plansStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { WorkflowPage } from '@/workflow/WorkflowPage'
 
@@ -21,6 +21,15 @@ export default function App() {
     ensureDemo()
   }, [ensureDemo])
 
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key === 'dormtopology.projects') void useProjectsStore.persist.rehydrate()
+      if (event.key === 'dormtopology.plans') void usePlansStore.persist.rehydrate()
+    }
+    window.addEventListener('storage', sync)
+    return () => window.removeEventListener('storage', sync)
+  }, [])
+
   return (
     <>
       {/* 后端健康检查与长任务状态恢复查询。 */}
@@ -31,11 +40,12 @@ export default function App() {
           <Route path="/projects/new" element={<NewProjectPage />} />
           <Route path="/projects/:id/setup" element={<SpaceSetupPage />} />
           <Route path="/projects/:id/import" element={<ImportPage />} />
-          <Route path="/projects/:id/guide" element={<GuidePage />} />
         </Route>
         {/* 三维工作台与方案对比为整屏布局，不套 AppShell */}
+        <Route path="/projects/:id/result" element={<ResultPage />} />
+        <Route path="/projects/:id/guide" element={<ResultPage />} />
         <Route path="/projects/:id/workspace" element={<WorkspacePage />} />
-        <Route path="/projects/:id/compare" element={<PlanComparePage />} />
+        <Route path="/projects/:id/compare" element={<ResultPage />} />
         <Route path="/algorithm-lab" element={<AlgorithmLabPage />} />
         <Route path="/workflow" element={<WorkflowPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

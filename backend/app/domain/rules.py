@@ -196,14 +196,16 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
         rotations = _array(
             item["allowed_rotations_y_rad"], path + ".allowed_rotations_y_rad"
         )
-        if not rotations:
-            _fail(path + ".allowed_rotations_y_rad", "must not be empty")
+        if not rotations or len(rotations) > 8:
+            _fail(path + ".allowed_rotations_y_rad", "must contain 1 to 8 angles")
         for angle in rotations:
             angle = _number(angle, path + ".allowed_rotations_y_rad")
-            if angle not in (0.0, math.pi / 2):
+            if not -math.pi <= angle <= math.pi:
                 _fail(
-                    path + ".allowed_rotations_y_rad", "only 0 and pi/2 are supported"
+                    path + ".allowed_rotations_y_rad", "angles must be within [-pi, pi]"
                 )
+        if len(set(rotations)) != len(rotations):
+            _fail(path + ".allowed_rotations_y_rad", "angles must be unique")
         collision = _object(item["collision"], "type", path + ".collision")
         _enum(collision["type"], {"box", "compound"}, path + ".collision.type")
         if collision["type"] == "compound":

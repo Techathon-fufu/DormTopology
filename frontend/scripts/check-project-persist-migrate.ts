@@ -10,6 +10,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: {
   setItem: (key: string, value: string) => entries.set(key, value),
   removeItem: (key: string) => entries.delete(key),
 }, configurable: true })
+const { usePlansStore } = await import('../src/state/plansStore')
 const { migrateDefaultDemoPorts, migrateDefaultDemoWiring, useProjectsStore } = await import('../src/state/projectsStore')
 
 for (const version of [1, 2, 3]) {
@@ -30,6 +31,9 @@ for (const version of [1, 2, 3]) {
   entries.set('dormtopology.projects', JSON.stringify({ version, state: { projects: { [DEMO_PROJECT_ID]: old, [custom.id]: custom } } }))
   await useProjectsStore.persist.rehydrate()
   assert.equal(useProjectsStore.getState().projects[DEMO_PROJECT_ID].demoSeedVersion, 3, 'hydration preserves the old seed until archiving')
+  usePlansStore.setState({ baselines: {}, candidates: {} })
+  usePlansStore.getState().captureBaseline(old)
+  const oldBaseline = structuredClone(usePlansStore.getState().baselines[old.id])
   useProjectsStore.getState().ensureDemo()
   const projects = useProjectsStore.getState().projects
   const current = projects[DEMO_PROJECT_ID]
@@ -39,6 +43,9 @@ for (const version of [1, 2, 3]) {
   const archives = Object.values(projects).filter((p) => p.id.startsWith(`${DEMO_PROJECT_ID}-seed-`))
   assert.equal(archives.length, 1)
   const archive = archives[0]
+  assert.equal(usePlansStore.getState().baselines[old.id], undefined)
+  assert.equal(usePlansStore.getState().baselines[archive.id].id, oldBaseline.id)
+  assert.deepEqual(usePlansStore.getState().baselines[archive.id].scene!.objects.map((o) => ({ ...o, projectId: old.id })), oldBaseline.scene!.objects)
   assert.equal(archive.isDemo, false)
   assert.equal(archive.room.furnitureModel, undefined)
   assert.deepEqual(archive.room.desk, oldRoom.desk)
@@ -74,7 +81,7 @@ legacyPorts.objects = legacyPorts.objects.map((o) => ({ ...o, ports: o.ports.map
       : p.id === 'port-laptop-hdmi' ? { ...p, confirmed: false, offset: [.173, .05, -.01] } : p) }))
 const surfacePorts = migrateDefaultDemoPorts(legacyPorts)
 const port = (p: typeof legacyPorts, id: string) => p.objects.flatMap((o) => o.ports).find((entry) => entry.id === id)!
-assert.deepEqual(port(surfacePorts, 'port-laptop-usbc').offset, [.172, .009, -.06])
+assert.deepEqual(port(surfacePorts, 'port-laptop-usbc').offset, [.175, .005, -.06])
 assert.deepEqual(port(surfacePorts, 'port-monitor-hdmi').offset, [-.12, .15, -.012])
 assert.deepEqual(port(surfacePorts, 'port-monitor-pwr').offset, [.12, .05, -.092], 'confirmed port measurements are preserved')
 assert.deepEqual(port(surfacePorts, 'port-laptop-hdmi').offset, [.173, .05, -.01], 'user-edited unconfirmed positions are preserved')

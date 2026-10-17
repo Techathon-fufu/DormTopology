@@ -18,6 +18,7 @@ import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
 import { useOrganizeStore } from './organizeStore'
+import { resizeIssue, laptopViewingAngle } from '@/scene/placementEditing'
 
 export type WorkspaceMode = 'organize' | 'cable'
 export type ViewPreset = 'persp' | 'front' | 'top' | 'left' | 'right' | 'desk'
@@ -135,7 +136,7 @@ interface WorkspaceState {
   setLastScore: (score: number | null) => void
   undo: (projectId: string) => void
   redo: (projectId: string) => void
-  updateObject: (projectId: string, objectId: string, patch: ObjectPatch, record?: boolean) => void
+  updateObject: (projectId: string, objectId: string, patch: ObjectPatch, record?: boolean) => boolean | void
   addObject: (projectId: string, object: SceneObject) => void
   removeObject: (projectId: string, objectId: string) => void
   replaceObjects: (projectId: string, objects: SceneObject[], record?: boolean) => void
@@ -302,12 +303,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return {
           ...o,
           ...rest,
-          transform: tPatch ? { ...o.transform, ...tPatch } : o.transform,
+          transform: mPatch?.shape === 'laptop' && mPatch.prefabId !== o.model.prefabId && !tPatch ? { ...o.transform, rotationY: laptopViewingAngle(o.transform.position, project.room) } : tPatch ? { ...o.transform, ...tPatch } : o.transform,
           dimensions,
           ports,
           model: mPatch ? { ...o.model, ...mPatch } : o.model,
         }
       })
+      if (dPatch) {
+        const changed = next.find((o) => o.id === objectId)
+        if (changed) {
+          const error = resizeIssue(changed, changed.dimensions, project.room, next)
+          if (error) { set({ notice: error }); return false }
+        }
+      }
       commit(
         projectId,
         {
@@ -316,12 +324,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         },
         record,
       )
+      return true
     },
 
     addObject(projectId, object) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
-      commit(projectId, { objects: [...project.objects, object] }, true)
+      const placed = object.model.shape === 'laptop' ? { ...object, transform: { ...object.transform, rotationY: laptopViewingAngle(object.transform.position, project.room) } } : object
+      commit(projectId, { objects: [...project.objects, placed] }, true)
       set({ selectedId: object.id })
     },
 

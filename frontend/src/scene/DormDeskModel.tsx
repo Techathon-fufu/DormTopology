@@ -20,6 +20,7 @@ import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useDrawerStore } from '@/state/drawerStore'
 import { hasFixedFurniture } from './fixedFurniture'
+import { CabinetDoor } from './CabinetDoor'
 
 /**
  * 桌体渲染：加载 models/dormdesk_parts/dormdesk_body.glb（无抽屉桌体）与三只抽屉分离件
@@ -187,6 +188,7 @@ export function DormDeskModel({
   const useGlb = hasFixedFurniture(room) && !forceFallback && status === 'loaded' && parts !== null
   return (
     <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
+      {hasFixedFurniture(room) ? <CabinetDoor /> : null}
       {useGlb && parts ? (
         <>
           <primitive object={parts.body} />

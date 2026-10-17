@@ -1,6 +1,6 @@
 import { requestJson } from './client'
 import { ApiError, isApiError } from './errors'
-import { forgetOrganizationScene, type StoredOrganizationScene } from './organizationScenes'
+import { forgetOrganizationScene, remoteOrganizationProjectId, type StoredOrganizationScene } from './organizationScenes'
 import { canonicalScene, sceneRef, type PackingScene } from './packingWire'
 
 function synchronizedScene(raw: unknown, expected: PackingScene, known: StoredOrganizationScene | null, baselineSourceId: string): PackingScene {
@@ -28,7 +28,7 @@ export async function synchronizeScene(input: {
   known: StoredOrganizationScene | null; signal?: AbortSignal
 }): Promise<PackingScene> {
   const { projectId, scene, baseline, baselineSourceId, known, signal } = input
-  const path = `/projects/${encodeURIComponent(projectId)}/scene`
+  const path = `/projects/${encodeURIComponent(remoteOrganizationProjectId(projectId, baselineSourceId))}/scene`
   const save = (ref: StoredOrganizationScene | null) => requestJson<PackingScene>(path, {
     method: 'PUT', signal,
     body: { scene, expected_revision: ref?.sceneRevision ?? null, baseline_source_id: baselineSourceId,

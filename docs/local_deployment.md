@@ -260,3 +260,31 @@ tail -n 40 /private/tmp/dorm-monitor-placement/.work/local-demo-20261017/fronten
 - 验证后停止临时后端，交付实例换用此前不存在的 `organization.sqlite3`。再以全新浏览器上下文完成桌面/手机只读检查，数据库的 `scenes`、`baselines`、`jobs` 均为 0；首次使用会从示例初始布局开始。
 
 本机浏览器检查与截图位于运行目录的 `verification-results.json`、`clean-results.json`、`verification-*.png` 和 `clean-*.png`，属于本地生成证据，不随代码提交。没有将现有依赖开发服务器源码入口的 Playwright 专项计为构建预览的验证，也未验证真实供应商调用、产品走线或精细模型资产。
+
+## 2026-10-18 固定桌面分区修复
+
+现有 `5177` / `8003` 使用当前工作区新构建和重启后的后端。复现原因：内置示例共用 `demo-dorm-101`，本地基线与后端已有记录不一致时，`PUT /projects/.../scene` 返回 409，领域算法尚未执行；`/algorithm-lab` 只加载预先生成的 JSON，不经过同步与原子应用，因此不会触发该错误。现在内置示例按基线来源隔离远端项目键，普通项目继续使用乐观版本检查，不能覆盖他人保存。
+
+完整真实默认场景通过：17 件物品全覆盖、16 件可移动物品归位、零未放置，前端完整几何复查可接受，整理后七根线全部有效。后端先通过 252 项完整回归；新增家具插口遮挡评分后，相关领域/服务/API 共 78 项通过。前端类型检查、生产构建、19 组同步场景、实际存储迁移与新分区专项通过。新分区脚本 `frontend/scripts/check-workstation-zones.ts` 的 `--http` 模式验证真实规划、原子接受、保存回读及两个内置示例基线互不覆盖；使用独立 `8004` QA 数据库。桌面浏览器完成真实生成与接受；手机 393×851 检查分区说明、场景和资产显示，未见控制台错误。原 `5177` 入口另复测成功生成、0 相交/0 越界及可接受按钮。
+
+生产数据库更新前无运行中任务，原 7 份不可变基线逐份 SHA256 保持不变；备份 `/private/tmp/dorm-before-workstation.sqlite3`。用户原始 `objects/dormdesk.blend` 修改与未跟踪 GLB 未修改。生产构建仍有既有 Three.js 大包提示；本机 Python 环境未安装 Ruff，本轮未报告 Ruff 通过。
+
+分区是尺寸约束，不会自动缩小物品：鼠标操作区 25×20cm，原始 30×30cm 预制鼠标垫超出范围时明确失败；未引入鼠标自动叠放到鼠标垫的通用支撑关系。当前 17 件示例无鼠标垫，不能将其成功结果当作鼠标垫叠放验收。第二格内的预制书堆严格专用，旧独立书本允许溢出到其它书架格。实体尺寸与人体工学仍需用户确认，真实 Rodin 不在本轮验收范围。
+
+额外执行旧参数化房间的 `check-monitor-backend.ts`：固定/锁定显示器、回退、错误角度保留和打印机侧位失败检查通过，但其 `full-demo` 夹具使用当前 17 件物品套入旧房间后不可行，故该脚本整体未通过。使用修改前的 `_choose` / `_region_id` 重跑同一输入仍不可行，不能把该旧夹具算作本次通过证据；当前固定家具的完整布局由 `check-workstation-zones.ts` 与 `check-demo-routing.ts` 验证。
+
+## 2026-10-18 项目编辑与动画页验证
+
+继续使用生产预览 `http://127.0.0.1:5177` 和后端 `8003`，生产 SQLite 路径不变。独立 QA 使用 `5178` / `8004`，测试记录和截图在 `.work/backend-only/`；未替换 `objects/` 源资产。
+
+本轮验证：TypeScript 与生产构建通过；`check-placement-editing.ts` 验证干涉拖放、碰撞缩放拒绝及无历史副作用、柜内两层支撑、吸附、10° 常量、笔记本朝向和只读动画；现有 `check-object-resize.ts` 通过。`check-workstation-zones.ts` 全场布局成功，`check-demo-routing.ts` 实际 17 件物品整理后七条线全部验证有效，原始布局几何无效/部分走线可行仍如实报告。
+
+浏览器实际验证：新建项目 → 确认空间 → 添加示例物品 → 完成创建自动进入工作台；真实整理生成并接受，16 件可移动物品归位、0 未放置；按住前后对比按下 `aria-pressed=true`、松开恢复 `false`；动画播放/暂停；柜内上层可摆放耳机，800mm 宽度碰撞被拒绝并恢复 90mm；Q/E 实际显示旋转 10°；水杯拖至鼠标相交后落点保留并出现警示；单模型页面点击表面可打开接口标记表单。桌面与 393×852 手机工作台/首页检查，手机首页内容宽度与视口均为 393px。
+
+补充验证：空间预览拖至水平旋转两端，均停留在墙的正面；柜门菜单可关闭并重新打开。修复多页面保存覆盖其它项目的问题：项目、基线和候选按本页面改动的记录键合并，浏览器 storage 事件同步列表；`check-record-storage.ts` 覆盖连续旧页写入、新记录保留、删除不复活及存储版本边界，`check-project-persist-migrate.ts` 通过实际历史版本迁移。浏览器在一页新建项目后，在另一页修改并保存示例，再刷新新项目仍可正常进入空间配置。该机制不提供同一项目多人实时协作，后端版本冲突保护继续保留。
+
+最终构建产物 `index-BgqCsXwp.js` 已由 `5177` 服务提供，页面错误日志为 0，代理健康检查返回 `organization` / `cable` 能力。手机动画页 393×852 下内容宽度 393px，播放/暂停正常；更新的 8 份 Markdown 本地文件链接检查和 `git diff --check` 通过。临时 `5178` / `8004` 验收进程已停止，生产实例继续运行。
+
+截图：`project-home-mobile.png`（手机首页）、`project-workbench-desktop.png`（桌面工作台）、`project-result-desktop.png` 与 `project-result-mobile.png`（动画页）。构建仍有已有 Three.js 大包提示；未新增供应商接入或验证真实 Rodin。
+
+主分支合并复查：随后合入远端 `648d5a9`，保留拖动后干涉提示、历史重置时清除提示及其专项脚本，同时保留本轮吸附、取消拖动、缩放碰撞和按住对比。合并后 `npm run build`（含 TypeScript）、`check-drag-drop-interference.ts`、`check-placement-editing.ts`、`check-object-resize.ts` 与差异空白检查通过；新构建 `index-DAVW8YdI.js` 由原 `5177` 预览服务提供。`objects/dormdesk.blend`、`objects/dormdesk.glb` 的 SHA256 在合并前后保持一致，未纳入提交。

@@ -183,7 +183,7 @@ export function SpaceSetupPage() {
   return (
     <div className="space-y-5">
       <PageIntro
-        step="01 / 确认空间"
+        step="创建项目 · 1/2"
         title="为你的书桌，建立空间"
         description="空间配置"
       >

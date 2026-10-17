@@ -4,6 +4,18 @@ import { ApiError } from './errors'
 
 export interface StoredOrganizationScene extends OrganizationSceneRef {
   baselineSourceId: string
+  remoteProjectId?: string
+}
+
+/** Built-in demo IDs are shared by browsers, but their baselines and backend scenes are not. */
+export function remoteOrganizationProjectId(projectId: string, baselineSourceId: string): string {
+  return projectId === 'demo-dorm-101' ? `${projectId}:${baselineSourceId}` : projectId
+}
+
+export function knownSceneForBaseline(projectId: string, baselineSourceId: string): StoredOrganizationScene | null {
+  const known = knownOrganizationScene(projectId)
+  if (projectId === 'demo-dorm-101' && known?.remoteProjectId !== remoteOrganizationProjectId(projectId, baselineSourceId)) return null
+  return known
 }
 
 const active = new Set<string>()
@@ -27,6 +39,7 @@ export function knownOrganizationScene(projectId: string): StoredOrganizationSce
 }
 
 export function rememberOrganizationScene(projectId: string, ref: StoredOrganizationScene): void {
+  if (projectId === 'demo-dorm-101') ref = { ...ref, remoteProjectId: remoteOrganizationProjectId(projectId, ref.baselineSourceId) }
   cache.set(projectId, ref)
   try {
     const previous = localStorage.getItem(key(projectId))

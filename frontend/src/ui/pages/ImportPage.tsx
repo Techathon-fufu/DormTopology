@@ -1,3 +1,4 @@
+import { laptopViewingAngle } from '@/scene/placementEditing'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
@@ -344,8 +345,7 @@ export function ImportPage() {
       name: item.name,
       category: item.category,
       dimensions: { ...item.dimensions },
-      baseDimensions: { ...item.dimensions },
-      transform: { position: initialDeskPlacement(index, project.room), rotationY: 0 },
+      transform: { position: initialDeskPlacement(index, project.room), rotationY: guessShape(item.name) === 'laptop' ? laptopViewingAngle(initialDeskPlacement(index, project.room), project.room) : 0 },
       model: {
         status: 'none',
         source: 'demo',
@@ -500,7 +500,7 @@ export function ImportPage() {
 
   return (
     <div className="space-y-5">
-      <PageIntro step="02 / 照片与物品" title="把桌面，带进三维空间" description="上传照片后，确认物品名称和尺寸，再选择展示模型。识别结果可随时校正。"><ProjectSteps projectId={project.id} current="import" className="flex-wrap" /></PageIntro>
+      <PageIntro step="创建项目 · 2/2" title="把桌面，带进三维空间" description="上传照片后，确认物品名称和尺寸，再选择展示模型。识别结果可随时校正。"><ProjectSteps projectId={project.id} current="import" className="flex-wrap" /></PageIntro>
       <div className="rounded-xl border border-border bg-surface p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-1">
           {STEP_LABELS.map((s, i) => (
@@ -912,15 +912,15 @@ export function ImportPage() {
             <FastForwardToggle compact />
             <span className="text-xs text-faint">
               {isMockMode
-                ? '演示：台灯首次生成会失败，重试后成功（用于演示失败 / 重试 / 部分成功）'
-                : '真实后端：模型生成按件提交 jobId 长任务；失败项可重试'}
+                ? '模拟生成可体验失败重试'
+                : '生成中可继续工作，失败后可重试'}
             </span>
           </div>
 
           <p className="text-xs text-faint">
             {isMockMode
-              ? '模型生成按件排队，状态为 等待 / 生成中 / 完成 / 失败；模拟任务无法提供真实进度，只显示阶段文字。模型未完成时，工作台会以匹配尺寸的几何占位物显示该物品。'
-              : '模型生成按件排队，状态为 等待 / 生成中 / 完成 / 失败；后端未提供精确进度时只显示阶段文字。资产就绪前（含失败 / 重试中），工作台以匹配尺寸的几何占位物显示该物品。'}
+              ? '外观未完成也可进入工作台，暂用简化模型显示。'
+              : '外观在后台逐件生成。完成前可先使用简化模型整理，失败后可重试。'}
           </p>
 
           {lastBatch ? (
@@ -1030,8 +1030,8 @@ export function ImportPage() {
             >
               全部使用占位盒
             </Button>
-            <Button size="lg" onClick={() => navigate(`/projects/${projectId}/workspace`)}>
-              进入三维工作台
+            <Button size="lg" onClick={() => { useProjectsStore.getState().update(projectId, (p) => ({ ...p, stage: 'organize' })); navigate(`/projects/${projectId}/workspace`) }}>
+              完成创建，进入工作台
               <ArrowRight className="h-4 w-4" />
             </Button>
             <Button variant="ghost" onClick={() => setStep(2)} disabled={!recognized}>

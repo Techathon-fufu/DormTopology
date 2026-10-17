@@ -25,8 +25,9 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
  * v5：合并真实 L 形桌面、书架及抽屉支撑与预制物品尺寸/碰撞；归档两个不同的旧 v4 示例。
  * v6：键鼠区左移 6cm，给真实笔记本留出主桌面侧位，避免与打印机争用回台。
  * v7：合并预制物品碰撞与双输出适配器接线，键鼠区左移 10cm 以保留 20mm 净距。
+ * v8：按长槽与使用方式固定分区，插排移到右后回台，旧场景及基线另存。
  */
-export const DEMO_SEED_VERSION = 7
+export const DEMO_SEED_VERSION = 8
 
 export const DEMO_ROOM_NOTE =
   '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
@@ -374,6 +375,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
     },
   ].map((object) => {
     const positions: Record<string, Vec3> = {
+      'demo-power-strip': [.83, deskY, .08],
       'demo-laptop': [-.26, deskY, .23], 'demo-monitor': [.1, deskY, .3],
       'demo-keyboard': [-.15, deskY, .5], 'demo-mouse': [.16, deskY, .5],
       'demo-lamp': [.48, deskY, .47], 'demo-printer': [.795, deskY, .55],

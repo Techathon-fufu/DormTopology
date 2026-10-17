@@ -430,12 +430,12 @@ function parseScene(value: unknown, path: string): Scene {
       if (!regionIds.has(regionId) || uniqueRegions.has(regionId)) invalid(entryPath, 'unknown or duplicate allowed region');
       uniqueRegions.add(regionId);
     });
-    const rotations = array(item.allowed_rotations_y_rad, `${entryPath}.allowed_rotations_y_rad`, 2);
+    const rotations = array(item.allowed_rotations_y_rad, `${entryPath}.allowed_rotations_y_rad`, 8);
     if (!rotations.length) invalid(entryPath, 'allowed rotations cannot be empty');
     if (new Set(rotations).size !== rotations.length) invalid(entryPath, 'allowed rotations must be unique');
     rotations.forEach((rotation, rotationIndex) => {
       const angle = number(rotation, `${entryPath}.allowed_rotations_y_rad[${rotationIndex}]`);
-      if (Math.abs(angle) > EPSILON && Math.abs(angle - Math.PI / 2) > EPSILON) invalid(entryPath, 'automatic rotations must be 0 or pi/2');
+      if (angle < -Math.PI || angle > Math.PI) invalid(entryPath, 'automatic rotations must be within [-pi, pi]');
     });
     const collision = object(item.collision, `${entryPath}.collision`);
     choice(collision.type, ['box'], `${entryPath}.collision.type`);

@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict'
+import { recordStorage } from '../src/state/recordStorage'
+const map = new Map<string, string>()
+const memory = { getItem: (k: string) => map.get(k) ?? null, setItem: (k: string,v: string) => map.set(k,v), removeItem: (k: string) => map.delete(k) } as unknown as Storage
+const payload = (projects: Record<string, unknown>, version = 3) => JSON.stringify({version, state: {projects}})
+map.set('p', payload({demo: {n: 1}, remove: {n: 1}}))
+const a = recordStorage(['projects'],memory), b = recordStorage(['projects'],memory)
+a.getItem('p'); b.getItem('p')
+b.setItem('p', payload({demo: {n: 1}, remove: {n: 1}, newlyCreated: {n: 1}}))
+a.setItem('p', payload({demo: {n: 2}, remove: {n: 1}}))
+assert.deepEqual(JSON.parse(map.get('p')!).state.projects, {demo: {n: 2}, remove: {n: 1}, newlyCreated: {n: 1}})
+a.setItem('p', payload({demo: {n: 3}, remove: {n: 1}}))
+assert.ok(JSON.parse(map.get('p')!).state.projects.newlyCreated, 'subsequent stale writes retain unknown remote keys')
+b.getItem('p')
+b.setItem('p', payload({demo: {n: 3}, newlyCreated: {n: 1}}))
+a.setItem('p', payload({demo: {n: 4}, remove: {n: 1}}))
+assert.equal(JSON.parse(map.get('p')!).state.projects.remove, undefined, 'stale tabs do not resurrect deletions')
+const c = recordStorage(['projects'],memory)
+c.getItem('p'); c.setItem('p',payload({freshSchema: true},4))
+assert.deepEqual(JSON.parse(map.get('p')!).state.projects,{freshSchema:true})
+console.log('Two-tab record persistence preserves new projects and deletions across repeated stale writes; schema migrations remain isolated.')

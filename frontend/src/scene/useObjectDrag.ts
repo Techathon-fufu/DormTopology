@@ -8,11 +8,10 @@ import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
+import { snapPlacement } from './placementEditing'
 
 /** 拖拽判定阈值（像素）：小于该位移视为点击选中 */
 const DRAG_THRESHOLD_PX = 4
-/** 位置网格吸附精度（米）：10 mm */
-const GRID = 0.01
 
 export interface ObjectDragHandlers {
   onPointerDown: (e: ThreeEvent<PointerEvent>) => void
@@ -21,7 +20,7 @@ export interface ObjectDragHandlers {
 /**
  * 物品拖拽：pointerdown 开始，指针射线投射到支撑面（桌面 / 书架搁板 / 地面）上取最近命中，
  * 位置吸附到 10mm 网格；拖动过程中仅写入会话级 drag 状态（不写项目库、不记录历史），
- * 松手时提交一次可撤销的移动（取消碰撞体积拦截与强行弹回，直接提交落点并提示干涉）。
+ * 松手时提交一次可撤销的移动（干涉只提醒，保留松手位置）。
  * 拖拽期间 CameraRig 的轨道控制会被禁用，避免操作冲突。
  */
 export function useObjectDrag(project: Project, object: SceneObject): ObjectDragHandlers {
@@ -57,7 +56,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
     let lastPos: Vec3 = startPos
     /** 本次拖拽中最后一次「有效预览位置」（越界 / 相交的预览不更新它） */
     let lastValidPos: Vec3 = startPos
-    /** 当前预览位置是否通过越界 / 相交校验（松手提交的判据） */
+    /** 当前预览位置是否通过越界 / 相交校验（仅用于警示） */
     let lastPreviewValid = true
 
     const cancelRaf = () => {
@@ -82,12 +81,8 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       const metrics = useDeskModelStore.getState().metrics
       const hit = raycastSupports(raycaster.ray, project.room, metrics)
       if (!hit) return // 指针未指向任何支撑面：保持上一次预览
-      const position: Vec3 = [
-        Math.round(hit.x / GRID) * GRID,
-        hit.y,
-        Math.round(hit.z / GRID) * GRID,
-      ]
       const others = useProjectsStore.getState().projects[project.id]?.objects ?? project.objects
+      const position = snapPlacement(object, hit, project.room, others)
       const issues = placementIssues(object, position, others, project.room, metrics)
       const valid = !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap' || i.type === 'roomCollision' || i.type === 'floating')
       moved = true
@@ -118,7 +113,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       useWorkspaceStore.getState().setDrag(null)
       if (!moved) return
       // 松手时一次性提交（一次可撤销的移动记录）：
-      // 拖拽摆放取消碰撞体积拦截，不弹回；保留落点并提示干涉；
+      // 干涉只提醒，保存最后落点；
       // 与起点一致时不提交，避免产生无变化的空历史记录。
       const commitPosition = resolveDropCommit(startPos, lastValidPos, lastPos, lastPreviewValid)
       if (commitPosition) {
@@ -137,14 +132,15 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
     const cleanup = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', finish)
-      window.removeEventListener('pointercancel', finish)
+      window.removeEventListener('pointercancel', cancel)
       cleanupRef.current = null
     }
 
+    const cancel = () => { cancelRaf(); cleanup(); useWorkspaceStore.getState().setDrag(null); document.body.style.cursor = 'auto' }
     cleanupRef.current?.() // 取消上一次未完成的拖拽
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', finish)
-    window.addEventListener('pointercancel', finish)
+    window.addEventListener('pointercancel', cancel)
     cleanupRef.current = cleanup
 
     document.body.style.cursor = 'grabbing'

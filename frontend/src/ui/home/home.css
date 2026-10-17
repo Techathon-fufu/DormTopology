@@ -943,3 +943,10 @@
     min-height: 44px;
   }
 }
+
+@media (max-width: 719px) {
+  .home-recent-inner { height: auto; min-height: 76px; flex-wrap: wrap; padding-block: 12px; }
+  .home-recent-item:nth-of-type(2) { display: none; }
+  .home-recent-more { margin-left: auto; }
+  .home-space-meta { flex-wrap: wrap; }
+}

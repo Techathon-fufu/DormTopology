@@ -88,7 +88,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   plan: null,
   error: null,
   compare: 'after',
-  showZones: true,
+  showZones: false,
   batchIndex: 0,
   batchProgress: 0,
   overrides: {},
@@ -100,7 +100,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
       set({ panelVisible: true })
       return
     }
-    set({ open: true, panelVisible: true, sessionToken: s.sessionToken + 1, status: 'config', error: null, showZones: true })
+    set({ open: true, panelVisible: true, sessionToken: s.sessionToken + 1, status: 'config', error: null, showZones: false })
   },
 
   hidePanel() {

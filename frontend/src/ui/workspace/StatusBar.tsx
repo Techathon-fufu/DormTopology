@@ -52,11 +52,7 @@ export function StatusBar({
         <span className="font-medium text-foreground">
           {mode === 'organize' ? '整理物品' : '规划走线'}
         </span>
-        <span className="hidden xl:inline">
-          {mode === 'organize'
-            ? '真实后端整理 · 本地保存'
-            : '真实后端走线'}
-        </span>
+
       </span>
 
       <span role="status" className="min-w-0 flex-1 truncate font-medium text-primary" title={flash ?? undefined}>{flash ?? (preview ? '预览尚未应用 · 原布局保留' : '布局已保存至本机')}</span>

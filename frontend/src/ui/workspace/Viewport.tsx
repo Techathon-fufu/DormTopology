@@ -1,13 +1,14 @@
 import { Component, Suspense, useMemo, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { MonitorOff, Pause, Play, RotateCcw, SkipForward } from 'lucide-react'
-import type { Project } from '@/types/project'
+import { CompareObjectMesh, CompareCables } from '@/scene/PlanCompareScene'
+import { PreviewCompareButton } from './HoldCompareButton'
+import type { PlanSceneSnapshot, Project } from '@/types/project'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { validateScene, type SceneIssue } from '@/scene/sceneValidation'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useCableStore } from '@/state/cableStore'
-import { useOrganizeStore, type PoseOverride } from '@/state/organizeStore'
-import { usePlansStore } from '@/state/plansStore'
+import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { CameraRig } from '@/scene/CameraRig'
@@ -74,7 +75,6 @@ function DragIndicator() {
 
 function OperationPlayback() {
   const compare = useOrganizeStore((s) => s.compare)
-  const setCompare = useOrganizeStore((s) => s.setCompare)
   const status = useOrganizeStore((s) => s.status)
   const commands = useOrganizeStore((s) => s.commands)
   const index = useOrganizeStore((s) => s.batchIndex)
@@ -100,7 +100,7 @@ function OperationPlayback() {
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2 sm:px-4">
         <span className="text-[11px] text-muted-foreground">同视角对比</span>
-        <div className="flex gap-1"><Button size="sm" className="h-7 px-2 text-xs" variant={compare === 'before' ? 'secondary' : 'ghost'} aria-pressed={compare === 'before'} onClick={() => setCompare('before')}>整理前</Button><Button size="sm" className="h-7 px-2 text-xs" variant={compare === 'after' && finished ? 'secondary' : 'ghost'} aria-pressed={compare === 'after' && finished} onClick={finish}>最终方案</Button></div>
+        <PreviewCompareButton />
       </div>
       <progress aria-label="整理预览进度" className="playback-progress block h-1 w-full" max={Math.max(1, commands.length)} value={finished ? Math.max(1, commands.length) : index + progress} />
     </section>
@@ -111,13 +111,12 @@ function OperationPlayback() {
 export function Viewport({
   project,
   issuesById,
-  compareBaseline,
   onObjectContextMenu,
+  before,
 }: {
   project: Project
+  before?: PlanSceneSnapshot
   issuesById: Map<string, SceneIssue[]>
-  /** 按住「摆放前后对比」：物品按整理前快照位姿渲染（会话态，不写项目数据） */
-  compareBaseline: boolean
   /** 物品右键 → 上报屏幕坐标，工作台据此展示上下文菜单 */
   onObjectContextMenu?: (objectId: string, clientX: number, clientY: number) => void
 }) {
@@ -142,18 +141,6 @@ export function Viewport({
     }), project.room, deskMetrics)
   }, [plan, compare, playbackStatus, project, issuesById, deskMetrics])
   const organizeZonesVisible = useOrganizeStore((s) => s.open && s.showZones)
-  const baseline = usePlansStore((s) => s.baselines[project.id])
-  /** 整理前快照位姿（取 assignments，兼容早期仅含指派的快照）：按住对比时按此渲染 */
-  const comparePoses = useMemo(() => {
-    const poses = new Map<string, PoseOverride>()
-    for (const a of baseline?.assignments ?? []) {
-      poses.set(a.objectId, {
-        position: [a.position[0], a.position[1], a.position[2]],
-        rotationY: a.rotationY,
-      })
-    }
-    return poses
-  }, [baseline])
 
   const webglOk = useMemo(detectWebGL, [])
 
@@ -203,28 +190,27 @@ export function Viewport({
             {/* 房间外壳与桌体分离：桌体加载正式模型（无抽屉桌体 + 三只抽屉分离件，抽屉可推拉），
                 失败 / 未就绪回退参数化几何；GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}
             <RoomShell
-              room={project.room}
+              room={before?.room ?? project.room}
               deskMode="none"
               showBed={viewPreset !== 'top' && !deskGlbLoaded}
               showCableHoles={deskGlbLoaded}
             />
-            <DormDeskModel room={project.room} hideBedParts={viewPreset === 'top'} />
-            {organizeZonesVisible ? (
+            <DormDeskModel room={before?.room ?? project.room} hideBedParts={viewPreset === 'top'} />
+            {organizeZonesVisible && !before ? (
               <ZoneOverlay room={project.room} preferences={resolveOrganizationPreferences(project)} />
             ) : null}
-            {project.objects.map((object) => (
+            {before ? before.objects.map((object) => <CompareObjectMesh key={object.id} object={object} zoneTint={false} diff={false} />) : project.objects.map((object) => (
               <SceneObjectMesh
                 key={object.id}
                 project={project}
                 object={object}
                 selected={object.id === selectedId}
                 issues={object.id === selectedId ? previewIssues.get(object.id) : undefined}
-                comparePose={compareBaseline ? comparePoses.get(object.id) : undefined}
                 onSelect={select}
                 onContextMenu={onObjectContextMenu}
               />
             ))}
-            {mode === 'cable' ? (
+            {before ? <CompareCables cables={before.cables} objects={before.objects} diffIds={new Set()} /> : mode === 'cable' ? (
               <>
                 <CablePlanningOverlay project={project} />
                 <CablesLayer project={project} />
@@ -234,18 +220,14 @@ export function Viewport({
               </>
             ) : null}
           </Suspense>
-          <DragIndicator />
+          {!before && <DragIndicator />}
           <CameraRig preset={viewPreset} furnitureModel={project.room.furnitureModel} />
         </Canvas>
       </SceneErrorBoundary>
       {/* 桌体模型状态提示（加载中 / 失败重试 / 简化几何恢复）：不遮挡三维操作 */}
       <DeskModelNotice />
-      {compareBaseline ? (
-        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-border bg-surface/90 px-3 py-1.5 text-xs shadow-sm">
-          正在查看「摆放前」· 松开恢复当前摆放
-        </div>
-      ) : null}
-      <OperationPlayback />
+      {!before && <OperationPlayback />}
+      {before && <span className="pointer-events-none absolute left-3 top-3 rounded-lg bg-surface px-3 py-2 text-sm shadow">摆放前 · 松开返回</span>}
     </div>
   )
 }

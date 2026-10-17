@@ -117,19 +117,18 @@ expectFallback('centre-outside-desk', {
   preferences: { ...preferences, typingOffsetX: .6 },
 })
 const retained = { ...monitor, transform: { position: [-.5, input.room.desk.height, .55] as Vec3, rotationY: Math.PI / 2 } }
-const retainedPlan = plan('retained-manual-quarter-turn', { ...input, objects: [retained, blocker] })
+const retainedPlan = plan('retained-manual-quarter-turn', { ...input, objects: [retained, blocker] }, 'partial')
 const retainedTarget = retainedPlan.assignments.find((assignment) => assignment.objectId === monitor.id)!
-assert.equal(retainedTarget.placementStatus, 'unchanged')
+assert.equal(retainedTarget.placementStatus, 'unplaced', 'a disallowed manual angle is retained as unresolved, not a satisfied target')
 assert.ok(retainedTarget.position.every((coordinate, axis) => Math.abs(coordinate - retained.transform.position[axis]) < 1e-12))
 assert.equal(retainedTarget.rotationY, retained.transform.rotationY)
-assert.match(retainedTarget.reason, /未采用中央主视位.*保留原位/)
-assert.ok(retainedPlan.serviceMeta?.warnings?.some((warning) => /未采用中央主视位.*保留原位/.test(warning)))
+assert.ok(retainedPlan.unplaced.some((item) => item.objectId === monitor.id))
 
 const printer = demo.objects.find((object) => object.model.shape === 'printer')!
 const narrowPrinter = { ...printer, transform: { position: [0, input.room.desk.height, .3] as Vec3, rotationY: 0 } }
 const narrowPlan = plan('printer-side-too-narrow', {
   ...input,
-  room: { ...input.room, desk: { ...input.room.desk, width: 1 }, shelf: { ...input.room.shelf, enabled: false } },
+  room: { ...input.room, cableHoles: [], desk: { ...input.room.desk, width: 1 }, shelf: { ...input.room.shelf, enabled: false } },
   objects: [narrowPrinter],
 }, 'partial')
 const unplacedPrinter = narrowPlan.assignments.find((assignment) => assignment.objectId === printer.id)!
@@ -141,14 +140,14 @@ assert.ok(narrowPlan.unplaced.some((object) => object.objectId === printer.id &&
 assert.ok(narrowPlan.serviceMeta?.issues.some((issue) => issue.entity_id === printer.id && issue.code === 'no_space'))
 assert.throws(() => toPackingScene({
   ...input,
-  room: { ...input.room, desk: { ...input.room.desk, width: 1 }, shelf: { ...input.room.shelf, enabled: false } },
+  room: { ...input.room, cableHoles: [], desk: { ...input.room.desk, width: 1 }, shelf: { ...input.room.shelf, enabled: false } },
   objects: [{ ...monitor, fixed: true, dimensions: { ...monitor.dimensions, width: 1 }, transform: { position: [0, input.room.desk.height, .3], rotationY: 0 } }, narrowPrinter],
 }), /侧部设备区/, 'if no side region exists, fail explicitly before submitting an invalid domain scene')
 
 const accessInput = {
   ...input,
-  room: { ...input.room, desk: { ...input.room.desk, width: 1.8 }, shelf: { ...input.room.shelf, enabled: false } },
-  objects: [monitor, { ...printer, dimensions: { ...printer.dimensions, depth: .2 } }],
+  room: { ...input.room, cableHoles: [], desk: { ...input.room.desk, width: 1.8 }, shelf: { ...input.room.shelf, enabled: false } },
+  objects: [{ ...monitor, dimensions: { ...monitor.dimensions, width: .5 } }, { ...printer, dimensions: { ...printer.dimensions, depth: .2 } }],
 }
 const accessScene = { ...toPackingScene(accessInput), baseline_id: 'final-device-access' }
 const accessTargets: Record<string, Vec3> = { [monitor.id]: [.59, .75, .58], [printer.id]: [.59, .75, .18] }
