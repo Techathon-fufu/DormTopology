@@ -28,12 +28,15 @@ from backend.app.domain.geometry import (
     scale,
     sub,
 )
+from backend.app.domain.geometry.convex import TOLERANCE, segment_hits, world_parts
 
 __all__ = [
     "AABB",
     "BEZIER_SAMPLE_ERROR",
     "EPSILON",
     "OBB",
+    "CollisionBody",
+    "Compound",
     "Point",
     "aabb_from_item",
     "aabb_from_zone",
@@ -44,6 +47,7 @@ __all__ = [
     "bezier_second_derivative",
     "beziers_arc_length",
     "boxes_from_entities",
+    "collision_from_item",
     "cross",
     "distance",
     "dot",
@@ -83,6 +87,25 @@ class OBB:
         return add(self.position, rotate_y(value, self.rotation_y_rad))
 
 
+ConvexPart = tuple[tuple[Point, ...], tuple[Point, ...], tuple[Point, ...]]
+
+
+@dataclass(frozen=True)
+class Compound:
+    """A union of prepared world-space convex solids."""
+
+    parts: tuple[ConvexPart, ...]
+
+    def excluding_containing(self, position: Point) -> Compound:
+        return Compound(tuple(
+            part for part in self.parts
+            if not segment_hits(position, position, (part,), TOLERANCE)
+        ))
+
+
+CollisionBody = AABB | OBB | Compound
+
+
 def obb_from_item(item: dict) -> OBB:
     width, height, depth = item["size_m"]
     return OBB(
@@ -92,7 +115,15 @@ def obb_from_item(item: dict) -> OBB:
     )
 
 
-def segment_intersects_box(start: Point, end: Point, box: AABB | OBB, inflate: float = 0.0) -> bool:
+def collision_from_item(item: dict) -> OBB | Compound:
+    if item.get("collision", {}).get("type") == "compound":
+        return Compound(world_parts(item))
+    return obb_from_item(item)
+
+
+def segment_intersects_box(start: Point, end: Point, box: CollisionBody, inflate: float = 0.0) -> bool:
+    if isinstance(box, Compound):
+        return segment_hits(start, end, box.parts, inflate)
     if isinstance(box, OBB):
         return segment_intersects_aabb(box.to_local(start), box.to_local(end), box.local_box, inflate)
     return segment_intersects_aabb(start, end, box, inflate)

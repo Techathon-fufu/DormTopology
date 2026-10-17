@@ -20,6 +20,7 @@ from ..geometry import (
     items_overlap,
     local_to_world,
 )
+from ..geometry.convex import TOLERANCE, segment_hits, segment_interval
 from ..models import RoutingResult, Scene
 from ..rules import validate_scene as validate_domain_scene
 from .geometry import (
@@ -27,10 +28,13 @@ from .geometry import (
     BEZIER_SAMPLE_ERROR,
     EPSILON,
     OBB,
+    CollisionBody,
+    Compound,
     Point,
     aabb_from_zone,
     add,
     beziers_arc_length,
+    collision_from_item,
     distance,
     dot,
     exposed_bezier_length,
@@ -38,7 +42,6 @@ from .geometry import (
     length,
     minimum_curve_radius,
     normalize,
-    obb_from_item,
     point,
     rotate_y,
     sample_beziers,
@@ -76,7 +79,7 @@ class ResolvedEndpoint:
     item_id: str
     position: Point
     direction: Point
-    collision_box: AABB | OBB
+    collision_box: CollisionBody
 
 
 @dataclass(frozen=True)
@@ -155,7 +158,7 @@ def resolve_port_world(item: dict, port: dict) -> tuple[Point, Point]:
 def _build_endpoints(scene: dict) -> dict[str, ResolvedEndpoint]:
     endpoints: dict[str, ResolvedEndpoint] = {}
     for item in scene["items"]:
-        box = obb_from_item(item)
+        box = collision_from_item(item)
         for port in item["ports"]:
             position, direction = resolve_port_world(item, port)
             endpoints[port["id"]] = ResolvedEndpoint(port["id"], item["id"], position, direction, box)
@@ -332,7 +335,7 @@ def _polyline_to_beziers(
     return segments or [_line_control_points(cleaned[0], cleaned[-1])]
 
 
-def _segment_clear(start: Point, end: Point, radius: float, boxes: Sequence[AABB | OBB]) -> bool:
+def _segment_clear(start: Point, end: Point, radius: float, boxes: Sequence[CollisionBody]) -> bool:
     return not any(segment_intersects_box(start, end, box, radius + EPSILON) for box in boxes)
 
 
@@ -467,7 +470,7 @@ def _curve_collides(
     radius: float,
     obstacles: Sequence[AABB],
     reserved: Sequence[AABB],
-    item_boxes: dict[str, AABB | OBB],
+    item_boxes: dict[str, CollisionBody],
     start_endpoint: ResolvedEndpoint,
     end_endpoint: ResolvedEndpoint,
 ) -> bool:
@@ -490,14 +493,17 @@ def _curve_collides(
 
     start_allowed = finite_leadout(start_endpoint)
     end_allowed = finite_leadout(end_endpoint, reverse=True)
+    start_remainder = _leadout_remainder(start_endpoint)
+    end_remainder = _leadout_remainder(end_endpoint)
     for index, (start, end) in enumerate(chords):
         if any(segment_intersects_box(start, end, box, clearance) for box in forbidden):
             return True
         for item_id, box in item_boxes.items():
-            if (
-                item_id == start_endpoint.item_id and index in start_allowed
-                or item_id == end_endpoint.item_id and index in end_allowed
-            ):
+            if item_id == start_endpoint.item_id and index in start_allowed:
+                box = start_remainder
+            elif item_id == end_endpoint.item_id and index in end_allowed:
+                box = end_remainder
+            if box is None:
                 continue
             if segment_intersects_box(start, end, box, clearance):
                 return True
@@ -508,18 +514,31 @@ def _arc_clearance(
     start: Point,
     end: Point,
     radius: float,
-    boxes: Sequence[AABB | OBB],
+    boxes: Sequence[CollisionBody],
 ) -> bool:
     return _segment_clear(start, end, radius, boxes)
 
 
 def _endpoint_exit(endpoint: ResolvedEndpoint, radius: float) -> Point:
-    """Return a short point beyond the first outward ray exit.
+    """Return a short point beyond the port's containing solids.
 
     The extra tolerance keeps the post-exit graph segment from being rejected
-    solely because its first point lies on the inflated box boundary. If an
-    interface is already outside its conservative box, no exemption is needed.
+    solely because its first point lies on the inflated boundary. A compound
+    port only exempts its actual host solids, never nearby independent parts.
     """
+    if isinstance(endpoint.collision_box, Compound):
+        direction = normalize(endpoint.direction)
+        clearance = radius + EPSILON + BEZIER_SAMPLE_ERROR
+        exits: list[float] = []
+        for part in endpoint.collision_box.parts:
+            if not segment_hits(endpoint.position, endpoint.position, (part,), TOLERANCE):
+                continue
+            interval = segment_interval(endpoint.position, direction, part, clearance)
+            if interval is not None:
+                exits.append(interval[1])
+        if not exits:
+            return endpoint.position
+        return add(endpoint.position, scale(direction, max(exits) + EPSILON))
     oriented = endpoint.collision_box if isinstance(endpoint.collision_box, OBB) else None
     box = (oriented.local_box if oriented else endpoint.collision_box).inflated(radius + EPSILON)
     origin = oriented.to_local(endpoint.position) if oriented else endpoint.position
@@ -543,6 +562,14 @@ def _endpoint_exit(endpoint: ResolvedEndpoint, radius: float) -> Point:
     return oriented.to_world(result) if oriented else result
 
 
+def _leadout_remainder(endpoint: ResolvedEndpoint) -> Compound | None:
+    # Only solids containing the port may share its finite exit exemption.
+    body = endpoint.collision_box
+    if isinstance(body, Compound):
+        return body.excluding_containing(endpoint.position)
+    return None
+
+
 def _search_path(
     nodes: dict[str, tuple[Point, str]],
     edges: list[dict],
@@ -551,7 +578,7 @@ def _search_path(
     spec: CableSpec,
     obstacle_boxes: Sequence[AABB],
     reserved_boxes: Sequence[AABB],
-    item_boxes: dict[str, AABB | OBB],
+    item_boxes: dict[str, CollisionBody],
     banned_edges: set[str],
     use_dijkstra: bool,
     candidate_node_ids: set[str] | None = None,
@@ -572,6 +599,10 @@ def _search_path(
     end_connection_boxes = list(obstacle_boxes) + list(reserved_boxes) + [
         box for item_id, box in item_boxes.items() if item_id != end.item_id
     ]
+    for endpoint, connection_boxes in ((start, start_connection_boxes), (end, end_connection_boxes)):
+        remainder = _leadout_remainder(endpoint)
+        if remainder is not None:
+            connection_boxes.append(remainder)
     start_exit = _endpoint_exit(start, spec.radius)
     end_exit = _endpoint_exit(end, spec.radius)
     start_leadout = distance(start.position, start_exit)
@@ -764,7 +795,7 @@ def _validate_curve(
     end: ResolvedEndpoint,
     obstacle_boxes: Sequence[AABB],
     reserved_boxes: Sequence[AABB],
-    item_boxes: dict[str, AABB | OBB],
+    item_boxes: dict[str, CollisionBody],
     occupied: Sequence[tuple[Sequence[Point], float]],
     required_points: Sequence[Point] = (),
     required_tolerance: float = EPSILON,
@@ -853,7 +884,7 @@ def _plan_one(
     edges: list[dict],
     obstacle_boxes: Sequence[AABB],
     reserved_boxes: Sequence[AABB],
-    item_boxes: dict[str, AABB | OBB],
+    item_boxes: dict[str, CollisionBody],
     occupied: Sequence[tuple[Sequence[Point], float]],
     use_dijkstra: bool,
     support_context: SupportContext | None = None,
@@ -1076,7 +1107,7 @@ def _candidate_count(
     edges: Sequence[dict],
     obstacle_boxes: Sequence[AABB],
     reserved_boxes: Sequence[AABB],
-    item_boxes: dict[str, AABB | OBB],
+    item_boxes: dict[str, CollisionBody],
 ) -> int:
     """Estimate usable endpoint-to-channel connections for stable ordering."""
     mode_edges = [edge for edge in edges if cable["mode"] in edge["modes"]]
@@ -1097,6 +1128,10 @@ def _candidate_count(
     end_boxes = list(obstacle_boxes) + list(reserved_boxes) + [
         box for item_id, box in item_boxes.items() if item_id != end.item_id
     ]
+    for endpoint, connection_boxes in ((start, start_boxes), (end, end_boxes)):
+        remainder = _leadout_remainder(endpoint)
+        if remainder is not None:
+            connection_boxes.append(remainder)
     start_leadout_clear = _arc_clearance(start.position, start_exit, radius, start_boxes)
     end_leadout_clear = _arc_clearance(end_exit, end.position, radius, end_boxes)
     start_count = 0
@@ -1124,7 +1159,7 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
     obstacle_boxes = [aabb_from_zone(zone) for zone in scene["obstacles"]]
     reserved_boxes = [aabb_from_zone(zone) for zone in scene["reserved_zones"]]
     exposure_boxes = [aabb_from_zone(zone) for zone in scene["exposure_zones"]]
-    item_boxes = {item["id"]: obb_from_item(item) for item in scene["items"]}
+    item_boxes = {item["id"]: collision_from_item(item) for item in scene["items"]}
     occupied_ports = _validate_port_capacity(scene)
     ordered_cables = sorted(
         scene["cables"],
