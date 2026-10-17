@@ -2,6 +2,7 @@ import { Euler, Matrix4, Vector3 } from 'three'
 import { ConvexHull } from 'three/examples/jsm/math/ConvexHull.js'
 import type { SceneObject, Vec3 } from '@/types/project'
 import { describePrimitive, primitivePartGeometry } from './primitiveGeometry'
+import { PREFAB_ITEM_COLLISIONS } from './prefabItemCollisions.generated'
 
 export const COLLISION_EPSILON=1e-7
 export interface ConvexPart { vertices_m:Vec3[]; faces:[number,number,number][] }
@@ -10,6 +11,8 @@ export interface Bounds { min:Vec3; max:Vec3 }
 interface Solid extends ConvexPart { normals:Vec3[]; edges:Vec3[]; bounds:Bounds }
 export interface ObjectCollision { parts:Solid[]; bounds:Bounds }
 const localCache=new Map<string,ObjectCollision>()
+/** 预制物品（随包碰撞数据 + 编辑后尺寸）构建结果缓存：键含尺寸，条目受 localCache 量级约束 */
+const prefabLocalCache=new Map<string,ObjectCollision>()
 const worldCache=new WeakMap<SceneObject,{key:string; value:ObjectCollision}>()
 const vec=(p:Vec3)=>new Vector3(...p)
 const tuple=(v:Vector3):Vec3=>[v.x,v.y,v.z]
@@ -36,7 +39,60 @@ function solid(part:ConvexPart):Solid {
   }
   return {...part,normals:uniqueAxes(normals),edges:uniqueAxes(edges),bounds:boundsOf(part.vertices_m)}
 }
+/**
+ * 随包碰撞数据（底心锚定 compound，Prefabmodel/*.collision.json 的同一 schema）→ 可计算碰撞体。
+ * 物品预制模型独占本入口；桌体的分离件碰撞若接入也复用同一转换。
+ */
+export function collisionFromCompound(compound:CompoundCollision):ObjectCollision {
+  const parts=compound.parts.map(solid)
+  return {parts,bounds:boundsOf(parts.flatMap(p=>p.vertices_m))}
+}
+/**
+ * 预制物品：碰撞体来自随包碰撞数据（Prefabmodel/collisionsize，底心锚定、与模型同源），
+ * 但需按编辑后的 object.dimensions 缩放——把源 compound 的包围盒实测尺寸非均匀缩放到声明尺寸，
+ * 并绕「规范底心」缩放（源 compound 的 xz 中心 / 最低点 → 原点），保证与渲染 GLB 同约定。
+ *
+ * 源 bounds 直接从 compound 顶点推导（不 import prefabItems，避免循环依赖）。
+ */
+function prefabCollision(compound:CompoundCollision, dims:{width:number;height:number;depth:number}):ObjectCollision {
+  const srcBounds=boundsOf(compound.parts.flatMap(p=>p.vertices_m))
+  // 规范底心：源 compound 的 xz 中心与底面最低点映射到原点。
+  const cx=(srcBounds.min[0]+srcBounds.max[0])/2
+  const cz=(srcBounds.min[2]+srcBounds.max[2])/2
+  const srcW=srcBounds.max[0]-srcBounds.min[0]
+  const srcH=srcBounds.max[1]-srcBounds.min[1]
+  const srcD=srcBounds.max[2]-srcBounds.min[2]
+  const sx=srcW>1e-9?dims.width/srcW:1
+  const sy=srcH>1e-9?dims.height/srcH:1
+  const sz=srcD>1e-9?dims.depth/srcD:1
+  // 非均匀缩放：顶点先平移到规范底心，再按轴缩放。
+  const parts=compound.parts.map(part=>{
+    const vertices=part.vertices_m.map(v=>[
+      (v[0]-cx)*sx,
+      (v[1]-srcBounds.min[1])*sy,
+      (v[2]-cz)*sz,
+    ] as Vec3)
+    // 非均匀缩放后必须重算法线/边/包围盒：solid() 从新顶点推导。
+    return solid({vertices_m:vertices,faces:part.faces})
+  })
+  return {parts,bounds:boundsOf(parts.flatMap(p=>p.vertices_m))}
+}
 export function localCollision(object:SceneObject):ObjectCollision {
+  // 预制物品：碰撞体来自随包碰撞数据并按编辑尺寸缩放；键含尺寸，编辑尺寸后不命中旧缓存。
+  const prefabId=object.model.prefabId
+  if(prefabId) {
+    const compound=PREFAB_ITEM_COLLISIONS[prefabId]
+    if(compound) {
+      const dims=object.dimensions
+      const key=`prefab:${prefabId}:${dims.width}:${dims.height}:${dims.depth}`
+      const cachedPrefab=prefabLocalCache.get(key)
+      if(cachedPrefab) return cachedPrefab
+      const result=prefabCollision(compound,dims)
+      if(prefabLocalCache.size>=512) prefabLocalCache.delete(prefabLocalCache.keys().next().value!)
+      prefabLocalCache.set(key,result)
+      return result
+    }
+  }
   const key=JSON.stringify([object.model.shape,object.dimensions,object.powerStrip?.socketCount])
   const cached=localCache.get(key)
   if(cached) return cached
@@ -77,7 +133,7 @@ export function exportCollision(object:SceneObject):CompoundCollision {
   return {type:'compound',parts:localCollision(object).parts.map(p=>({vertices_m:p.vertices_m.map(v=>[...v] as Vec3),faces:p.faces.map(f=>[...f])}))}
 }
 export function worldCollision(object:SceneObject,position:Vec3=object.transform.position):ObjectCollision {
-  const key=JSON.stringify([position,object.transform.rotationY,object.dimensions,object.model.shape,object.powerStrip?.socketCount])
+  const key=JSON.stringify([position,object.transform.rotationY,object.dimensions,object.model.shape,object.powerStrip?.socketCount,object.model.prefabId??''])
   const cached=worldCache.get(object)
   if(cached?.key===key) return cached.value
   const angle=object.transform.rotationY,c=Math.cos(angle),s=Math.sin(angle)
@@ -160,6 +216,8 @@ export function objectExtent(object:SceneObject):ObjectExtent {
  * ``size_m`` box is already exact and no hull arithmetic is needed.
  */
 function isExactBox(object:SceneObject):boolean {
+  // 预制物品的碰撞体来自随包数据并按编辑尺寸缩放，与声明尺寸盒不等价——一律走凸体外包计算。
+  if(object.model.prefabId && PREFAB_ITEM_COLLISIONS[object.model.prefabId]) return false
   const parts=describePrimitive(object.model.shape,object.dimensions).parts
   return parts.length===1 && parts[0].kind==='box' && parts[0].rotation.every(a=>a===0)
 }

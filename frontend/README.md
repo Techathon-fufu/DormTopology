@@ -191,3 +191,7 @@ frontend/src/
 - `npm run typecheck` 通过；`npm run build` 通过（产物约 1.30 MB JS + 22.9 KB CSS，含 Three.js 单块体积警告，属预期）。
 - Vite 开发服务器（:5173）入口与各目录模块均返回 200。
 - 本阶段产品交互为浏览器手动验证，尚无对应自动化浏览器覆盖。
+
+## 独立工作流与模型整合
+
+产品真实规划与家具几何沿用最新 main；独立 `/workflow` 直接使用 `/api/v1/workflow`，提供完整契约场景、基线、整理、走线和 Markdown 指南。新增预制单品与独立抽屉交互，示例种子 v5。两个前端入口尚未统一成同一个保存场景。详见[整合验收](../docs/merge_workflow_prefab_acceptance.md)。

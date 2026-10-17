@@ -49,6 +49,7 @@ export function CableListPanel({
   className,
   onClose,
   onAfterSelect,
+  showPlanningActions = true,
 }: {
   project: Project
   routingConfirmed: boolean
@@ -59,6 +60,7 @@ export function CableListPanel({
   className?: string
   onClose?: () => void
   onAfterSelect?: () => void
+  showPlanningActions?: boolean
 }) {
   const cables = project.cables
   const selectedCableId = useCableStore((s) => s.selectedCableId)
@@ -173,6 +175,7 @@ export function CableListPanel({
 
         {/* 规划操作 */}
         <div className="space-y-1.5">
+          {showPlanningActions ? <>
           <label className="flex items-start gap-2 py-1 text-xs">
             <input
               type="checkbox"
@@ -204,6 +207,7 @@ export function CableListPanel({
               更新 {staleIds.length} 条「需重算」走线
             </Button>
           ) : null}
+          </> : null}
           {missingPorts > 0 ? (
             <Button size="sm" variant="outline" className="w-full" onClick={handleEnsurePorts}>
               <PlugZap className="h-3.5 w-3.5" />

@@ -1,6 +1,6 @@
 import type { LayoutPlan, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, OrganizationSceneRef, PlanAssignment, ZoneKind } from '@/types/organization'
-import { exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
+import { collisionsOverlap, exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
 import { roomSolids } from '@/scene/roomCollision'
 import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { BED_UNDERSIDE_Y, computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
@@ -330,6 +330,14 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
   }
   if (pending.size) fail('整理结果未覆盖所有输入物品')
   const localIssues: OrganizationIssue[] = targets.flatMap((object) => placementIssues(object, object.transform.position, targets, ctx.room).map((issue) => ({ entity_id: object.id, code: issue.type, message: issue.message })))
+  // Detail messages are capped per object, so their count cannot recover pair totals.
+  const bodies = targets.map((object) => worldCollision(object))
+  let overlapCount = 0
+  for (let i = 0; i < bodies.length; i += 1) {
+    for (let j = i + 1; j < bodies.length; j += 1) {
+      if (collisionsOverlap(bodies[i], bodies[j])) overlapCount += 1
+    }
+  }
   for (const printer of targets.filter((object) => object.model.shape === 'printer' && !object.fixed && !object.locked && assignments.find((a) => a.objectId === object.id)?.placementStatus !== 'unplaced')) {
     const bounds = worldCollision(printer).bounds
     const sharesViewColumn = targets.filter((object) => object.model.shape === 'monitor').some((monitor) => {
@@ -357,7 +365,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     metrics: {
       deskFreeAreaBefore: area('desk_free_before', estimateDeskFreeArea(ctx.room, poses(ctx.objects))), deskFreeAreaAfter: area('desk_free_after', estimateDeskFreeArea(ctx.room, poses(targets))),
       placedCount: assignments.filter((a) => a.placementStatus === 'placed').length, movableCount: ctx.objects.filter((o) => !o.fixed && !o.locked).length,
-      unplacedCount: unplaced.length, overlapCount: localIssues.filter((i) => i.code === 'overlap').length / 2,
+      unplacedCount: unplaced.length, overlapCount,
       outOfBoundsCount: localIssues.filter((i) => i.code === 'outOfBounds').length,
       method: `完整当前场景复查含固定和残留物品、真实凸体碰撞、家具实体及支撑；${metrics.desk_free_before !== undefined && metrics.desk_free_after !== undefined ? '面积来自后端连续可用面积计算，null表示未知。' : '缺失的面积由真实足迹本地估算。'}`,
     },

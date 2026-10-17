@@ -11,7 +11,10 @@ import type { ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
 
 /**
- * 空间配置预览与工作台共用家具加载、支撑及开孔几何。
+ * 空间配置三维预览：与三维工作台共用同一套家具加载逻辑——DormDeskModel 负责
+ * 加载无抽屉桌体 + 三只抽屉分离件（GLB 成功时渲染正式模型并叠加 ParametricDesk
+ * desktopOnly 桌面开孔；失败 / 简化时回退参数化几何），并按固定家具的支撑与
+ * 出线孔几何隐藏参数化床架 / 孔位标记；俯视时对家具模型做显示-only 剖切。
  */
 export function SpacePreview3D({ room }: { room: RoomConfig }) {
   const [view, setView] = useState<ViewPreset>('persp')

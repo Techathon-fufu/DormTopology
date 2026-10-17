@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createDemoProject, DEMO_PROJECT_ID, DEMO_SEED_VERSION } from '../src/data/demoProject'
-import { isDemoProjectStale } from '../src/state/projectsStore'
+import { isDemoProjectStale, useProjectsStore } from '../src/state/projectsStore'
 import type { Project } from '../src/types/project'
 
 // ── 示例数据本身：种子版本与场景规模 ─────────────────────────────────────────
@@ -10,6 +10,8 @@ assert.equal(fresh.room.desk.width, 1.45, 'L 形桌面包络宽 1450mm')
 assert.equal(fresh.room.desk.depth, 0.86, 'L 形桌面包络深 860mm')
 assert.equal(fresh.room.furnitureModel, 'dormdesk-v1')
 assert.equal(fresh.objects.length, 17, '示例场景 17 件物品')
+assert.equal(fresh.organization?.typingOffsetX, -.06, '真实笔记本需要主桌面的侧部净宽')
+assert.equal(fresh.organization?.typingWidth, .55, '键鼠区保持原宽度')
 assert.equal(fresh.room.outlets.length, 1, '示例房间仅一块插座面板（固定模型口径）')
 assert.equal(fresh.room.outlets[0].id, 'outlet-1', '插座面板 id 稳定')
 assert.deepEqual(fresh.room.outlets[0].position, [0, 0.35, 0.01], '插座后墙居中、距地 350mm')
@@ -51,6 +53,29 @@ assert.ok(
   !reseeded.objects.some((o) => o.id === 'demo-books'),
   '重种后不再有旧的叠放书本 id',
 )
+
+// A reseed must preserve edits in the archived demo and leave user projects intact.
+const initialProjects = useProjectsStore.getState().projects
+const editedPrevious = {
+  ...fresh, demoSeedVersion: DEMO_SEED_VERSION - 1,
+  objects: fresh.objects.map((o, i) => i === 0 ? { ...o, name: '保留用户编辑', dimensions: { ...o.dimensions, width: .4 } } : o),
+}
+try {
+  useProjectsStore.setState({ projects: { [DEMO_PROJECT_ID]: editedPrevious, [userProject.id]: userProject } })
+  useProjectsStore.getState().ensureDemo()
+  const projects = useProjectsStore.getState().projects
+  const archives = Object.values(projects).filter((p) => p.id.startsWith(`${DEMO_PROJECT_ID}-seed-`))
+  assert.equal(archives.length, 1)
+  assert.equal(archives[0].objects[0].name, '保留用户编辑')
+  assert.deepEqual(archives[0].objects[0].dimensions, editedPrevious.objects[0].dimensions)
+  assert.equal(archives[0].objects[0].projectId, archives[0].id)
+  assert.equal(archives[0].isDemo, false)
+  assert.deepEqual(projects[userProject.id], userProject)
+  assert.equal(projects[DEMO_PROJECT_ID].demoSeedVersion, DEMO_SEED_VERSION)
+  assert.equal(projects[DEMO_PROJECT_ID].organization?.typingOffsetX, -.06)
+} finally {
+  useProjectsStore.setState({ projects: initialProjects })
+}
 
 console.log(
   'Demo seed checks passed: seed boundaries, versioned L-shaped furniture and the 17-item scene with a single dual-socket outlet panel.',

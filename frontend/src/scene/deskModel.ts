@@ -4,8 +4,12 @@ import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
 import { FURNITURE_OFFSET, hasFixedFurniture } from './fixedFurniture'
 
 /**
- * 固定家具使用 dormdesk_parts 四份资产的共同父节点变换。
- * 通用归一化与锚点工具同时保留给历史资产检查及独立模型导入。
+ * 桌体 GLB 模型（frontend/public/models/dorm_desk_body.glb + 三只抽屉分离件，源资产
+ * Prefabmodel/dormdesk_parts/）接入：配置、归一化与实测锚点。
+ *
+ * 固定家具（hasFixedFurniture）使用 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
+ * （FURNITURE_OFFSET），四份 GLB 共享同一父节点变换；本模块的通用归一化与锚点工具
+ * 保留给历史资产检查及独立模型导入。
  *
  * 口径说明（与 sceneValidation / deskModelStore 的分工）：
  * - 固定家具的支撑和碰撞由 fixedFurniture 提供，不依赖异步加载；
@@ -48,8 +52,10 @@ export interface DeskModelConfig {
 }
 
 /**
- * 默认配置：仓库内置的整组「上床下桌」固定家具（Blender 源 dormdesk.blend 导出；
- * 运行时副本 frontend/public/models/dorm_desk_assembled.glb）。
+ * 默认配置：仓库内置的整组「上床下桌」固定家具（无抽屉桌体；抽屉为独立分离件，
+ * 清单与运动学见 scene/dormDeskDrawers.ts）。运行时副本
+ * frontend/public/models/dorm_desk_body.glb（由 scripts/sync-desk-parts.ts 从
+ * Prefabmodel/dormdesk_parts/dormdesk_body.glb 同步）。
  *
  * 摆放口径（固定模型，实测见 frontend/docs/desk-model.md）：
  * - 单位已是米、Y-up、正面朝 +z，无需单位换算或轴校正；
@@ -58,13 +64,14 @@ export interface DeskModelConfig {
  * - 桌面锚点（Desk_Top_Main / Desk_Top_L_Return）对齐到逻辑桌面高度 room.desk.height，
  *   使物品摆放面与模型桌面一致（模型标称 770mm → 对齐后整体下沉约 20mm，底脚藏于地面内）。
  *
- * 注：`Prefabmodel/dormdesk_parts/` 另提供拆分版资产（无抽屉桌体 + 三个独立抽屉，
- * 共用世界原点、抽屉可抽拉）；切换到拆分版时需改为
- * `centerXZ: false` + `verticalAlign: 'bottom'`，且不得居中，否则抽屉会与柜体错位
- * （见 docs/data_contract.md 第 1.1 节）。
+ * 注：`Prefabmodel/dormdesk_parts/` 的拆分版资产（无抽屉桌体 + 三个独立抽屉）
+ * 共用同一建模坐标系与世界原点，抽屉为可抽拉分离件。固定家具由 mountDeskModel 直接施加
+ * FURNITURE_OFFSET（四份 GLB 共享同一父节点变换），不再走独立归一化；
+ * 每个抽屉分离件套用桌体归一化后的同一变换矩阵（见 DormDeskModel），因此抽屉与柜体
+ * 共享归一化矩阵，不会错位（见 docs/data_contract.md 第 1.1 节）。
  */
 export const DORM_DESK_MODEL_CONFIG: DeskModelConfig = {
-  url: 'models/dorm_desk_assembled.glb',
+  url: 'models/dormdesk_parts/dormdesk_body.glb',
   unitScale: 1,
   axisRotationY: 0,
   fitWidthM: null,

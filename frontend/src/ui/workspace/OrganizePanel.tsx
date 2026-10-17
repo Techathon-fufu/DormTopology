@@ -91,9 +91,9 @@ function Chip({
 
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="rounded-lg border border-border px-2.5 py-2" title={hint}>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold tabular-nums">{value}</p>
+    <div className="rounded-lg bg-background px-3 py-3" title={hint}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
     </div>
   )
 }
@@ -352,8 +352,8 @@ export function OrganizePanel({
   )
 
   return (
-    <aside className={cn('flex flex-col border-border bg-surface', className)}>
-      <div className="flex items-center justify-between px-3 pb-2 pt-3">
+    <aside aria-label="整理方案" className={cn('flex min-h-0 flex-col border-border bg-surface', className)}>
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-3">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold">
           <Wand2 className="h-4 w-4 text-primary" />
           空间整理
@@ -379,12 +379,12 @@ export function OrganizePanel({
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
         {hasPlan ? <p className="rounded-lg border border-primary/20 bg-primary-soft px-3 py-2 text-xs leading-6 text-primary">{planFailure ?? '方案仅在预览中。关闭面板会保留进度；接受后才写入项目。'}</p> : null}
         {hasPlan && (error || stale) ? <p role="alert" className="rounded-lg bg-warning/10 px-3 py-2 text-xs leading-6 text-warning">{error ?? '场景已变更，请取消预览后重新生成。'}</p> : null}
         {/* 分区说明 */}
-        <section className="space-y-2 rounded-lg border border-border p-3">
-          <h3 className="text-[13px] font-semibold">三个分区</h3>
+        <details className="space-y-2 rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-[13px] font-medium">分区与参考线</summary>
           {ZONE_ORDER.map((z) => (
             <div key={z} className="flex items-start gap-2 text-xs leading-relaxed">
               <span
@@ -407,7 +407,7 @@ export function OrganizePanel({
             />
             在三维视图中显示分区参考线
           </label>
-        </section>
+        </details>
 
         {!hasPlan ? (
           <>
@@ -603,18 +603,18 @@ export function OrganizePanel({
         ) : (
           <>
             {/* 方案摘要 + 指标 */}
-            <section className="space-y-2 rounded-lg border border-border p-3">
+            <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-[13px] font-semibold">整理结果预览</h3>
                 <span className="text-[11px] text-faint">{formatDateTime(plan.createdAt)}</span>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">{plan.summary.replace(/，动画 \d+ 组/, `，操作 ${commands.length} 步`)}</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <Stat
                   label="桌面可用面积"
                   hint="估算口径见下方说明"
                   value={
-                    <span className="text-[13px]">
+                    <span className="text-lg">
                       {plan.metrics.deskFreeAreaBefore == null ? '未知' : plan.metrics.deskFreeAreaBefore.toFixed(2)} →{' '}
                       {plan.metrics.deskFreeAreaAfter == null ? '未知' : plan.metrics.deskFreeAreaAfter.toFixed(2)} m²
                     </span>

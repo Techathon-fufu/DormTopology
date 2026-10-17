@@ -108,3 +108,7 @@ python backend/scripts/generate_rodin_models.py --item item_03 --tier basic
 # 自定义切片生模
 python backend/scripts/generate_rodin_models.py --image tests/crops/crop_item_07_充电器.png --name charger
 ```
+
+## 独立完整契约工作流
+
+同一应用工厂另提供 `/api/v1/workflow`，包括场景保存、基线、实时整理/走线、比较、照片参照及 Markdown 指南。它与产品后台规划接口分开，避免同名 `/scenes/{id}` 互相覆盖。工作流默认数据库为产品数据库旁 `workflow.sqlite3`，照片位于同级 `workflow-data/photos/`；`DORMTOPOLOGY_WORKFLOW_DB_PATH`、`DORMTOPOLOGY_WORKFLOW_DATA_DIR` 可覆盖。照片识别与实时 Rodin 没有因本次合并而接入。详见[工作流说明](../docs/closed_loop_acceptance.md)与[整合验收](../docs/merge_workflow_prefab_acceptance.md)。

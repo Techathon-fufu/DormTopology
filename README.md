@@ -72,3 +72,7 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 新增后端时按[分层架构与依赖方向](docs/implementation_roadmap.md#分层与依赖方向)组织工程：`domain` 承载规则与算法，`service` 编排用例，`api` 处理 HTTP，`db` 与外部适配器实现存储及供应商能力。当前走线模块已保持纯函数和无外部 I/O；后续由统一装配入口接入 service，不能把 Web、数据库或凭证依赖放回算法模块。
 
 前端安装、启动与环境变量见 [frontend/README.md](frontend/README.md)，后端见 [backend/README.md](backend/README.md)。先启动后端，再在 `frontend/` 运行 `npm run dev` 即会调用真实整理与理线；Vite 默认将 `/api/v1` 代理到 `http://127.0.0.1:8000`。`VITE_API_MODE=mock|real` 仅控制识别与模型生成，旧 `VITE_ORGANIZATION_API_MODE`、`VITE_CABLE_API_MODE` 和浏览器模式覆盖均不再生效。真实请求失败不会回退到本地规则规划。
+
+## 工作流与预制模型整合
+
+`codex/merge-workflow-prefab` 在 main `3bbc18e` 的产品真实整理、走线与固定家具几何之上，合入独立 `/workflow`（完整契约场景、基线、算法、对比和 Markdown 指南），以及 12 个单品预制 GLB、8 件示例模型替换和三个独立抽屉推拉。产品 API 保留 `/api/v1`，独立工作流使用 `/api/v1/workflow`，由同一应用工厂装配。预制模型外观与碰撞随编辑尺寸同步。示例种子 v6 将键鼠区左移 6cm，保留 55cm 宽度，为真实笔记本留出侧位；旧示例归档保留。17 件真实模型布局已通过算法、前端完整碰撞与应用检查，16 件可移动物品全部归位，零未放置；相交问题按实际物品对统计，修复小数计数。实际验收与边界见[整合记录](docs/merge_workflow_prefab_acceptance.md)。

@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ChevronUp, Loader2 } from 'lucide-react'
 import type { GenerationJob, Project } from '@/types/project'
 import { formatMeters } from '@/lib/units'
 import type { SceneIssue } from '@/scene/sceneValidation'
@@ -47,8 +47,8 @@ export function StatusBar({
   const firstIssueId = issuesById.keys().next().value as string | undefined
 
   return (
-    <footer className="z-30 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border bg-surface px-4 py-1.5 text-xs text-muted-foreground">
-      <span className="inline-flex items-center gap-1.5">
+    <footer aria-label="工作台状态" className="relative z-30 flex h-10 shrink-0 items-center gap-3 border-t border-border bg-surface px-3 text-xs text-muted-foreground sm:px-4">
+      <span className="hidden shrink-0 items-center gap-1.5 md:inline-flex">
         <span className="font-medium text-foreground">
           {mode === 'organize' ? '整理物品' : '规划走线'}
         </span>
@@ -59,9 +59,18 @@ export function StatusBar({
         </span>
       </span>
 
-      {flash ? <span className="font-medium text-primary">{flash}</span> : null}
+      <span role="status" className="min-w-0 flex-1 truncate font-medium text-primary" title={flash ?? undefined}>{flash ?? (preview ? '预览尚未应用 · 原布局保留' : '布局已保存至本机')}</span>
 
-      <span className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 xl:ml-auto xl:w-auto">
+      {issueCount > 0 ? <button type="button" className="inline-flex shrink-0 items-center gap-1 text-warning" title="定位到第一个有警示的物品" onClick={() => { if (firstIssueId) select(firstIssueId) }}><AlertTriangle className="h-3.5 w-3.5" />{preview ? '原布局' : '警示'} {issueCount} 件</button> : null}
+      <span className="hidden shrink-0 tabular-nums lg:inline">物品 {project.objects.length} · 线缆 {project.cables.length}</span>
+      <details className="group shrink-0">
+        <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg px-2 hover:bg-muted [&::-webkit-details-marker]:hidden">
+          {active.length > 0 ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : null}
+          <span className={failed.length > 0 ? 'text-danger' : ''}>{failed.length > 0 ? `${failed.length} 个任务待处理` : active.length > 0 ? `${active.length} 个任务进行中` : '服务与任务'}</span>
+          <ChevronUp className="h-3.5 w-3.5 group-open:rotate-180" />
+        </summary>
+        <div className="absolute bottom-full right-2 mb-2 max-h-[65vh] w-[360px] max-w-[calc(100vw-16px)] space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-overlay">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         <ServiceStatusCluster placement="up" />
         {active.length > 0 ? (
           <span className="inline-flex min-w-0 max-w-full items-center gap-2">
@@ -97,14 +106,14 @@ export function StatusBar({
             </Button>
           </span>
         ) : null}
-      </span>
+      </div>
 
-      <span className="tabular-nums" title="模型状态汇总（完成 / 占位 / 生成中 / 失败 / 未生成）">
+      <p className="tabular-nums" title="模型状态汇总（完成 / 占位 / 生成中 / 失败 / 未生成）">
         模型 完成 {modelCounts.ready} · 占位 {modelCounts.placeholder}
         {modelCounts.generating > 0 ? ` · 生成中 ${modelCounts.generating}` : ''}
         {modelCounts.failed > 0 ? ` · 失败 ${modelCounts.failed}` : ''}
         {modelCounts.none > 0 ? ` · 未生成 ${modelCounts.none}` : ''}
-      </span>
+      </p>
 
       {issueCount > 0 ? (
         <button
@@ -120,8 +129,8 @@ export function StatusBar({
         </button>
       ) : null}
 
-      <span className="tabular-nums">物品 {project.objects.length}</span>
-      <span
+      <p className="tabular-nums">物品 {project.objects.length}</p>
+      <p
         className="tabular-nums"
         title="后端路径采用已验证曲线长度；历史或手动路径采用本地采样估算。有失败或待重算路径时总长未知。"
       >
@@ -132,10 +141,12 @@ export function StatusBar({
         {conflictCableCount > 0 ? (
           <span className="text-danger"> · 障碍 {conflictCableCount}</span>
         ) : null}
-      </span>
+      </p>
       {lastScore !== null ? (
         <span className="tabular-nums text-primary">整理度 {lastScore}（模拟评估）</span>
       ) : null}
+        </div>
+      </details>
     </footer>
   )
 }
