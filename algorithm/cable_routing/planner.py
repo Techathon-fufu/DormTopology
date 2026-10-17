@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from itertools import pairwise
 from typing import Any
 
+from backend.app.domain.geometry import direction_to_world, local_to_world
+
 from .geometry import (
     AABB,
     BEZIER_SAMPLE_ERROR,
@@ -31,7 +33,6 @@ from .geometry import (
     minimum_curve_radius,
     normalize,
     point,
-    rotate_y,
     sample_beziers,
     scale,
     segment_intersects_aabb,
@@ -412,9 +413,8 @@ def validate_scene(scene: dict) -> None:
 
 def resolve_port_world(item: dict, port: dict) -> tuple[Point, Point]:
     """Transform a confirmed local port using the contract's Y rotation."""
-    angle = float(item.get("rotation_y_rad", 0.0))
-    position = add(point(item["position"]), rotate_y(point(port["local_position"]), angle))
-    direction = normalize(rotate_y(point(port["local_direction"]), angle))
+    position = local_to_world(item, port["local_position"])
+    direction = normalize(direction_to_world(item, port["local_direction"]))
     return position, direction
 
 

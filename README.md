@@ -8,7 +8,7 @@
 
 仓库已有可运行的前端演示应用（`frontend/`，React + R3F，本地 Mock 与规则式演示，尚未与后端和算法联调），覆盖“空间配置 → 照片与物品 → 三维工作台 → 方案交付（执行指南）”流程，并提供首页“一键演示”6 步导览；演示脚本、验收结论与能力边界见 [frontend/docs/demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)。
 
-走线算法已完成独立 Python 实现和 14 项算法级测试，包含输入校验、双策略搜索、曲线验证和基础汇聚/指标；后端 FastAPI 服务、真实场景通道、物品布局接入、完整前后端联调、自动化测试与 Rodin 接入尚未完成。前端演示不代表这些集成验收已通过，各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+物品布局算法已在 `backend/app/domain/` 实现，包含共享几何、多平面贪心摆放、布局复查和连续可用面积，并通过 31 项算法测试。走线算法已有独立 Python 实现和 14 项算法级测试，基础几何现复用领域模块；后端 FastAPI 服务、真实场景通道、物品布局接入、完整前后端联调与 Rodin 接入尚未完成。前端演示不代表这些集成验收已通过，各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 现有文件 | 状态与用途 |
 | --- | --- |
@@ -17,6 +17,7 @@
 | `objects/tissue_box.obj` | 纸巾盒 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `objects/杯子.obj` | 杯子 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `algorithm/cable_routing/` | 已交付的纯 Python 走线规划模块，包含输入校验、双策略搜索、曲线验证和测试 |
+| `backend/app/domain/` | C 的纯 Python 物品布局、共享几何与领域类型；含独立布局复查和连续面积评估，调用与验收记录见[布局算法交接](docs/packing_algorithm.md) |
 
 当前没有 `models/` 目录，也没有已导出的桌体 GLB。开发先用参数化简化几何跑通闭环，最终验收需加载 `models/dorm_desk_assembled.glb`，并按数据契约导出和接入独立单品资产。
 
@@ -45,6 +46,7 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 | --- | --- |
 | [项目实施方案](docs/implementation_roadmap.md) | 首版范围、技术架构、算法选择、工期与模块职责 |
 | [走线算法规划](docs/routing_algorithm_plan.md) | 走线输入、A* 搜索、双策略、曲线复查、多线汇聚与输出约定 |
+| [布局算法交接](docs/packing_algorithm.md) | 已实现的布局函数、共享几何、运行命令、样例及算法验收证据 |
 | [用户体验设计](docs/ux_design.md) | 用户流程、交互方式、加载状态与错误反馈 |
 | [数据契约](docs/data_contract.md) | 坐标、单位、资产规范、场景与模块 JSON 协议 |
 | [研发任务与验收](docs/project_tasks.md) | 任务负责人、依赖、验收条件与集成检查 |
@@ -52,11 +54,11 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 
 范围和工期以实施方案为准；字段和空间约定以数据契约为准。修改这两类约定时，必须同步检查 UX 与任务清单。其他文档通过链接引用协议，不再维护第二套 JSON 示例。
 
-2026-10-16 已将用户提供的 `tasks.md` 要求合并到首版范围，逐项对应见[附件要求对照](docs/project_tasks.md#8-附件-tasksmd-要求对照)。截至 2026-10-17，D 模块已完成算法层实现和 14 项测试；其余清单仍按真实联调、资产和终端验收状态记录。Mock 接口验证不替代真实联调，无法走通的端点必须返回失败。
+2026-10-16 已将用户提供的 `tasks.md` 要求合并到首版范围，逐项对应见[附件要求对照](docs/project_tasks.md#8-附件-tasksmd-要求对照)。截至 2026-10-17，C、D 已有算法层实现和测试；清单仍区分算法证据与真实联调、资产及终端验收。Mock 接口验证不替代真实联调，无法走通的端点必须返回失败。
 
 ## 开发入口
 
-当前可复用的算法入口是 `algorithm.cable_routing.plan_routes(scene)`，用于在确认场景上生成符合数据契约的走线结果。下一步仍需实现物品布局、后端编排和前端闭环，再用 8 件待整理物品及 3 根线的共同场景完成集成验收；具体任务见[任务清单](docs/project_tasks.md)。
+当前可复用的算法入口包括 `backend.app.domain.packing` 的 `plan_packing(scene)`、`validate_layout(scene)`、`measure_free_area(scene)`，以及 `algorithm.cable_routing.plan_routes(scene)`。布局算法的调用、测试和四类 JSON 样例生成命令见[交接说明](docs/packing_algorithm.md)。下一步需实现后端编排和前端接入，再用 8 件待整理物品及 3 根线完成集成验收；具体任务见[任务清单](docs/project_tasks.md)。
 
 算法分为两个独立任务：[C：物品布局算法](docs/project_tasks.md#4-成员-c物品布局算法)与[D：走线算法](docs/project_tasks.md#5-成员-d走线算法)。两人使用共同场景样例并行实现，分别交付整理与走线结果；集成时走线使用已应用布局后的当前场景。
 

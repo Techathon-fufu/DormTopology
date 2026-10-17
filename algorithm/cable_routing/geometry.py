@@ -9,37 +9,61 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from itertools import pairwise
 
-Point = tuple[float, float, float]
-EPSILON = 0.001
+from backend.app.domain.geometry import (
+    AABB,
+    EPSILON,
+    Point,
+    aabb_from_item,
+    aabb_from_zone,
+    add,
+    distance,
+    dot,
+    length,
+    normalize,
+    point,
+    rotate_y,
+    scale,
+    sub,
+)
+
+__all__ = [
+    "AABB",
+    "BEZIER_SAMPLE_ERROR",
+    "EPSILON",
+    "Point",
+    "aabb_from_item",
+    "aabb_from_zone",
+    "add",
+    "bezier_arc_length",
+    "bezier_derivative",
+    "bezier_point",
+    "bezier_second_derivative",
+    "beziers_arc_length",
+    "boxes_from_entities",
+    "cross",
+    "distance",
+    "dot",
+    "exposed_bezier_length",
+    "exposed_polyline_length",
+    "length",
+    "minimum_curve_radius",
+    "normalize",
+    "point",
+    "polyline_length",
+    "rotate_y",
+    "sample_beziers",
+    "scale",
+    "segment_intersects_aabb",
+    "segment_segment_distance",
+    "sub",
+]
+
 # The sampler bounds the midpoint deviation of each chord by this value. The
 # planner uses it as a conservative clearance margin when checking the sampled
 # polyline against continuous geometry.
 BEZIER_SAMPLE_ERROR = 0.0005
-
-
-def point(value: Sequence[float]) -> Point:
-    if len(value) != 3:
-        raise ValueError("point must contain three coordinates")
-    return (float(value[0]), float(value[1]), float(value[2]))
-
-
-def add(a: Point, b: Point) -> Point:
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
-
-
-def sub(a: Point, b: Point) -> Point:
-    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
-
-
-def scale(a: Point, factor: float) -> Point:
-    return (a[0] * factor, a[1] * factor, a[2] * factor)
-
-
-def dot(a: Point, b: Point) -> float:
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
 def cross(a: Point, b: Point) -> Point:
@@ -48,66 +72,6 @@ def cross(a: Point, b: Point) -> Point:
         a[2] * b[0] - a[0] * b[2],
         a[0] * b[1] - a[1] * b[0],
     )
-
-
-def length(a: Point) -> float:
-    return math.sqrt(dot(a, a))
-
-
-def distance(a: Point, b: Point) -> float:
-    return length(sub(a, b))
-
-
-def normalize(a: Point) -> Point:
-    magnitude = length(a)
-    if magnitude <= 1e-12:
-        raise ValueError("zero-length vector")
-    return scale(a, 1.0 / magnitude)
-
-
-def rotate_y(vector: Point, angle: float) -> Point:
-    cosine = math.cos(angle)
-    sine = math.sin(angle)
-    return (
-        cosine * vector[0] + sine * vector[2],
-        vector[1],
-        -sine * vector[0] + cosine * vector[2],
-    )
-
-
-@dataclass(frozen=True)
-class AABB:
-    minimum: Point
-    maximum: Point
-
-    def inflated(self, amount: float) -> AABB:
-        offset = (amount, amount, amount)
-        return AABB(sub(self.minimum, offset), add(self.maximum, offset))
-
-
-def aabb_from_item(item: dict) -> AABB:
-    """Return a conservative world AABB for a rotated box item.
-
-    The contract anchors ``position`` at the centre of the bottom face. The
-    local box therefore spans y=0..height and rotates around that anchor.
-    """
-    size = point(item["size_m"])
-    anchor = point(item["position"])
-    angle = float(item.get("rotation_y_rad", 0.0))
-    half = (size[0] / 2.0, size[1] / 2.0, size[2] / 2.0)
-    corners: list[Point] = []
-    for sx in (-half[0], half[0]):
-        for sy in (0.0, size[1]):
-            for sz in (-half[2], half[2]):
-                corners.append(add(anchor, rotate_y((sx, sy, sz), angle)))
-    return AABB(
-        tuple(min(c[index] for c in corners) for index in range(3)),
-        tuple(max(c[index] for c in corners) for index in range(3)),
-    )
-
-
-def aabb_from_zone(zone: dict) -> AABB:
-    return AABB(point(zone["min"]), point(zone["max"]))
 
 
 def segment_intersects_aabb(start: Point, end: Point, box: AABB, inflate: float = 0.0) -> bool:
