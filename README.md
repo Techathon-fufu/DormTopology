@@ -6,11 +6,11 @@
 
 ## 当前状态
 
-仓库处于方案与资产准备阶段。前端已有可运行的演示应用（`frontend/`，React + R3F，本地 Mock 与规则式演示，尚未与后端和算法联调），已覆盖「空间配置 → 照片与物品 → 三维工作台 → 方案交付（执行指南）」的完整演示流程，并提供首页「一键演示」6 步导览（可重置重播、可跳过模拟等待、遵循系统减少动态效果偏好）；演示脚本、验收结论与能力边界见 [frontend/docs/demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)。后端 FastAPI 服务、自动化测试与 Rodin 接入尚未实现。其余功能均为开发目标，不代表已经完成。各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+仓库处于方案与资产准备阶段。前端已有可运行的演示应用（`frontend/`，React + R3F，本地 Mock 与规则式演示，尚未与后端和算法联调），已覆盖「空间配置 → 照片与物品 → 三维工作台 → 方案交付（执行指南）」的完整演示流程，并提供首页「一键演示」6 步导览（可重置重播、可跳过模拟等待、遵循系统减少动态效果偏好；三个重点画面——杂乱桌面的三维还原、物品归位动画、线缆收拢前后对比——串为一段可重复操作的完整流程）；演示脚本、验收结论与能力边界见 [frontend/docs/demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)。后端 FastAPI 服务、自动化测试与 Rodin 接入尚未实现。其余功能均为开发目标，不代表已经完成。各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 | 现有文件 | 状态与用途 |
 | --- | --- |
-| `frontend/` | 前端演示应用（成员 A）：空间配置、照片导入与物品确认、三维工作台、整理预览、走线规划（规则式演示）与方案交付（执行指南，含配件参数预览与导出）；提供「一键演示」6 步导览与验收说明（[demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)），运行方式与已知差异见 [frontend/README.md](frontend/README.md) |
+| `frontend/` | 前端演示应用（成员 A）：空间配置、照片导入与物品确认、三维工作台、整理预览、走线规划（规则式演示）与方案交付（执行指南，含配件参数预览与导出）；提供「一键演示」6 步导览（三个重点画面——杂乱还原 / 归位动画 / 收拢对比——串为可重复流程）与验收说明（[demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)），运行方式与已知差异见 [frontend/README.md](frontend/README.md) |
 | `objects/dorm_desk.blend` | 桌体 Blender 源文件；尺寸、原点、轴向与网格仍需核验 |
 | `objects/tissue_box.obj` | 纸巾盒 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `objects/杯子.obj` | 杯子 OBJ 资产；运行时导入前需校正尺寸与轴向 |
