@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  GitCompareArrows,
   MoreHorizontal,
   ChevronDown,
   LayoutGrid,
@@ -27,6 +28,7 @@ import { Select } from '@/ui/kit/primitives'
 import { Segmented } from '@/ui/kit/segmented'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
+import { usePlansStore } from '@/state/plansStore'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 
@@ -61,6 +63,8 @@ interface ToolbarProps {
   onOpenOrganize: () => void
   onPlanCables: () => void
   onSavePlan: () => void
+  onOpenPlans: () => void
+  plansOpen: boolean
   busy: 'cable' | null
   onToggleLeftPanel: () => void
   onToggleRightPanel: () => void
@@ -71,6 +75,8 @@ export function Toolbar({
   onOpenOrganize,
   onPlanCables,
   onSavePlan,
+  onOpenPlans,
+  plansOpen,
   busy,
   onToggleLeftPanel,
   onToggleRightPanel,
@@ -89,6 +95,7 @@ export function Toolbar({
   const staleCount = project.cables.filter((c) => c.status === 'stale').length
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
+  const candidateCount = usePlansStore((s) => (s.candidates[project.id] ?? []).length)
 
   return (
     <header className="relative z-30 shrink-0 border-b border-border bg-surface">
@@ -132,6 +139,19 @@ export function Toolbar({
               {busy === 'cable' ? '规划中' : staleCount > 0 ? `更新走线 · ${staleCount}` : '规划全部走线'}
             </Button>
           )}
+          <Button
+            variant={plansOpen ? 'primary' : 'outline'}
+            size="sm"
+            title={
+              candidateCount > 0
+                ? `候选方案：查看列表与指标，最多选 3 个并排对比（已保存 ${candidateCount} 个）`
+                : '候选方案：先点「保存方案」保存当前布局，再进入对比'
+            }
+            onClick={onOpenPlans}
+          >
+            <GitCompareArrows className="h-4 w-4" />
+            方案对比{candidateCount > 0 ? `（${candidateCount}）` : ''}
+          </Button>
           <Dropdown className="group relative">
             <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden" aria-label="更多操作" title="更多操作"><MoreHorizontal className="h-5 w-5" /></summary>
             <div className="absolute right-0 top-11 z-50 flex w-60 flex-col gap-1 rounded-xl border border-border bg-surface p-2 shadow-overlay">

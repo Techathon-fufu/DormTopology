@@ -1,11 +1,11 @@
-# 服务适配层与后端接口约定（前端 0.6.0）
+# 服务适配层与后端接口约定
 
 本文档记录前端「后端服务适配层」的实现口径：运行模式切换、统一 HTTP 客户端、四项能力的 wire 契约、
 前端本地校验、任务留痕与刷新恢复，以及**当前无法联调的字段缺口**。
 
 > 状态声明（重要）：
-> - 仓库内后端 FastAPI 服务尚未实现（`backend/app/domain/` 仅有算法层），**本契约由前端依据
->   [docs/data_contract.md](../../docs/data_contract.md) 推导自定稿**，联调前可能调整；
+> - 仓库内后端 FastAPI 服务尚未实现（`backend/app/domain/` 仅有算法层）。本文记录当前前端 HTTP
+>   适配的请求与响应形式；与[权威数据契约](../../docs/data_contract.md)的差异列于第 6 节，正式接入前须完成转换与字段补齐；
 > - 适配层已实现并通过本地「假 HTTP 服务器」冒烟验证（超时 / 网络错误 / 非 2xx / 坏 JSON / 任务 404 /
 >   轮询状态流转 / 取消 / 校验器 / 存储持久化 / 模式解析，详见第 9 节），**尚未与真实后端联调**；
 > - 前端不持有任何服务密钥（Rodin 等第三方密钥只在后端）。
@@ -50,7 +50,9 @@
 ```jsonc
 // POST /api/v1/<capability>  →  202
 { "job_id": "job_...", "status": "queued", "created_at": "2026-10-17T09:00:00Z" }
+```
 
+```jsonc
 // GET /api/v1/jobs/{job_id}
 {
   "job_id": "job_...",
@@ -151,7 +153,7 @@
 }
 ```
 
-响应 `result`（对应 `docs/data_contract.md` 的 `packing_result`）：
+响应 `result`（当前适配层接受的整理结果子集；完整领域输出见 `docs/data_contract.md` 的 `packing_result`）：
 
 ```jsonc
 {
@@ -202,7 +204,7 @@
   "cables": [
     {
       "cable_id": "c1",
-      "path_points": [[0.1,0.77,0.3],[0.1,0.62,0.3], …],  // ≥ 2 点；首末点应为端点附近（前端以端点坐标贴合首末点）
+      "path_points": [[0.1,0.77,0.3],[0.1,0.62,0.3]],     // ≥ 2 点；首末点应为端点附近（前端以端点坐标贴合首末点）
       "channels": ["deskUnderside", "post"],               // deskEdge | deskUnderside | post | floor | free（兼容 snake_case）
       "length_m": 1.42
     }
@@ -217,6 +219,8 @@
 计入 warnings（界面显示未采用数量），其余正常采用；`issues` 中的线缆标记为冲突并展示原因。
 
 ### 4.5 场景载荷（`scene`，请求侧）
+
+以下是当前产品适配层发送的字段子集，包含尚未填写线长的草稿示例，不能直接作为领域算法输入；缺少的结构和确认条件见第 6 节。
 
 ```jsonc
 {
@@ -240,10 +244,13 @@
 ```
 
 - `cable_type`：内部 5 类（power / charging / video / network / data）映射为 `power|power|hdmi|network|usb`；
-  `thickness=thick` 覆盖电源 / 网线 / 视频线，`thin` 覆盖充电 / 外设线（与 data_contract 的粗/细预设一致）；
+  `thickness` 优先采用用户显式设置，未设置时电源 / 网线 / 视频线默认为 `thick`，充电 / 外设线默认为 `thin`；
 - `diameter_m` / `min_bend_radius_m` 当前使用前端演示预设（粗 6.5 mm / 32.5 mm，细 3.5 mm / 17.5 mm），
-  **数值待产品确认后由后端定稿**，前端未存储该配置；
-- `length_m`：用户填写的实际线长，未填写为 `null`（后端需容忍）。
+  数值来自 `CABLE_THICKNESS_META`；前端保存粗细档位，尚无独立编辑这两个数值的控件，正式规划前仍须按实物确认；
+- `mode`：`resolveCableVisibility` 优先采用显式的可见 / 隐藏设置，否则根据两端设备名称推断，无匹配时默认可见；
+  `hidden` 映射为 `backboard`，`visible` 映射为 `slot`。该映射不表示已提供两种模式的真实通道图；
+- `length_m`：用户填写的实际线长；当前界面未填写时仍会发送 `null`，这是待修复的接入缺口。
+  [数据契约第 2.3 节](../../docs/data_contract.md#23-线缆输入)和领域校验要求有限正数，正式调用算法前须由应用层取得用户确认的线长并校验；未知时阻止规划，不能以 `null`、估算值或默认值绕过要求。
 
 ### 4.6 布局规划（遗留能力）`POST /api/v1/layout/plan`
 
@@ -263,17 +270,23 @@
   需要重放时请在原入口重新执行一次任务（如重新「生成整理方案」）；
 - 界面入口：工作台底栏 / 页头的「任务 N」服务状态面板（重查 / 取消 / 移除 / 清除已结束）。
 
-## 6. 字段缺口（联调前需后端 / 产品定稿）
+## 6. 字段缺口（正式接入前按数据契约补齐）
+
+独立 `/algorithm-lab` 已能解析完整领域载荷中的优先级、直插关系、支撑与集线槽字段；这不代表产品工作台的内部模型或 HTTP 载荷已经支持它们。以下缺口须在应用层和前端适配中对齐，不能让领域算法忽略必需结构。
 
 | 缺口 | 现状 | 影响 |
 | --- | --- | --- |
-| 坐标原点 | 前端发送内部坐标（x 以桌面中心为 0、后墙 z=0）；[data_contract](../../docs/data_contract.md) 约定「桌面左后角投影」原点 | 若后端按契约解析，需平移 `[desk_width/2, 0, +z 偏移]`；联调前必须二选一定稿 |
+| 坐标原点 | 前端发送内部坐标（x 以桌面中心为 0、后墙 z=0）；[data_contract](../../docs/data_contract.md) 约定「桌面左后角投影」原点 | 正式接入前须转换场景位置并核对 Z 偏移；物品及接口局部坐标已采用底面中心锚点，不重复做中心到底面的偏移 |
 | `scene_revision` | 前端暂无修订号 | 后端无法做乐观并发校验 |
 | `regions` / `target_region_id` | 前端无区域实体，发送 `null` | 后端区域相关优化不可用 |
-| `obstacles` / `reserved_zones` / `routing_graph` / `allowed_region_ids` | 未提供 | 后端避障与走线只能依据物品几何 |
+| `obstacles` / `reserved_zones` / `routing_graph` / `allowed_region_ids` | 未提供 | 不能直接调用领域算法；须补齐真实场景几何、收纳约束与两种允许通道 |
+| `placement_priority` / `plug_mount` | 未进入产品物品载荷 | 大型设备优先级、直插适配器的安装几何与孔位占用不能从当前产品请求还原 |
+| `routing_graph.support_policy` / `supports` / `tray_candidates` | 未进入产品载荷 | 尚不能传递安装条件或取得产品流程中的集线槽建议；接受、安装确认和版本保存仍待实现 |
 | `dimensions_confirmed` | 由尺寸来源推断（estimated→false） | 语义若不同需对齐 |
 | 线径 / 最小弯折半径 | 前端演示预设（见 4.5） | 数值与产品实物不符时结果不可用 |
-| `mode`（slot/backboard）与墙面锚点 | 统一发送 `slot`；墙面安装细节未发送 | 背板走线场景受限 |
+| `length_m` | 未填写时发送 `null` | 正式调用领域前须取得用户确认的有限正数；未知时阻止规划，不能要求算法容忍 |
+| `mode`（slot/backboard）与墙面锚点 | 隐藏线发送 `backboard`、可见线发送 `slot`；墙面安装细节未发送 | 模式字段已有区分，真实双策略图与墙面设备仍需按契约配置 |
+| 墙面插座默认高度 | 产品演示默认为 350mm，共享契约要求物品底面中心默认高度为 0.30m | 须按契约映射墙面设备并核验、统一默认值；不能以完成高度编辑界面视为已符合共享场景约定 |
 | `usage_frequency` | 频繁/常用 → high，其余 medium | 若后端分级不同需映射 |
 | 识别 `quantity` / `fixed` | 透传，缺省 1 / false | — |
 | `photo_id` | 仅透传本地上传记录 id（照片经 multipart 已上传） | 若后端需要照片引用 id 需改为服务端 id |

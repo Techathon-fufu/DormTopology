@@ -10,6 +10,8 @@
 
 物品布局与走线核心现统一位于 `backend/app/domain/`，包含共享几何、多平面贪心摆放、布局复查、连续可用面积、双策略走线搜索与曲线验证；已有算法回归和仅加载领域目录的隔离测试。`algorithm/cable_routing/` 保留兼容导入。后端 FastAPI 服务、真实场景通道、完整前后端联调与 Rodin 接入尚未完成，前端演示不代表这些集成验收已通过；各交付轮次的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
+新增独立[算法可视化验证工作台](docs/algorithm_visual_testing.md)：前端 `/algorithm-lab` 直接查看 14 组 Python 真实算法 JSON，支持整理前后、几何图层、有效路径、失败原因和导入导出，并提供桌面/手机 Chromium 的 Playwright 检查。包含桌沿/孔边/柜侧固定、桌下扎带、连续集线托盘、无支撑失败，以及先逐线规划再推荐集线槽的三线案例；候选槽与已安装支撑分开。新增[综合桌面样例](docs/integrated_desk_scenario.md)，包含高优先级显示器和打印机、直插插排的适配器，以及应用整理后重新生成的三根线。开启支撑策略时复查最终曲线的最大悬空跨距，历史场景明确标记支撑未评估。无需先准备精细模型；该入口与产品 Mock 流程独立，不计为 FastAPI、真实资产或完整流程验收。
+
 | 现有文件 | 状态与用途 |
 | --- | --- |
 | `frontend/` | 前端演示应用（成员 A）：空间配置、照片导入与物品确认、三维工作台、整理预览、走线规划（规则式演示）与方案交付（执行指南，含配件参数预览与导出）；提供「一键演示」6 步导览（三个重点画面——杂乱还原 / 归位动画 / 收拢对比——串为可重复流程）与验收说明（[demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)），运行方式与已知差异见 [frontend/README.md](frontend/README.md) |
@@ -47,6 +49,8 @@ Rodin 在后台异步生成外观模型，完成后替换简化模型；生成�
 | [项目实施方案](docs/implementation_roadmap.md) | 首版范围、技术架构、算法选择、工期与模块职责 |
 | [走线算法规划](docs/routing_algorithm_plan.md) | 走线输入、A* 搜索、双策略、曲线复查、多线汇聚与输出约定 |
 | [布局算法交接](docs/packing_algorithm.md) | 已实现的布局函数、共享几何、运行命令、样例及算法验收证据 |
+| [算法可视化验证](docs/algorithm_visual_testing.md) | 真实算法 JSON 工作台、14 类样例、支撑与集线槽建议、导入版本规则和浏览器测试命令 |
+| [综合桌面样例](docs/integrated_desk_scenario.md) | 显示器、打印机等 8 件物品的摆放优先级、直插适配器与整理后走线设计 |
 | [用户体验设计](docs/ux_design.md) | 用户流程、交互方式、加载状态与错误反馈 |
 | [数据契约](docs/data_contract.md) | 坐标、单位、资产规范、场景与模块 JSON 协议 |
 | [研发任务与验收](docs/project_tasks.md) | 任务负责人、依赖、验收条件与集成检查 |

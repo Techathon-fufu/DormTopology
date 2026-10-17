@@ -240,6 +240,11 @@ export function OrganizePanel({
       })),
       true,
     )
+    // 记录布局来源：保存候选方案时用于标注「算法来源」
+    useProjectsStore.getState().update(project.id, (p) => ({
+      ...p,
+      layoutSource: plan.kind === 'algorithm' ? 'algorithm' : 'rule',
+    }))
     closePanel()
     useTourStore.getState().signal(project.id, 'organize')
     onFlash(

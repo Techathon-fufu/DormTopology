@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from itertools import pairwise
 
 from ..errors import SceneInputError
-from ..geometry import direction_to_world, local_to_world
+from ..geometry import (
+    direction_to_world,
+    item_intersects_box,
+    items_overlap,
+    local_to_world,
+)
 from ..models import RoutingResult, Scene
 from ..rules import validate_scene as validate_domain_scene
 from .geometry import (
@@ -42,6 +47,8 @@ from .geometry import (
     segment_segment_distance,
     sub,
 )
+from .optimizer import optimize_underside_trays
+from .support import SupportContext, analyze_support, build_support_context
 
 ERROR_MESSAGES = {
     "invalid_input": "The scene or cable fields are invalid",
@@ -52,6 +59,7 @@ ERROR_MESSAGES = {
     "endpoint_blocked": "An endpoint lead-out is blocked",
     "no_path": "No path satisfies clearance, bend, and exclusion constraints",
     "unsupported_mode": "The selected routing mode has no configured channel",
+    "unsupported_span": "The route exceeds the configured unsupported span; add mounted ties or a tray",
 }
 
 
@@ -89,6 +97,7 @@ class Arc:
     length: float
     edge_id: str | None
     exposed: bool
+    unsupported_length: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -108,6 +117,21 @@ def validate_scene(scene: dict) -> None:
         validate_domain_scene(scene, for_planning=True)
     except SceneInputError as error:
         raise RoutingInputError(str(error), field=error.field) from error
+    for index, adapter in enumerate(scene["items"]):
+        if "plug_mount" not in adapter:
+            continue
+        field = f"items[{index}].plug_mount"
+        if any(
+            other["id"] != adapter["id"] and items_overlap(adapter, other)
+            for other in scene["items"]
+        ):
+            raise RoutingInputError("mounted adapter body overlaps another item", field=field)
+        if any(
+            item_intersects_box(adapter, aabb_from_zone(zone))
+            for key in ("obstacles", "reserved_zones")
+            for zone in scene[key]
+        ):
+            raise RoutingInputError("mounted adapter body intersects a forbidden zone", field=field)
     ports = {
         port["id"]: port
         for item in scene["items"]
@@ -158,9 +182,12 @@ def _issue(cable: dict, reason: str) -> dict:
         "path_points": [],
         "path_length_m": None,
         "reason_code": reason,
+        "support_check": {"status": "not_evaluated", "max_unsupported_span_m": None, "support_ids": []},
     }
 
-def _valid(cable: dict, segments: Sequence[Sequence[Point]], samples: Sequence[Point], path_length: float) -> dict:
+def _valid(cable: dict, segments: Sequence[Sequence[Point]], samples: Sequence[Point], path_length: float,
+           support_context: SupportContext | None = None) -> dict:
+    support = analyze_support(segments, support_context, cable["diameter_m"] / 2) if support_context else None
     return {
         "id": cable["id"],
         "start_port_id": cable["start_port_id"],
@@ -174,6 +201,11 @@ def _valid(cable: dict, segments: Sequence[Sequence[Point]], samples: Sequence[P
         "path_points": [list(p) for p in samples],
         "path_length_m": path_length,
         "reason_code": None,
+        "support_check": {
+            "status": "verified" if support else "not_evaluated",
+            "max_unsupported_span_m": support.max_unsupported_span_m if support else None,
+            "support_ids": list(support.support_ids) if support else [],
+        },
     }
 
 
@@ -182,12 +214,34 @@ def _line_control_points(start: Point, end: Point) -> tuple[Point, Point, Point,
     return (start, add(start, scale(vector, 1.0 / 3.0)), add(start, scale(vector, 2.0 / 3.0)), end)
 
 
+def _port_handle_length(
+    anchor: Point,
+    opposite_control: Point,
+    direction: Point,
+    original_length: float,
+    minimum_radius: float,
+    factor: float | None,
+) -> float:
+    if factor is None:
+        return original_length
+    normal = normalize(direction)
+    offset = sub(opposite_control, anchor)
+    transverse = length(sub(offset, scale(normal, dot(offset, normal))))
+    if transverse <= 1e-9:
+        return original_length
+    # For P1=P0+h*normal, the endpoint radius is 3*h*h/(2*transverse).
+    # Interior curvature and all physical constraints still require validation.
+    local_length = math.sqrt(2.0 * minimum_radius * transverse / 3.0)
+    return min(original_length, factor * local_length)
+
+
 def _polyline_to_beziers(
     points: Sequence[Point],
     minimum_radius: float,
     *,
     start_direction: Point | None = None,
     end_direction: Point | None = None,
+    endpoint_handle_factor: float | None = None,
 ) -> list[tuple[Point, Point, Point, Point]] | None:
     cleaned: list[Point] = []
     for value in points:
@@ -213,12 +267,20 @@ def _polyline_to_beziers(
         adjusted = list(core)
         if has_start_leadout:
             first = list(adjusted[0])
-            handle_length = distance(first[0], first[3]) / 3.0
+            handle_length = _port_handle_length(
+                first[0], first[2], start_direction,
+                distance(first[0], first[3]) / 3.0,
+                minimum_radius, endpoint_handle_factor,
+            )
             first[1] = add(first[0], scale(normalize(start_direction), handle_length))
             adjusted[0] = tuple(first)
         if has_end_leadout:
             last = list(adjusted[-1])
-            handle_length = distance(last[0], last[3]) / 3.0
+            handle_length = _port_handle_length(
+                last[3], last[1], end_direction,
+                distance(last[0], last[3]) / 3.0,
+                minimum_radius, endpoint_handle_factor,
+            )
             # Traversal enters the endpoint in the opposite direction of its
             # outward normal, so P3-P2 must point along -end_direction.
             last[2] = add(last[3], scale(normalize(end_direction), handle_length))
@@ -493,6 +555,8 @@ def _search_path(
     banned_edges: set[str],
     use_dijkstra: bool,
     candidate_node_ids: set[str] | None = None,
+    support_context: SupportContext | None = None,
+    occupied: Sequence[tuple[Sequence[Point], float]] = (),
 ) -> tuple[SearchPath | None, bool, bool]:
     """Search the mode-specific graph and return path plus endpoint candidates.
 
@@ -517,6 +581,13 @@ def _search_path(
     adjacency[end_node] = []
     start_candidates = False
     end_candidates = False
+    def support_for(*points: Point):
+        if support_context is None:
+            return None
+        segments = [_line_control_points(first, last) for first, last in pairwise(points)
+                    if distance(first, last) > 1e-12]
+        return analyze_support(segments, support_context, spec.radius) if segments else None
+
     for node_id, (node_position, _) in nodes.items():
         if candidate_node_ids is not None and node_id not in candidate_node_ids:
             continue
@@ -524,14 +595,24 @@ def _search_path(
             _arc_clearance(start.position, start_exit, spec.radius, start_connection_boxes)
             and _arc_clearance(start_exit, node_position, spec.radius, all_boxes)
         ):
-            adjacency[start_node].append(Arc(node_id, distance(start_exit, node_position), None, False))
             start_candidates = True
+            support = support_for(start.position, start_exit, node_position)
+            if (support is None or support.valid) and not _tube_conflicts(
+                (start.position, start_exit, node_position), spec.radius, occupied
+            ):
+                adjacency[start_node].append(Arc(node_id, distance(start_exit, node_position), None, False,
+                                                 support.unsupported_length_m if support else 0.0))
         if (
             _arc_clearance(node_position, end_exit, spec.radius, all_boxes)
             and _arc_clearance(end_exit, end.position, spec.radius, end_connection_boxes)
         ):
-            adjacency[node_id].append(Arc(end_node, distance(node_position, end_exit) + end_leadout, None, False))
             end_candidates = True
+            support = support_for(node_position, end_exit, end.position)
+            if (support is None or support.valid) and not _tube_conflicts(
+                (node_position, end_exit, end.position), spec.radius, occupied
+            ):
+                adjacency[node_id].append(Arc(end_node, distance(node_position, end_exit) + end_leadout, None, False,
+                                              support.unsupported_length_m if support else 0.0))
 
     for edge in edges:
         edge_id = edge["id"]
@@ -543,9 +624,15 @@ def _search_path(
             continue
         if not _arc_clearance(from_position, to_position, spec.radius, all_boxes):
             continue
+        if _tube_conflicts((from_position, to_position), spec.radius, occupied):
+            continue
+        support = support_for(from_position, to_position)
+        if support is not None and not support.valid:
+            continue
         edge_length = distance(from_position, to_position)
-        adjacency[from_id].append(Arc(to_id, edge_length, edge_id, bool(edge["exposed"])))
-        adjacency[to_id].append(Arc(from_id, edge_length, edge_id, bool(edge["exposed"])))
+        unsupported = support.unsupported_length_m if support else 0.0
+        adjacency[from_id].append(Arc(to_id, edge_length, edge_id, bool(edge["exposed"]), unsupported))
+        adjacency[to_id].append(Arc(from_id, edge_length, edge_id, bool(edge["exposed"]), unsupported))
 
     required_kind = "slot" if spec.mode == "slot" else "fixing_point"
     positions = {node_id: value[0] for node_id, value in nodes.items()}
@@ -559,7 +646,7 @@ def _search_path(
                 nodes[arc.target][1] == required_kind,
                 False,
                 start_node,
-                start_leadout + arc.length,
+                start_leadout + arc.length + 3.0 * arc.unsupported_length,
             )
         )
     if not start_states:
@@ -605,7 +692,7 @@ def _search_path(
                     previous_direction = normalize(previous_vector)
                     next_direction = normalize(next_vector)
                     turn_cost = bend_penalty * (1.0 - dot(previous_direction, next_direction))
-            next_cost = cost + arc.length + (exposure_penalty * arc.length if arc.exposed else 0.0) + turn_cost
+            next_cost = cost + arc.length + (exposure_penalty * arc.length if arc.exposed else 0.0) + turn_cost + 3.0 * arc.unsupported_length
             next_state = (arc.target, next_passed, next_used_edge, node_id)
             if next_cost + 1e-12 >= costs.get(next_state, math.inf):
                 continue
@@ -682,6 +769,7 @@ def _validate_curve(
     required_points: Sequence[Point] = (),
     required_tolerance: float = EPSILON,
     corridors: Sequence[tuple[Point, Point, float | None]] = (),
+    support_context: SupportContext | None = None,
 ) -> tuple[str | None, float]:
     for previous, following in pairwise(segments):
         if distance(previous[3], following[0]) > 1e-9:
@@ -752,6 +840,8 @@ def _validate_curve(
     path_length = beziers_arc_length(segments)
     if path_length + spec.cable["slack_m"] > spec.cable["length_m"] + EPSILON:
         return "length_exceeded", path_length
+    if support_context and not analyze_support(segments, support_context, spec.radius).valid:
+        return "unsupported_span", path_length
     return None, path_length
 
 
@@ -766,6 +856,7 @@ def _plan_one(
     item_boxes: dict[str, AABB | OBB],
     occupied: Sequence[tuple[Sequence[Point], float]],
     use_dijkstra: bool,
+    support_context: SupportContext | None = None,
 ) -> tuple[dict, tuple[Sequence[Point], float] | None]:
     start = endpoints[cable["start_port_id"]]
     end = endpoints[cable["end_port_id"]]
@@ -805,7 +896,9 @@ def _plan_one(
     banned_edges: set[str] = set()
     last_reason = "no_path"
     saw_length_exceeded = False
+    saw_unsupported = False
     for _attempt in range(3):
+        search_occupied = occupied if _attempt else ()
         search_path, start_candidates, end_candidates = _search_path(
             nodes,
             edges,
@@ -818,35 +911,59 @@ def _plan_one(
             banned_edges,
             use_dijkstra,
             candidate_node_ids,
+            support_context,
+            search_occupied,
         )
         if search_path is None:
             if not start_candidates or not end_candidates:
                 last_reason = "endpoint_blocked"
             else:
                 last_reason = "no_path"
+                if support_context:
+                    geometric_path, _, _ = _search_path(
+                        nodes, edges, start, end, spec, obstacle_boxes, reserved_boxes,
+                        item_boxes, banned_edges, use_dijkstra, candidate_node_ids,
+                        occupied=search_occupied,
+                    )
+                    if geometric_path is not None:
+                        last_reason = "unsupported_span"
             break
         start_exit = _endpoint_exit(start, spec.radius)
         end_exit = _endpoint_exit(end, spec.radius)
-        segments = _polyline_to_beziers(
-            search_path.points,
-            spec.min_bend_radius * 1.1,
-            start_direction=start.direction
-            if distance(start.position, start_exit) > 1e-9
-            else None,
-            end_direction=end.direction
-            if distance(end.position, end_exit) > 1e-9
-            else None,
-        )
-        if not segments:
-            last_reason = "no_path"
-        else:
+        # Keep established geometry first. Two local handle profiles can avoid
+        # long normal-directed bulges without consuming another path attempt.
+        for endpoint_handle_factor in (None, 1.2, 1.3):
+            segments = _polyline_to_beziers(
+                search_path.points,
+                spec.min_bend_radius * 1.1,
+                start_direction=start.direction
+                if distance(start.position, start_exit) > 1e-9
+                else None,
+                end_direction=end.direction
+                if distance(end.position, end_exit) > 1e-9
+                else None,
+                endpoint_handle_factor=endpoint_handle_factor,
+            )
+            if not segments:
+                last_reason = "no_path"
+                continue
             # Ports already outside the device still require their confirmed
             # tangent, even though they have no collision-box lead-out.
             first = list(segments[0])
-            first[1] = add(first[0], scale(start.direction, distance(first[0], first[1])))
+            first_handle = _port_handle_length(
+                first[0], first[2], start.direction,
+                distance(first[0], first[1]), spec.min_bend_radius * 1.1,
+                endpoint_handle_factor,
+            )
+            first[1] = add(first[0], scale(start.direction, first_handle))
             segments[0] = tuple(first)
             last = list(segments[-1])
-            last[2] = add(last[3], scale(end.direction, distance(last[2], last[3])))
+            last_handle = _port_handle_length(
+                last[3], last[1], end.direction,
+                distance(last[2], last[3]), spec.min_bend_radius * 1.1,
+                endpoint_handle_factor,
+            )
+            last[2] = add(last[3], scale(end.direction, last_handle))
             segments[-1] = tuple(last)
             path_clearances = [
                 edge["clearance_radius_m"]
@@ -872,6 +989,7 @@ def _plan_one(
                 search_path.required_points,
                 path_required_tolerance,
                 search_path.corridors,
+                support_context,
             )
             if last_reason == "no_path" and occupied and _tube_conflicts(samples, spec.radius, occupied):
                 edge_clearances = [
@@ -902,22 +1020,27 @@ def _plan_one(
                         search_path.required_points,
                         required_tolerance=max(path_required_tolerance, channel_clearance),
                         corridors=search_path.corridors,
+                        support_context=support_context,
                     )
                     if lane_reason is None:
-                        return _valid(cable, lane_segments, lane_samples, lane_length), (
+                        return _valid(cable, lane_segments, lane_samples, lane_length, support_context), (
                             lane_samples,
                             spec.radius,
                         )
             if last_reason is None:
-                return _valid(cable, segments, samples, path_length), (samples, spec.radius)
+                return _valid(cable, segments, samples, path_length, support_context), (samples, spec.radius)
             if last_reason == "length_exceeded":
                 saw_length_exceeded = True
+            if last_reason == "unsupported_span":
+                saw_unsupported = True
         if search_path.edge_ids:
             banned_edges.add(search_path.edge_ids[min(_attempt, len(search_path.edge_ids) - 1)])
         else:
             break
     if saw_length_exceeded and last_reason in {"no_path", "length_exceeded"}:
         last_reason = "length_exceeded"
+    if saw_unsupported and last_reason == "no_path":
+        last_reason = "unsupported_span"
     return _issue(cable, last_reason), None
 
 
@@ -932,6 +1055,10 @@ def _validate_port_capacity(scene: dict) -> set[str]:
         for port in item["ports"]
     }
     counts: dict[str, int] = {port_id: 0 for port_id in ports}
+    for item in scene["items"]:
+        if "plug_mount" in item:
+            counts[item["plug_mount"]["socket_port_id"]] += 1
+            counts[item["plug_mount"]["plug_port_id"]] += 1
     for cable in scene["cables"]:
         counts[cable["start_port_id"]] += 1
         counts[cable["end_port_id"]] += 1
@@ -990,6 +1117,7 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
     implementation against the same non-negative graph cost function.
     """
     validate_scene(scene)
+    support_context = build_support_context(scene)
     endpoints = _build_endpoints(scene)
     nodes = {node["id"]: (point(node["position"]), node["kind"]) for node in scene["routing_graph"]["nodes"]}
     edges = scene["routing_graph"]["edges"]
@@ -1031,6 +1159,7 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
             item_boxes,
             occupied,
             use_dijkstra,
+            support_context,
         )
         results_by_id[cable["id"]] = result
         if tube is not None:
@@ -1088,4 +1217,5 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
             "baseline_exposed_length_m": baseline_length,
         },
         "issues": issues,
+        "underside_tray_optimizations": optimize_underside_trays(scene, results),
     }

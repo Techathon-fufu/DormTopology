@@ -1,6 +1,6 @@
 import { Dropdown } from '@/ui/kit/dropdown'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, FolderOpen, Plus, Sparkles, Trash2, MoreHorizontal, Box, Cable, Clock3, Ruler, ImagePlus, LayoutGrid, FileCheck2 } from 'lucide-react'
+import { ArrowRight, FileCheck2, FlaskConical, FolderOpen, ImagePlus, LayoutGrid, MoreHorizontal, Plus, Ruler, Sparkles, Trash2, Box, Cable, Clock3 } from 'lucide-react'
 import type { Project } from '@/types/project'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useTourStore } from '@/state/tourStore'
@@ -53,7 +53,7 @@ export function ProjectsPage() {
           <p className="flex items-center gap-2 text-xs font-medium tracking-widest text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />让空间回到顺手的样子</p>
           <h1 className="mt-5 text-3xl font-semibold leading-[1.35] tracking-tight sm:text-4xl">桌面有序，<br />灵感就有了位置。</h1>
           <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground">从一张照片开始，确认物品与空间，在三维预览中整理摆放、规划走线，得到一份可照着执行的指南。</p>
-          <div className="mt-7 flex flex-wrap gap-3"><Button size="lg" onClick={startDemoTour}><Sparkles className="h-4 w-4" />体验整理演示<ArrowRight className="h-4 w-4" /></Button><Button size="lg" variant="outline" onClick={() => navigate('/projects/new')}><Plus className="h-4 w-4" />创建我的空间</Button></div>
+          <div className="mt-7 flex flex-wrap gap-3"><Button size="lg" onClick={startDemoTour}><Sparkles className="h-4 w-4" />体验整理演示<ArrowRight className="h-4 w-4" /></Button><Button size="lg" variant="outline" onClick={() => navigate('/projects/new')}><Plus className="h-4 w-4" />创建我的空间</Button><Button size="lg" variant="outline" onClick={() => navigate('/algorithm-lab')}><FlaskConical className="h-4 w-4" />算法验证</Button></div>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">演示使用示例数据，可随时暂停与重播。</p>
         </div>
         <div className="relative hidden items-center justify-center px-6 lg:flex"><DeskIllustration className="max-w-lg" /><span className="absolute bottom-6 right-6 text-[11px] text-muted-foreground">空间整理示意</span></div>

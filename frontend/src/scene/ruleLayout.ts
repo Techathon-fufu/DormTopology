@@ -312,7 +312,7 @@ function placeInsideContainer(
 }
 
 /** 桌面可用面积估算：桌面矩形 − 平放在桌面上（未被容器收纳）的物品包围盒与桌面矩形的相交面积 */
-function deskFreeArea(
+export function estimateDeskFreeArea(
   room: RoomConfig,
   poses: Array<{ object: SceneObject; position: Vec3 }>,
 ): number {
@@ -780,8 +780,8 @@ export function computeRuleBasedPlan(input: {
   ]
 
   const metrics = {
-    deskFreeAreaBefore: round2(deskFreeArea(room, beforePoses)),
-    deskFreeAreaAfter: round2(deskFreeArea(room, afterPoses)),
+    deskFreeAreaBefore: round2(estimateDeskFreeArea(room, beforePoses)),
+    deskFreeAreaAfter: round2(estimateDeskFreeArea(room, afterPoses)),
     placedCount: ctx.assignments.length,
     movableCount: movables.length,
     unplacedCount: unplaced.length,
