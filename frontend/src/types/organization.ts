@@ -22,7 +22,7 @@ export const ZONE_LABELS: Record<ZoneKind, string> = {
 export const ZONE_DESCRIPTIONS: Record<ZoneKind, string> = {
   desk: '键鼠、常用物品与带电设备的易取位置（桌面后排与两侧）',
   shelf: '书本与收纳容器的主要归位区（书架搁板上）',
-  underDesk: '排插等不常用带电设备的隐蔽放置区（桌下地面）',
+  underDesk: '主机及明确选择桌下的非常用收纳容器可放地面；插排使用横梁或桌面',
 }
 
 /** 分区参考线颜色（面板图例与三维叠加共用） */

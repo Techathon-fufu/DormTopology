@@ -143,3 +143,57 @@ test('rejects a consumed result after a later backend edit without changing loca
   await expect(page.getByRole('alert')).toBeVisible()
   expect((await readProject(page, id)).objects).toEqual(original.objects)
 })
+
+test('keeps ordinary demo objects above the floor through Python planning and apply', async ({ page }, testInfo) => {
+  test.setTimeout(120_000)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/projects/demo-dorm-101/workspace')
+  await expect(page.locator('canvas')).toBeVisible()
+  const url = await moduleUrl(page, '/src/state/projectsStore.ts')
+  const id = `floor-policy-${crypto.randomUUID()}`
+  await page.evaluate(async ({ url, id }) => {
+    const { useProjectsStore } = await import(url)
+    const project = structuredClone(useProjectsStore.getState().projects['demo-dorm-101'])
+    project.id = id
+    project.name = 'Floor placement regression'
+    project.cables = []
+    project.objects.forEach((object: { projectId: string }) => { object.projectId = id })
+    useProjectsStore.getState().upsert(project)
+  }, { url, id })
+  await page.goto(`/projects/${id}/workspace`)
+  const original = await readProject(page, id)
+  expect(original.objects).toHaveLength(17)
+  await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
+  await page.getByRole('checkbox', { name: '我已核对物品尺寸及整理前位置' }).check()
+  await page.getByRole('button', { name: '生成整理方案', exact: true }).last().click()
+  await expect.poll(async () => (await readPlan(page))?.serviceMeta?.source, { timeout: 90_000 }).toBe('real')
+  const plan = await readPlan(page)
+  expect(plan.serviceMeta.status).toBe('success')
+  expect(plan.serviceMeta.applicable).toBe(true)
+  expect(plan.unplaced).toEqual([])
+  expect((await readProject(page, id)).objects).toEqual(original.objects)
+  for (const assignment of plan.assignments) {
+    const object = original.objects.find((entry: { id: string }) => entry.id === assignment.objectId)
+    if (object.fixed || object.locked) continue
+    if (assignment.position[1] === 0) expect(object.model.shape).toBe('computerTower')
+  }
+  expect(plan.assignments.find((assignment: { objectId: string }) => assignment.objectId === 'demo-storage-box').zone).toBe('shelf')
+  if (!await page.getByRole('button', { name: '接受方案', exact: true }).isVisible()) {
+    await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
+  }
+  await page.getByRole('button', { name: '接受方案', exact: true }).click()
+  await expect.poll(async () => (await readProject(page, id)).layoutSource).toBe('algorithm')
+  const applied = await readProject(page, id)
+  const saved = await page.request.get(`/api/v1/projects/${id}/scene`)
+  expect(saved.status()).toBe(200)
+  const scene = await saved.json()
+  for (const object of applied.objects) {
+    const stored = scene.items.find((item: { id: string }) => item.id === object.id)
+    expect(stored.position[1]).toBeCloseTo(object.transform.position[1])
+    if (!object.fixed && !object.locked && object.transform.position[1] === 0) expect(object.model.shape).toBe('computerTower')
+  }
+  await page.keyboard.press('Escape')
+  const screenshot = testInfo.outputPath('floor-policy-demo-applied.png')
+  await page.screenshot({ path: screenshot, animations: 'disabled' })
+  await testInfo.attach('floor-policy-demo-applied', { path: screenshot, contentType: 'image/png' })
+})

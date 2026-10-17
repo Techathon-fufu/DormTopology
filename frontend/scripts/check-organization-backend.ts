@@ -16,6 +16,27 @@ assert.equal(scene.obstacles.length, 13)
 assert.equal(new Set(scene.regions.map((r) => r.id)).size, scene.regions.length)
 assert.deepEqual(scene.reserved_zones, [])
 const typing = scene.regions.find((region) => region.id === 'typing')!
+for (const preferredStorageZone of ['desk', 'shelf', 'underDesk'] as const) {
+  const variant = toPackingScene({ ...input, preferences: { ...preferences, preferredStorageZone } })
+  for (const item of variant.items) {
+    const floorAllowed = item.id === 'demo-computer-tower' || (item.id === 'demo-storage-box' && preferredStorageZone === 'underDesk')
+    assert.equal(item.allowed_region_ids.includes('under-desk'), floorAllowed, `${item.id}: floor eligibility with ${preferredStorageZone} preference`)
+    assert.ok(!item.allowed_region_ids.includes('support-floor'), 'room floor supports original poses only')
+    assert.ok(item.preferred_region_ids.every((id) => item.allowed_region_ids.includes(id)))
+  }
+  const storage = variant.items.find((item) => item.id === 'demo-storage-box')!
+  assert.ok(storage.preferred_region_ids.length > 0)
+  assert.ok(storage.preferred_region_ids.every((id) => preferredStorageZone === 'desk' ? id.startsWith('desk-clear-') : preferredStorageZone === 'shelf' ? id === 'support-shelf' : id === 'under-desk'))
+}
+const frequentStorage = demo.objects.map((object) => object.id === 'demo-storage-box' ? { ...object, frequent: true } : object)
+const frequentScene = toPackingScene({ ...input, objects: frequentStorage, preferences: { ...preferences, preferredStorageZone: 'underDesk' } })
+assert.ok(!frequentScene.items.find((item) => item.id === 'demo-storage-box')!.allowed_region_ids.includes('under-desk'))
+const noShelf = toPackingScene({ ...input, room: { ...demo.room, shelf: { ...demo.room.shelf, enabled: false } } })
+for (const item of noShelf.items.filter((entry) => entry.category === 'book' || entry.category === 'storageBox')) {
+  assert.ok(item.allowed_region_ids.length > 0)
+  assert.ok(item.allowed_region_ids.every((id) => id.startsWith('desk-clear-')))
+  assert.deepEqual(item.preferred_region_ids, [])
+}
 for (const item of scene.items.filter((entry) => entry.category === 'monitor' || entry.category === 'printer')) {
   assert.equal(item.placement_priority, 100)
   assert.ok(item.allowed_region_ids.length > 0)
@@ -71,10 +92,12 @@ assert.throws(() => mapPackingOrganizationResult({ ...response, scene_revision: 
 assert.throws(() => mapPackingOrganizationResult({ ...response, items: response.items.slice(1) }, ctx))
 assert.throws(() => mapPackingOrganizationResult({ ...response, items: [response.items[0], response.items[0]] }, ctx))
 assert.throws(() => canonicalScene({ ...canonical, items: [{ ...canonical.items[0], size_m: [1, 1, 1] }, canonical.items[1]] }, canonical))
+assert.throws(() => canonicalScene({ ...canonical, items: [{ ...canonical.items[0], preferred_region_ids: ['under-desk'] }, canonical.items[1]] }, canonical))
 const reorderKeys = (value: unknown): unknown => Array.isArray(value) ? value.map(reorderKeys)
   : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).reverse().map(([key, v]) => [key, reorderKeys(v)])) : value
 assert.deepEqual(canonicalScene(reorderKeys(canonical), canonical), canonical)
 const moved = (target: Vec3) => ({ ...response, items: [{ ...response.items[0], placement_status: 'placed', target_region_id: 'desk-clear-0', target_pos: toPackingPosition(target, demo.room) }, response.items[1]] })
+assert.throws(() => mapPackingOrganizationResult({ ...moved([-.2, 0, .4]), items: [{ ...moved([-.2, 0, .4]).items[0], target_region_id: 'under-desk' }, response.items[1]] }, ctx), /目标区域/)
 const collision = mapPackingOrganizationResult(moved(blocker.transform.position), ctx)
 assert.equal(collision.serviceMeta?.applicable, false)
 assert.ok(collision.serviceMeta?.issues.some((i) => i.code === 'overlap'))
@@ -90,6 +113,32 @@ assert.equal(infeasible.serviceMeta?.applicable, false)
 assert.equal(compileOrganizationCommands(infeasible, fixtures).length, 0)
 assert.equal(infeasible.serviceMeta?.issues[0].message, 'No valid layout')
 console.log('Organization backend checks passed: complete contract, coordinates, original baseline, source/confirmation, strict identity/coverage/poses, fixed collisions, support, furniture, infeasible, nullable continuous area.')
+
+if (process.argv.includes('--plan-demo')) {
+  for (const preferredStorageZone of ['shelf', 'underDesk'] as const) {
+    const demoInput = { ...input, preferences: { ...preferences, preferredStorageZone } }
+    const demoScene = { ...toPackingScene(demoInput), baseline_id: 'floor-policy-regression' }
+    const planned = spawnSync('python3', ['-B', '-c', 'import json,sys; from backend.app.domain.packing import plan_packing,validate_layout; from backend.examples.packing_demo import preview_scene; s=json.load(sys.stdin); r=plan_packing(s); assert validate_layout(preview_scene(s,r))["geometry_valid"]; print(json.dumps(r))'], {
+      cwd: resolve(process.cwd(), '..'), input: JSON.stringify(demoScene), encoding: 'utf8', timeout: 120_000,
+    })
+    assert.equal(planned.status, 0, planned.stderr)
+    const result = JSON.parse(planned.stdout)
+    const plan = mapPackingOrganizationResult(result, { ...demoInput, scene: demoScene, jobId: 'floor-policy-regression' })
+    assert.equal(plan.serviceMeta?.applicable, true, JSON.stringify(plan.serviceMeta?.issues))
+    assert.equal(result.status, 'success', JSON.stringify(result.issues))
+    assert.equal(plan.assignments.length, demo.objects.length)
+    for (const assignment of plan.assignments) {
+      const object = demo.objects.find((entry) => entry.id === assignment.objectId)!
+      if (object.fixed || object.locked) {
+        assert.deepEqual(assignment.position, object.transform.position)
+        continue
+      }
+      if (assignment.position[1] === 0) assert.ok(object.id === 'demo-computer-tower' || (object.id === 'demo-storage-box' && preferredStorageZone === 'underDesk'), `${object.id} must not land on the floor`)
+    }
+    assert.equal(plan.assignments.find((a) => a.objectId === 'demo-storage-box')!.zone, preferredStorageZone)
+    console.log(`Full ${demo.objects.length}-item Python plan passed: ${preferredStorageZone} preference, geometry valid, no ordinary items on floor.`)
+  }
+}
 
 if (process.argv.includes('--http')) {
   const saved = new Map<string, string>()
@@ -167,7 +216,7 @@ if (process.argv.includes('--http')) {
   console.log('Lost apply response recovery passed: real commit, immediate readback, later 409 retry, mismatching revision refused, and repeated apply protection retained.')
 
   const { knownOrganizationScene } = await import('../src/api/core/organizationScenes')
-  const syncCases = ['initial', 'noop', 'edited', 'baseline-change', 'retry', 'wrong-source', 'wrong-version', 'wrong-name', 'wrong-usage', 'wrong-image', 'wrong-geometry', 'wrong-id', 'wrong-baseline', 'changed-baseline-id', 'aborted'] as const
+  const syncCases = ['initial', 'noop', 'edited', 'baseline-change', 'retry', 'wrong-source', 'wrong-version', 'wrong-name', 'wrong-usage', 'wrong-preference', 'wrong-image', 'wrong-geometry', 'wrong-id', 'wrong-baseline', 'changed-baseline-id', 'aborted'] as const
   for (const recovery of syncCases) {
     const recoveryId = `${projectId}-sync-${recovery}`
     const recoveryProject = { ...project, id: recoveryId, objects: project.objects.map((object) => ({ ...object, projectId: recoveryId })) }
@@ -197,6 +246,7 @@ if (process.argv.includes('--http')) {
         if (recovery === 'wrong-version') state.scene.scene_revision += 1
         if (recovery === 'wrong-name') state.scene.items[0].name += ' changed'
         if (recovery === 'wrong-usage') state.scene.items[0].usage_frequency = state.scene.items[0].usage_frequency === 'high' ? 'medium' : 'high'
+        if (recovery === 'wrong-preference') state.scene.items[0].preferred_region_ids = ['under-desk']
         if (recovery === 'wrong-image') state.scene.items[0].image_url = 'https://example.invalid/other-image.png'
         if (recovery === 'wrong-geometry') state.scene.items[0].position[0] += .01
         if (recovery === 'wrong-id') state.scene.scene_id += '-another-scene'
