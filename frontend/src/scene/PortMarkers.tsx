@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useConnectionsStore } from '@/features/connections/store'
 import { Html } from '@react-three/drei'
 import type { Port, Project, Vec3 } from '@/types/project'
 import { PORT_TYPE_LABELS } from '@/types/project'
@@ -29,7 +30,6 @@ export function PortMarkers({ project }: { project: Project }) {
     const out: PortMarkerData[] = []
     for (const o of project.objects) {
       if (!o.visible || o.ports.length === 0) continue
-      if (o.category !== 'electrical' && !o.needsPower) continue
       for (const p of o.ports) {
         out.push({ objectId: o.id, objectName: o.name, port: p, position: portWorldPosition(o, p) })
       }
@@ -37,7 +37,8 @@ export function PortMarkers({ project }: { project: Project }) {
     return out
   }, [project.objects])
 
-  if (!showPorts) return null
+  const picking = useConnectionsStore(s => s.projectId === project.id && s.pickingObjectId !== null)
+  if (!showPorts || picking) return null
 
   return (
     <group>
@@ -88,6 +89,7 @@ export function PortMarkers({ project }: { project: Project }) {
                     {' '}
                     · {m.port.label ?? PORT_TYPE_LABELS[m.port.type]}
                   </span>
+                  {m.port.note ? <p className="mt-1 max-w-48 whitespace-normal break-words text-xs text-muted-foreground">{m.port.note}</p> : null}
                   <div className="text-[10px] text-faint">
                     {isLinkSource
                       ? '已选为起点：再点击另一个接口'

@@ -1,3 +1,4 @@
+import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 import type { LayoutPlan, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, OrganizationSceneRef, PlanAssignment, ZoneKind } from '@/types/organization'
 import { collisionsOverlap, exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
@@ -6,7 +7,7 @@ import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { BED_UNDERSIDE_Y, computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
 import { allowsFloorPlacement, monitorViewRegion, printerSideRegions, subtractRect } from '@/scene/organizationPolicy'
 import { DESK_GAP, placementIssues } from '@/scene/sceneValidation'
-import { localDirVec, resolvePortOffset } from '@/scene/ports'
+import { resolvePortOffset } from '@/scene/ports'
 import { estimateDeskFreeArea } from '@/scene/ruleLayout'
 import { uid } from '@/lib/utils'
 import { ApiError } from './errors'
@@ -174,7 +175,7 @@ export function toPackingScene(input: {
       id: p.id,
       type: p.type === 'power-ac' || p.type === 'dc' ? (p.powered && !object.powerStrip ? 'power_sink' : 'power_source')
         : p.type === 'hdmi' ? 'hdmi' : p.type === 'rj45' ? 'network' : 'usb',
-      local_position: resolvePortOffset(object, p), local_direction: localDirVec(p.direction ?? 'back'), capacity: 1, confirmed: false,
+      local_position: resolvePortOffset(object, p), local_direction: resolvePortLocalDirection(p), capacity: 1, confirmed: false,
     }))
     // The strip bus is a sink; all sockets are sources regardless of display powered flags.
     if (object.powerStrip) {

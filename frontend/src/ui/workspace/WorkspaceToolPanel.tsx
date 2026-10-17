@@ -27,6 +27,7 @@ export function WorkspaceToolPanel({
   onConfirmRouting,
   busy,
   onPlanCables,
+  onOpenMarking,
   onFlash,
   onGenerateModel,
   className,
@@ -38,6 +39,8 @@ export function WorkspaceToolPanel({
   onConfirmRouting: (confirmed: boolean) => void
   busy: boolean
   onPlanCables: (targetIds?: string[]) => void
+  /** 打开表面描点页面（连线模式与手机端入口；桌面也可右键物品） */
+  onOpenMarking?: () => void
   onFlash: (msg: string) => void
   onGenerateModel: (object: SceneObject) => void
   className?: string
@@ -186,6 +189,7 @@ export function WorkspaceToolPanel({
               onConfirmRouting={onConfirmRouting}
               busy={busy}
               onPlanCables={onPlanCables}
+              onOpenMarking={onOpenMarking}
               onFlash={onFlash}
               className="min-h-0 flex-1"
               showPlanningActions={false}

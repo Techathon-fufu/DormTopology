@@ -133,6 +133,14 @@ export interface Port {
   offset?: Vec3
   /** 接口朝向（局部方向），默认朝后 */
   direction?: PortDirection
+  /**
+   * 接口局部朝向（单位向量，设备自身坐标系）。
+   * 显式填写时优先于六轴 `direction`；非法（非有限 / 零向量）时回退 `direction`。
+   * 与 `direction` 同义（不是新的走线字段，仅本地存储更精确方向）。
+   */
+  localDirection?: Vec3
+  /** 用户本地备注（仅本地元数据，不参与后端走线 JSON） */
+  note?: string
   /** 用户已核对当前局部接口位置、方向及类型；编辑这些字段后须重新确认。 */
   confirmed?: boolean
 }
