@@ -12,6 +12,15 @@ import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
 
+/**
+ * 内置示例项目的数据种子版本。
+ * 每次修改示例场景（尺寸、物品、线缆等）都要 +1：浏览器里已存在的示例项目会在载入时
+ * 按最新数据重种，避免"代码已更新、页面仍是旧场景"。
+ * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
+ * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
+ */
+export const DEMO_SEED_VERSION = 2
+
 export const DEMO_ROOM_NOTE =
   '示例尺寸（可修改）：桌面 1600 × 800 × 750 mm，仅为演示默认值，请以实际测量为准'
 
@@ -99,7 +108,8 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       name: '显示器',
       category: 'electrical',
       dimensions: { width: 0.54, height: 0.46, depth: 0.18 },
-      transform: { position: [0.1, deskY, 0.19], rotationY: 0.1 },
+      // 避开书架搁板 z 范围 [0.05, 0.25]：显示器高 0.46 > 搁板下净空 0.371，必须放在搁板投影之外
+      transform: { position: [0.1, deskY, 0.4], rotationY: 0.1 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'monitor' },
       ports: [
         {
@@ -171,7 +181,8 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       name: '台灯',
       category: 'electrical',
       dimensions: { width: 0.16, height: 0.45, depth: 0.18 },
-      transform: { position: [0.47, deskY, 0.23], rotationY: 0.6 },
+      // 同显示器：高 0.45 > 搁板下净空 0.371，落在搁板投影之外（z ≥ 0.25 + 深度/2）
+      transform: { position: [0.47, deskY, 0.46], rotationY: 0.6 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'lamp' },
       ports: [
         {
@@ -535,6 +546,7 @@ export function createDemoProject(): Project {
     objects,
     cables: createDemoCables(objects),
     organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backLeft' },
+    demoSeedVersion: DEMO_SEED_VERSION,
     stage: 'organize',
   }
 }

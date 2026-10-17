@@ -2,12 +2,24 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Project } from '@/types/project'
-import { createDemoProject, DEMO_PROJECT_ID } from '@/data/demoProject'
+import { createDemoProject, DEMO_PROJECT_ID, DEMO_SEED_VERSION } from '@/data/demoProject'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
  * 照片与模型文件不放这里，见 src/storage/idb.ts。
+ *
+ * 两层版本，职责不同，不要混用：
+ * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
+ * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
+const PROJECTS_PERSIST_VERSION = 2
+
+/** 内置示例项目是否需要按最新示例数据重种 */
+export function isDemoProjectStale(project: Project | undefined): boolean {
+  if (!project || project.id !== DEMO_PROJECT_ID) return false
+  return (project.demoSeedVersion ?? 0) < DEMO_SEED_VERSION
+}
+
 interface ProjectsState {
   projects: Record<string, Project>
   ensureDemo: () => void
@@ -23,7 +35,10 @@ export const useProjectsStore = create<ProjectsState>()(
     (set, get) => ({
       projects: {},
       ensureDemo() {
-        if (!get().projects[DEMO_PROJECT_ID]) {
+        const existing = get().projects[DEMO_PROJECT_ID]
+        // 不存在，或仍是旧种子版本的示例场景：按最新示例数据重种。
+        // 仅作用于内置示例项目，用户自建项目不受影响。
+        if (!existing || isDemoProjectStale(existing)) {
           set((s) => ({ projects: { ...s.projects, [DEMO_PROJECT_ID]: createDemoProject() } }))
         }
       },
@@ -53,7 +68,23 @@ export const useProjectsStore = create<ProjectsState>()(
         })
       },
     }),
-    { name: 'dormtopology.projects', version: 1 },
+    {
+      name: 'dormtopology.projects',
+      version: PROJECTS_PERSIST_VERSION,
+      /**
+       * v1 → v2：早期版本把示例场景写进了本地存储，示例数据更新后不会自动生效。
+       * 迁移时仅按最新示例数据重种内置示例项目；用户自建项目原样保留（补默认种子版本除外）。
+       */
+      migrate: (persisted, from) => {
+        const state = persisted as Partial<ProjectsState> | undefined
+        if (!state?.projects) return persisted as ProjectsState
+        const projects = { ...state.projects }
+        if (from < PROJECTS_PERSIST_VERSION && isDemoProjectStale(projects[DEMO_PROJECT_ID])) {
+          projects[DEMO_PROJECT_ID] = createDemoProject()
+        }
+        return { ...state, projects } as ProjectsState
+      },
+    },
   ),
 )
 
