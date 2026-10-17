@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createDemoProject, createStandardRoom } from '../src/data/demoProject'
+import { createLegacyDemoProject as createDemoProject } from './fixtures/legacyDemo'
 import { cachedRoomSolids, roomSolids } from '../src/scene/roomCollision'
 import { objectExtent, objectFootprint, objectRoomHits, objectsCollide } from '../src/scene/collisionGeometry'
 import { computeOrganizationZones } from '../src/scene/organizationZones'
@@ -16,7 +16,7 @@ import {
 } from '../src/scene/sceneValidation'
 import type { RoomConfig, SceneObject, Vec3 } from '../src/types/project'
 
-const room = createStandardRoom()
+const room = createDemoProject().room
 
 /** Minimal object factory: bottom-centre position, metres, shape-driven collision. */
 function obj(

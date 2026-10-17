@@ -80,7 +80,6 @@ export function PortMarkers({ project }: { project: Project }) {
               <Html
                 position={[0, 0.045, 0]}
                 center
-                distanceFactor={8}
                 zIndexRange={[30, 10]}
               >
                 <div className="pointer-events-none whitespace-nowrap rounded-md border border-border bg-surface/95 px-2 py-1 text-[11px] leading-tight shadow-sm">

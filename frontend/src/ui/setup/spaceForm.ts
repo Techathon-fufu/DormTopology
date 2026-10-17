@@ -1,6 +1,7 @@
 import { OUTLET_FIXED_Y_M, type RoomConfig, type Vec3 } from '@/types/project'
 import { createStandardRoom } from '@/data/demoProject'
 import { mmToM, mToMm } from '@/lib/units'
+import { validFurnitureHole } from '@/scene/fixedFurniture'
 
 /**
  * 空间配置表单模型（单位：毫米 mm，面向用户）。
@@ -35,6 +36,7 @@ export interface SpaceOutletForm {
 }
 
 export interface SpaceForm {
+  furnitureModel?: RoomConfig['furnitureModel']
   deskW: number
   deskD: number
   deskH: number
@@ -76,7 +78,7 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
   const push = (id: string, level: ValidationIssue['level'], message: string) =>
     issues.push({ id, level, message })
 
-  for (const [key, field] of RANGE_FIELDS) {
+  for (const [key, field] of f.furnitureModel ? [] : RANGE_FIELDS) {
     const range = SPACE_RANGES[key]
     const value = f[field] as number
     if (!Number.isFinite(value)) {
@@ -91,7 +93,7 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
   }
 
   // 书架结构冲突（对照示例床架；床桌 / 房间 / 立柱为固定模型，不在此校验）
-  if (f.shelfEnabled) {
+  if (f.shelfEnabled && !f.furnitureModel) {
     const headroom = f.deskH + f.shelfAbove + 250
     if (headroom > BED_UNDERSIDE_MM) {
       push(
@@ -113,7 +115,10 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
       `出线孔直径需在 ${SPACE_RANGES.holeDiameter.min}–${SPACE_RANGES.holeDiameter.max} mm 之间`,
     )
   }
-  if (
+  if (f.furnitureModel) {
+    const room = formToRoom(f)
+    if (!validFurnitureHole(room, room.cableHoles[0].position, room.cableHoles[0].diameter)) push('hole-position', 'error', '出线孔需完整位于真实 L 形桌面内，不能位于缺口或桌外')
+  } else if (
     Math.abs(f.hole.x) > f.deskW / 2 - 40 ||
     f.hole.z < DESK_WALL_GAP_MM + 40 ||
     f.hole.z > DESK_WALL_GAP_MM + f.deskD - 40
@@ -139,6 +144,7 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
 export function roomToForm(room: RoomConfig): SpaceForm {
   const hole = room.cableHoles[0]
   return {
+    furnitureModel: room.furnitureModel,
     deskW: mToMm(room.desk.width),
     deskD: mToMm(room.desk.depth),
     deskH: mToMm(room.desk.height),
@@ -174,6 +180,7 @@ export function roomToForm(room: RoomConfig): SpaceForm {
 export function formToRoom(f: SpaceForm): RoomConfig {
   return {
     template: 'loft-standard',
+    furnitureModel: f.furnitureModel,
     length: mmToM(f.roomL),
     width: mmToM(f.roomW),
     height: mmToM(f.roomH),

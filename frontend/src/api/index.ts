@@ -1,31 +1,34 @@
 import type { AppServices } from './types'
-import { mockServices } from './mock'
+import { mockRecognitionService } from './mock/recognition'
+import { mockModelGenerationService } from './mock/modelGeneration'
 import { httpServices } from './http'
-import { envApiMode, isDemoFallbackMode, resolvedApiMode, organizationApiMode, setApiModeOverride } from './core/config'
+import { resolvedApiMode } from './core/config'
 
 /**
- * 服务注册入口：按运行模式选择实现（唯一开关，其他模块不得自行判断环境变量）。
+ * 服务注册入口：规划固定请求后端；供应商能力按构建配置选择实现。
  *
- * - `VITE_API_MODE=mock`（默认）：本地模拟服务，界面标注「模拟」
- * - `VITE_API_MODE=real`：调用应用后端（统一 HTTP 客户端 + jobId 长任务轮询 + 健康检查）
- * - 兼容旧变量 `VITE_SERVICE_MODE=mock|service`；VITE_API_MODE 优先
- * - 后端不可用时界面提供「切换到演示模式」入口（持久化到 localStorage，刷新后仍生效）
+ * 旧规划模式变量与浏览器覆盖不能启用本地规则规划。
  */
 
 const mode = resolvedApiMode
 
 export const services: AppServices = {
-  ...(mode === 'real' ? httpServices : mockServices),
-  organizationPlanning: organizationApiMode === 'real' ? httpServices.organizationPlanning : mockServices.organizationPlanning,
+  ...httpServices,
+  mode,
+  meta: {
+    label: '后端规划',
+    description: mode === 'mock' ? '整理与走线请求后端；识别和模型生成使用模拟数据' : '请求应用后端',
+  },
+  recognition: mode === 'real' ? httpServices.recognition : mockRecognitionService,
+  modelGeneration: mode === 'real' ? httpServices.modelGeneration : mockModelGenerationService,
 }
 
+/** 识别与模型生成的供应商模式，不影响整理或走线。 */
 export const isMockMode = services.mode === 'mock'
-export const isOrganizationMockMode = organizationApiMode === 'mock'
-export const hasRealServices = !isMockMode || !isOrganizationMockMode
+export const hasRealServices = true
 export const apiMode = services.mode
 
-// 运行模式（供界面展示与切换；密钥边界：前端没有任何服务密钥）
-export { envApiMode, isDemoFallbackMode, setApiModeOverride }
+export { envApiMode } from './core/config'
 
 // 统一错误与健康检查 / 长任务工具（界面与服务层共用）
 export { ApiError, describeApiError, isApiError, isServiceFailure } from './core/errors'

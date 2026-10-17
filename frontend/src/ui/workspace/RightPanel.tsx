@@ -31,8 +31,7 @@ import {
 } from '@/types/project'
 import { isMockMode } from '@/api'
 import { nearestSupport, type SceneIssue } from '@/scene/sceneValidation'
-import { cableDisplayPoints } from '@/scene/cables'
-import { estimateCableLength } from '@/scene/cableRoute'
+import { totalCablePathLength } from '@/scene/cableGeometry'
 import { isPowerStripObject } from '@/scene/powerStrip'
 import { PORT_TYPE_COLORS, portWorldPosition, resolvePortOffset } from '@/scene/ports'
 import { useCableLink } from '@/lib/useCableLink'
@@ -595,11 +594,8 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 
 function ProjectSummary({ project }: { project: Project }) {
   const navigate = useNavigate()
-  // 线缆总长：按「端点到接口贴合后的平滑路径」实时估算（计算值）
-  const totalCableLength = project.cables.reduce(
-    (sum, c) => sum + estimateCableLength(cableDisplayPoints(c, project.objects, 'suggested')),
-    0,
-  )
+  const totalCableLength = totalCablePathLength(project.cables, project.objects)
+  const estimated = project.cables.some((c) => c.route.pathLengthM === undefined)
   const electrical = project.objects.filter((o) => o.category === 'electrical').length
   const mm3 = (v: number[]) => `${v.map((x) => Math.round(mToMm(x))).join(' × ')} mm`
 
@@ -633,10 +629,10 @@ function ProjectSummary({ project }: { project: Project }) {
             value={
               <span
                 className="inline-flex items-center gap-1.5"
-                title="按端点到接口贴合后的平滑路径实时估算（本地计算值）"
+                title={totalCableLength === null ? '部分线缆尚无有效路径，无法计算完整总长度' : estimated ? '按当前展示路径估算' : '采用后端已验证曲线长度'}
               >
-                {project.cables.length} 条 · 约 {formatMeters(totalCableLength)}
-                <DataBadge kind="computed" />
+                {project.cables.length} 条 · {totalCableLength === null ? '总长未知' : `${estimated ? '约 ' : ''}${formatMeters(totalCableLength)}`}
+                {totalCableLength !== null ? <DataBadge kind={estimated ? 'computed' : 'real'} /> : null}
               </span>
             }
           />

@@ -1,5 +1,6 @@
 import { mockSleep } from '@/lib/mockPacing'
 import { planCableRoute } from '@/scene/cableRoute'
+import { validateCableConnection } from '@/scene/cables'
 import { computeCableAvoidZones } from '@/scene/routeNodes'
 import { CABLE_VISIBILITY_META } from '@/types/project'
 import type { CableConnection } from '@/types/project'
@@ -12,7 +13,7 @@ import type { CablePlanningService, CablePlanningResult } from '../types'
  * 1. 收集避让区（打字活动区 / 水杯活动区 / 桌下腿部活动区）；
  * 2. 对每条目标线缆：按线材类型（可见线 = 出线槽策略 / 隐藏线 = 背板后策略）
  *    在候选节点链（桌边 / 桌底 / 背板 / 桌腿 / 出线孔 / 地面）中挑选第一条通过
- *    「平滑采样障碍检查」的路径；
+ *    「连接、线长、平滑采样障碍与弯曲检查」的路径；
  * 3. 首次规划时把规划前的走线留存为「原始走线」快照（用于对比与收拢动画）；
  * 4. 全部候选失败 → 标记 conflict 并附具体问题（用户可调整路径节点）。
  *
@@ -44,18 +45,22 @@ export const mockCablePlanningService: CablePlanningService = {
 
       const fromObject = objects.find((o) => o.id === cable.from.objectId)
       const toObject = objects.find((o) => o.id === cable.to.objectId)
-      if (!fromObject || !toObject) {
+      const connection = validateCableConnection({ objects, cables }, cable.from, cable.to, { excludeCableId: cable.id, kind: cable.kind })
+      if (!fromObject || !toObject || !connection.ok) {
         conflictCount += 1
+        const { verification: _verification, pathLengthM: _pathLengthM, ...route } = cable.route
         updated.push({
           ...cable,
+          route,
           status: 'conflict',
-          note: '端点设备已删除，无法规划路径（请重新建立连接）',
+          planSource: 'demo-rule',
+          note: !connection.ok ? connection.reason : '端点设备已删除，无法规划路径（请重新建立连接）',
           updatedAt: Date.now(),
         })
         continue
       }
 
-      const result = planCableRoute(cable, objects, room, avoidZones)
+      const result = planCableRoute(cable, objects, room, avoidZones, cables)
       const originalRoute = cable.originalRoute
         ? cable.originalRoute
         : {
@@ -101,7 +106,7 @@ export const mockCablePlanningService: CablePlanningService = {
           originalRoute,
           status: 'conflict',
           planSource: 'demo-rule',
-          note: `${visLabel}未找到无碰撞的演示路径：${firstIssue}（共 ${result.issues.length} 处，可调整路径节点后重新检查）`,
+          note: `${visLabel}演示路径未通过检查：${firstIssue}（共 ${result.issues.length} 处，请检查连接、线长或路径节点）`,
           updatedAt: Date.now(),
         })
       }
@@ -118,7 +123,9 @@ export const mockCablePlanningService: CablePlanningService = {
       algorithmVerified: false,
       notes: [
         '路径为规则式演示规划，平滑曲线仅用于显示，未经过真实算法验证。',
-        '避让结论来自本地几何检查（采样点 vs 避让区 / 物品 / 桌板），不是真实寻路算法。',
+        '避让结论来自本地采样几何检查（含线径扫掠），不是真实寻路算法。',
+        ...(targets.some((c) => c.actualLengthM === undefined) ? ['部分线缆未填写实际线长，尚未验证长度是否足够。'] : []),
+        '线径净空与弯曲半径只经过本地采样检查；连续曲线与支撑可行性需要真实后端验证。',
       ],
     }
     return result

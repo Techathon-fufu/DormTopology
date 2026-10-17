@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
-import type { GenerationJob, SceneObject } from '@/types/project'
+import type { GenerationJob, Project, SceneObject } from '@/types/project'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
 import { usePlansStore } from '@/state/plansStore'
 import { useJobsStore } from '@/state/jobsStore'
@@ -10,6 +10,7 @@ import { useCableStore } from '@/state/cableStore'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { isMockMode, services } from '@/api'
+import { cablePlanningInputSignature } from '@/api/core/routingWire'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { validateScene, type SceneIssue } from '@/scene/sceneValidation'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,19 @@ import { Drawer } from '@/ui/kit/drawer'
 import { EmptyState } from '@/ui/kit/empty-state'
 
 const mm = (v: number) => Math.round(v * 1000) / 1000
+
+function routingConfirmationSignature(project: Project): string {
+  return JSON.stringify({
+    room: project.room,
+    objects: project.objects.map((object) => ({
+      id: object.id,
+      dimensions: object.dimensions,
+      transform: object.transform,
+      ports: object.ports,
+      visible: object.visible,
+    })),
+  })
+}
 
 /**
  * 拖拽提示芯片：只订阅拖拽状态，拖动时仅此组件重渲染（避免整页重渲染）。
@@ -87,8 +101,26 @@ export function WorkspacePage() {
   const [rightOpen, setRightOpen] = useState(false)
   const [plansOpen, setPlansOpen] = useState(false)
   const flashTimer = useRef<number | null>(null)
+  const cablePlanning = useRef(false)
+  const [routingConfirmation, setRoutingConfirmation] = useState<string | null>(null)
 
   const projectId = project?.id
+  const routingConfirmed = Boolean(project && routingConfirmation === `${project.id}:${routingConfirmationSignature(project)}`)
+
+  const confirmRouting = (confirmed: boolean) => {
+    if (!confirmed || !project) {
+      setRoutingConfirmation(null)
+      return
+    }
+    for (const object of project.objects) {
+      if (object.ports.length === 0) continue
+      useWorkspaceStore.getState().updateObject(project.id, object.id, {
+        ports: object.ports.map((port) => ({ ...port, confirmed: port.type !== 'wireless' })),
+      })
+    }
+    const current = useProjectsStore.getState().projects[project.id]
+    setRoutingConfirmation(`${current.id}:${routingConfirmationSignature(current)}`)
+  }
 
   // 场景摆放校验（越界 / 相交 / 悬空）：随项目数据变化实时重算
   const issuesById = useMemo(
@@ -252,24 +284,29 @@ export function WorkspacePage() {
 
   const runPlanCables = async (targetIds?: string[]) => {
     const p = useProjectsStore.getState().projects[projectId ?? '']
-    if (!p || useOrganizeStore.getState().isPreviewBlocking()) return
+    if (!p || cablePlanning.current || useOrganizeStore.getState().isPreviewBlocking()) return
+    if (!routingConfirmed) {
+      showFlash('请先核对并确认物品尺寸、位置与接口')
+      return
+    }
+    const inputSignature = cablePlanningInputSignature(p)
+    cablePlanning.current = true
     const job = createJob({
       projectId: p.id,
       type: 'cable',
       title:
         targetIds && targetIds.length > 0
-          ? isMockMode
-            ? '更新走线（演示）'
-            : '更新走线（真实后端）'
-          : isMockMode
-            ? '规划走线（演示）'
-            : '规划走线（真实后端）',
-      mock: isMockMode,
+          ? '更新走线（真实后端）'
+          : '规划走线（真实后端）',
+      mock: false,
     })
     setBusy('cable')
     updateJob(job.id, { status: 'running', progress: 0.05, stageLabel: '准备中' })
     try {
       const result = await services.cablePlanning.planCables({
+        project: p,
+        baseline: usePlansStore.getState().baselines[p.id],
+        confirmed: routingConfirmed,
         projectId: p.id,
         objects: p.objects,
         room: p.room,
@@ -279,9 +316,11 @@ export function WorkspacePage() {
         onProgress: (progress, stageLabel) =>
           updateJob(job.id, { status: 'running', progress, stageLabel }),
       })
-      // 重新读取最新数据后合并（规划期间可能有其它编辑），并通过工作台写入（可撤销）
       const current = useProjectsStore.getState().projects[p.id]
       if (!current) return
+      if (cablePlanningInputSignature(current) !== inputSignature) {
+        throw new Error('场景或线缆已变化，旧走线结果已丢弃。请重新规划。')
+      }
       const updatedById = new Map(result.cables.map((c) => [c.id, c]))
       const nextCables = current.cables.map((c) => updatedById.get(c.id) ?? c)
       useWorkspaceStore.getState().replaceCables(p.id, nextCables, true)
@@ -290,27 +329,25 @@ export function WorkspacePage() {
         result.conflictCount > 0 ? `，${result.conflictCount} 条存在障碍（见右侧路径检查）` : ''
       }`
       const warnCount = result.warnings?.length ?? 0
-      const verifyNote = isMockMode
-        ? '规则式演示，未经真实算法验证'
-        : `真实后端算法结果${result.algorithmVerified ? '（后端已标记 verified）' : '（后端未标记 verified）'}${
-            warnCount > 0 ? `，本地校验未采用 ${warnCount} 条路径` : ''
-          }`
+      const verifyNote = `真实后端算法结果${result.algorithmVerified ? '（后端已标记 verified）' : '（后端未标记 verified）'}${
+        warnCount > 0 ? `，本地校验未采用 ${warnCount} 条路径` : ''
+      }`
       updateJob(job.id, {
-        status: result.conflictCount > 0 ? 'partial' : 'success',
+        status: result.conflictCount > 0 ? result.plannedCount > 0 ? 'partial' : 'failed' : 'success',
         progress: 1,
         resultNote: `${summary} · ${verifyNote}`,
       })
       showFlash(
-        `${summary}：路径来自${
-          isMockMode ? '规则式演示（未经真实算法验证）' : '真实后端算法（经本地校验）'
-        }${result.plannedCount > 0 ? '，可在左侧播放「收拢动画」查看原始 → 建议对比' : ''}（可撤销）`,
+        `${summary}：路径来自真实后端算法${result.plannedCount > 0 ? '，可在左侧播放「收拢动画」查看原始 → 建议对比' : ''}（可撤销）`,
       )
     } catch (err) {
+      showFlash(err instanceof Error ? err.message : String(err))
       updateJob(job.id, {
         status: 'failed',
         error: err instanceof Error ? err.message : String(err),
       })
     } finally {
+      cablePlanning.current = false
       setBusy(null)
     }
   }
@@ -421,6 +458,8 @@ export function WorkspacePage() {
         {mode === 'cable' ? (
           <CableListPanel
             project={project}
+            routingConfirmed={routingConfirmed}
+            onConfirmRouting={confirmRouting}
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
@@ -447,7 +486,7 @@ export function WorkspacePage() {
           {busy === 'cable' ? (
             <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 text-xs shadow-sm">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-              走线规划中（规则式演示）…
+              走线规划中（真实后端）…
             </div>
           ) : null}
 
@@ -524,12 +563,14 @@ export function WorkspacePage() {
         {mode === 'cable' ? (
           <CableListPanel
             project={project}
+            routingConfirmed={routingConfirmed}
+            onConfirmRouting={confirmRouting}
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
             className="h-full w-full border-r"
             onClose={() => setLeftOpen(false)}
-            onAfterSelect={() => setLeftOpen(false)}
+            onAfterSelect={() => { setLeftOpen(false); setRightOpen(true) }}
           />
         ) : (
           <LeftPanel
@@ -577,7 +618,7 @@ export function WorkspacePage() {
             onPlanCables={(ids) => void runPlanCables(ids)}
             onFlash={showFlash}
             className="h-full w-full border-l"
-            onClose={() => useCableStore.getState().selectCable(null)}
+            onClose={() => setRightOpen(false)}
           />
         ) : organizeOpen || !selectedId ? (
           <WorkspaceOverview

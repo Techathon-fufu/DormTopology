@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-test.skip(process.env.PLAYWRIGHT_REAL_ORGANIZATION !== '1', 'Requires a running Python backend and VITE_ORGANIZATION_API_MODE=real.')
+test.skip(process.env.PLAYWRIGHT_REAL_ORGANIZATION !== '1', 'Requires a running Python backend and the Vite source development server.')
 
 async function moduleUrl(page: Page, path: string) {
   return page.evaluate((pathname) => {
@@ -39,6 +39,9 @@ async function openConfirmedPreview(page: Page) {
     const project = structuredClone(source)
     project.id = id
     project.name = 'HTTP organization regression'
+    project.room.furnitureModel = undefined
+    project.room.desk = { width: 1.6, depth: .8, height: .75, thickness: .025 }
+    project.room.shelf = { enabled: true, levels: 1, heightAboveDesk: .38, depth: .2 }
     project.cables = []
     project.objects = [-0.2, -0.16, 0.55].map((x, index) => ({
       ...structuredClone(source.objects[0]),
@@ -192,7 +195,12 @@ test('centres the monitor, places the printer beside it and keeps ordinary objec
   if (!await page.getByRole('button', { name: '接受方案', exact: true }).isVisible()) {
     await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
   }
+  const appliedResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith(`/jobs/${plan.serviceMeta.jobId}/apply`))
   await page.getByRole('button', { name: '接受方案', exact: true }).click()
+  const response = await appliedResponse
+  expect(response.status()).toBe(200)
+  const canonical = await response.json()
+  expect(canonical.scene_revision).toBe(plan.serviceMeta.sceneRevision + 1)
   await expect.poll(async () => (await readProject(page, id)).layoutSource).toBe('algorithm')
   const applied = await readProject(page, id)
   const appliedMonitor = applied.objects.find((object: { id: string }) => object.id === 'demo-monitor')
@@ -204,9 +212,16 @@ test('centres the monitor, places the printer beside it and keeps ordinary objec
   const saved = await page.request.get(`/api/v1/projects/${id}/scene`)
   expect(saved.status()).toBe(200)
   const scene = await saved.json()
+  expect(scene).toEqual(canonical)
   for (const object of applied.objects) {
+    const assignment = plan.assignments.find((entry: { objectId: string }) => entry.objectId === object.id)
+    expect(object.transform.position).toEqual(assignment.position)
+    expect(object.transform.rotationY).toBe(assignment.rotationY)
     const stored = scene.items.find((item: { id: string }) => item.id === object.id)
+    expect(stored.position[0]).toBeCloseTo(object.transform.position[0] + (applied.room.furnitureModel ? .45 : applied.room.desk.width / 2))
     expect(stored.position[1]).toBeCloseTo(object.transform.position[1])
+    expect(stored.position[2]).toBeCloseTo(object.transform.position[2] - (applied.room.furnitureModel ? .042 : .05))
+    expect(stored.rotation_y_rad).toBeCloseTo(object.transform.rotationY)
     if (!object.fixed && !object.locked && object.transform.position[1] === 0) expect(object.model.shape).toBe('computerTower')
   }
   await page.keyboard.press('Escape')

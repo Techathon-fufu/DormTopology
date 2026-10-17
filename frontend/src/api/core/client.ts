@@ -76,7 +76,7 @@ async function doFetch(
         path: url,
       })
     }
-    throw new ApiError('无法连接后端服务：网络不可达或后端未启动（可切换到演示模式继续体验）', {
+    throw new ApiError('无法连接后端服务：请检查网络和后端状态后重试', {
       kind: 'network',
       path: url,
       detail: err instanceof Error ? err.message : String(err),

@@ -153,7 +153,7 @@ class OrganizationAPITests(unittest.TestCase):
             404,
         )
         self.assertEqual(self.client.get("/api/v1/jobs/missing").status_code, 404)
-        for path in ("recognition", "models/generate", "cables/plan", "layout/plan"):
+        for path in ("recognition", "models/generate", "layout/plan"):
             self.assertEqual(
                 self.client.post(f"/api/v1/{path}", json={}).status_code, 501
             )

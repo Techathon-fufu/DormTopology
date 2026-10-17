@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
-import { toPackingScene, mapPackingOrganizationResult, toPackingPosition } from '../src/api/core/packingWire'
-import { createDemoProject } from '../src/data/demoProject'
+import { toPackingScene, mapPackingOrganizationResult, packingBaseline, sceneRef, toPackingPosition, type PackingScene } from '../src/api/core/packingWire'
+import { createLegacyDemoProject as createDemoProject } from './fixtures/legacyDemo'
 import { computeOrganizationZones } from '../src/scene/organizationZones'
 import { worldCollision } from '../src/scene/collisionGeometry'
 import { resolveOrganizationPreferences } from '../src/types/organization'
+import { planFromProject } from '../src/lib/plans'
 import type { SceneObject, Vec3 } from '../src/types/project'
 
 const demo = createDemoProject()
@@ -180,3 +181,99 @@ centered('original-quarter-turn', {
     ? { ...object, transform: { ...object.transform, rotationY: Math.PI / 2 } } : object),
 })
 console.log('Real device regressions passed: centred monitor, accessible side printer, full demo, typing offset, original rotation, preserved poses, legal fallback and unavailable side-region failures.')
+
+if (process.argv.includes('--http')) {
+  const saved = new Map<string, string>()
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => saved.set(key, value),
+    removeItem: (key: string) => saved.delete(key),
+  } })
+  const { apiBaseUrl } = await import('../src/api/core/config')
+  assert.ok(apiBaseUrl, '--http requires an explicit isolated QA VITE_API_BASE_URL')
+  const { requestJson } = await import('../src/api/core/client')
+  const { createHttpServices } = await import('../src/api/http')
+  const { rememberOrganizationScene } = await import('../src/api/core/organizationScenes')
+  const { createHash } = await import('node:crypto')
+  const projectId = `monitor-rules-upgrade-${Date.now()}-${crypto.randomUUID()}`
+  const project = { ...demo, id: projectId, objects: demo.objects.map((object) => ({ ...object, projectId })), cables: [] }
+  const source = planFromProject(project, 'baseline', 'Original device rules', { withScene: true })
+  const args = { projectId, objects: project.objects, room: project.room, preferences, baseline: source, confirmed: true }
+  const legacyRules = (scene: PackingScene): PackingScene => {
+    const previous = structuredClone(scene)
+    const clearIds = previous.regions.filter((region) => region.id.startsWith('desk-clear-')).map((region) => region.id)
+    assert.ok(clearIds.length > 0, 'the legacy fixture must contain clear desktop regions')
+    previous.regions = previous.regions.filter((region) => !region.id.startsWith('monitor-view-') && !region.id.startsWith('printer-side-'))
+    previous.items = previous.items.map((item) => item.category === 'monitor' || item.category === 'printer'
+      ? { ...item, allowed_region_ids: [...clearIds], preferred_region_ids: [], placement_priority: 100, allowed_rotations_y_rad: [0, Math.PI / 2] }
+      : item)
+    return previous
+  }
+  const legacyScene = legacyRules(toPackingScene(args))
+  const legacyBaseline = legacyRules(packingBaseline(source, args))
+  const path = `/projects/${encodeURIComponent(projectId)}/scene`
+  const created = await requestJson<PackingScene>(path, {
+    method: 'PUT',
+    body: { scene: legacyScene, baseline: legacyBaseline, expected_revision: null, baseline_source_id: source.id },
+  })
+  const originalRef = sceneRef(created)
+  assert.equal(originalRef.sceneRevision, 1)
+  assert.notEqual(originalRef.sceneId, projectId)
+  const initialState = await requestJson<{ scene: PackingScene; baseline_source_id: string }>(`${path}-state`)
+  assert.deepEqual(initialState.scene, created)
+  assert.equal(initialState.baseline_source_id, source.id)
+  rememberOrganizationScene(projectId, { ...originalRef, baselineSourceId: source.id })
+  const originalBaseline = { ...legacyBaseline, scene_id: originalRef.sceneId, baseline_id: originalRef.baselineId, scene_revision: originalRef.sceneRevision }
+  const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, item]) => [key, stable(item)])) : value
+  console.log(`Legacy baseline audit: ${JSON.stringify({ projectId, sceneId: originalRef.sceneId, baselineId: originalRef.baselineId, baselineSourceId: source.id, baselineSha256: createHash('sha256').update(JSON.stringify(stable(originalBaseline))).digest('hex') })}`)
+
+  const service = createHttpServices().organizationPlanning
+  const upgraded = await service.planOrganization(args)
+  assert.equal(upgraded.serviceMeta?.source, 'real')
+  assert.equal(upgraded.serviceMeta?.applicable, true, JSON.stringify(upgraded.serviceMeta?.issues))
+  assert.equal(upgraded.serviceMeta?.sceneId, originalRef.sceneId)
+  assert.equal(upgraded.serviceMeta?.baselineId, originalRef.baselineId, 'a rules upgrade must retain the original baseline')
+  assert.equal(upgraded.serviceMeta?.sceneRevision, originalRef.sceneRevision + 1, 'new device rules must increment the current scene revision once')
+  assert.deepEqual(upgraded.unplaced, [])
+  const updatedState = await requestJson<typeof initialState>(`${path}-state`)
+  assert.equal(updatedState.baseline_source_id, source.id)
+  assert.equal(updatedState.scene.baseline_id, originalRef.baselineId)
+  assert.equal(updatedState.scene.scene_revision, originalRef.sceneRevision + 1)
+  const expectedScene = toPackingScene(args)
+  assert.deepEqual(updatedState.scene.regions, expectedScene.regions)
+  assert.ok(updatedState.scene.regions.some((region) => region.id.startsWith('monitor-view-')))
+  assert.ok(updatedState.scene.regions.some((region) => region.id.startsWith('printer-side-')))
+  for (const device of updatedState.scene.items.filter((item) => item.category === 'monitor' || item.category === 'printer')) {
+    const expected = expectedScene.items.find((item) => item.id === device.id)!
+    const previous = created.items.find((item) => item.id === device.id)!
+    assert.deepEqual(device.position, previous.position, 'upgrading constraints must preserve the current device pose')
+    assert.equal(device.rotation_y_rad, previous.rotation_y_rad)
+    assert.equal(device.placement_priority, expected.placement_priority)
+    assert.deepEqual(device.allowed_region_ids, expected.allowed_region_ids)
+    assert.deepEqual(device.preferred_region_ids, expected.preferred_region_ids)
+    assert.deepEqual(device.allowed_rotations_y_rad, [0])
+  }
+  const monitorTarget = upgraded.assignments.find((assignment) => assignment.objectId === monitor.id)!
+  const printerTarget = upgraded.assignments.find((assignment) => assignment.objectId === printer.id)!
+  assert.ok(Math.abs(monitorTarget.position[0] - preferences.typingOffsetX) <= .002, 'the upgraded monitor must align with the typing centre')
+  assert.equal(monitorTarget.rotationY, 0)
+  assert.match(printerTarget.targetRegionId ?? '', /^printer-side-/)
+  assert.equal(printerTarget.rotationY, 0)
+  assert.ok(Math.abs(printerTarget.position[0] - monitorTarget.position[0]) > (printer.dimensions.width + monitor.dimensions.width) / 2, 'the upgraded printer must sit beside the monitor')
+
+  const applied = await service.applyOrganization({ ...args, plan: upgraded })
+  assert.equal(applied?.sceneId, originalRef.sceneId)
+  assert.equal(applied?.baselineId, originalRef.baselineId)
+  assert.equal(applied?.sceneRevision, originalRef.sceneRevision + 2, 'atomic application must increment the upgraded scene revision once more')
+  const finalState = await requestJson<typeof initialState>(`${path}-state`)
+  assert.equal(finalState.baseline_source_id, source.id)
+  assert.equal(finalState.scene.baseline_id, originalRef.baselineId)
+  assert.equal(finalState.scene.scene_revision, originalRef.sceneRevision + 2)
+  for (const target of [monitorTarget, printerTarget]) {
+    const stored = finalState.scene.items.find((item) => item.id === target.objectId)!
+    assert.deepEqual(stored.position, toPackingPosition(target.position, project.room))
+    assert.equal(stored.rotation_y_rad, target.rotationY)
+  }
+  console.log(`Real HTTP device-rule upgrade passed: ${projectId}, ${originalRef.sceneId}, baseline ${originalRef.baselineId}, revisions ${originalRef.sceneRevision} -> ${upgraded.serviceMeta!.sceneRevision} -> ${applied!.sceneRevision}; original baseline source retained for the separate repository audit.`)
+}

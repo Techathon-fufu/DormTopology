@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Group } from 'three'
+import { Group } from 'three'
 import type { RoomConfig, Vec3 } from '@/types/project'
 import { applyBedCutaway, DORM_DESK_MODEL_CONFIG, mountDeskModel } from '@/scene/deskModel'
 import { disposeObject3D, loadModelFromUrl } from '@/scene/modelLoader'
 import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
+import { FIXED_MODEL_URLS, hasFixedFurniture } from './fixedFurniture'
+import { resolvePublicAssetUrl } from './deskModel'
 
 /**
- * 桌体渲染：优先加载 dorm_desk_assembled.glb（GLTFLoader + 归一化），
+ * 固定家具：四份 GLB 共用父节点变换，桌面开孔与碰撞几何同源。
  * 加载完成前 / 加载失败 / 用户选择简化几何时回退参数化桌体（ParametricDesk，与逻辑尺寸一致）。
  *
  * GLB 相关逻辑集中在 scene / state 层，不散落到工作台页面：
@@ -44,6 +46,7 @@ export function DormDeskModel({
 
   // 桌面尺寸配置变化时重新归一化；仅依赖影响归一化的标量，避免项目对象引用变化触发重载
   const roomShapeKey = [
+    room.furnitureModel,
     room.desk.width,
     room.desk.depth,
     room.desk.height,
@@ -61,7 +64,7 @@ export function DormDeskModel({
       }
     }
 
-    if (forceFallback) {
+    if (forceFallback || !hasFixedFurniture(room)) {
       clearModel()
       useDeskModelStore.getState().markSkipped()
       return
@@ -71,13 +74,24 @@ export function DormDeskModel({
     let cancelled = false
     const deskStore = useDeskModelStore.getState()
     deskStore.beginLoad()
-    loadModelFromUrl(deskStore.modelUrl)
+    Promise.allSettled(FIXED_MODEL_URLS.map((url) => loadModelFromUrl(resolvePublicAssetUrl(url))))
+      .then((parts) => {
+        const failed = parts.find((part) => part.status === 'rejected')
+        if (failed?.status === 'rejected') {
+          parts.forEach((part) => { if (part.status === 'fulfilled') disposeObject3D(part.value.scene) })
+          throw failed.reason
+        }
+        const scene = new Group()
+        parts.forEach((part) => { if (part.status === 'fulfilled') scene.add(part.value.scene) })
+        return { scene }
+      })
       .then(({ scene }) => {
         if (cancelled) {
           disposeObject3D(scene)
           return
         }
         const mounted = mountDeskModel(scene, DORM_DESK_MODEL_CONFIG, room)
+        scene.traverse((node) => { if (node.name.startsWith('Desk_Top_')) node.visible = false })
         modelRef.current = scene
         setModel(scene)
         useDeskModelStore.getState().loadSucceeded(mounted.metrics)
@@ -113,10 +127,10 @@ export function DormDeskModel({
     [],
   )
 
-  const useGlb = !forceFallback && status === 'loaded' && model !== null
+  const useGlb = hasFixedFurniture(room) && !forceFallback && status === 'loaded' && model !== null
   return (
     <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
-      {useGlb && model ? <primitive object={model} /> : <ParametricDesk room={room} />}
+      {useGlb && model ? <><primitive object={model} /><ParametricDesk room={room} desktopOnly /></> : <ParametricDesk room={room} hideBedParts={hideBedParts} />}
     </group>
   )
 }

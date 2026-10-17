@@ -10,6 +10,8 @@ export type ApiErrorKind =
   | 'timeout'
   /** 非 2xx 响应 */
   | 'http'
+  /** 本地场景与后端版本无法安全自动合并 */
+  | 'conflict'
   /** 响应不是有效 JSON，或结构不符合约定 */
   | 'malformed'
   /** 资源 / 任务不存在（404、已过期、后端重启） */
@@ -57,7 +59,7 @@ export function describeApiError(e: unknown): string {
   return String(e)
 }
 
-/** 该错误是否值得展示「切换到演示模式」入口（真实模式下的服务/网络类失败） */
+/** 区分服务故障与无需重试的输入或取消错误。 */
 export function isServiceFailure(e: unknown): boolean {
   if (!isApiError(e)) return e instanceof Error
   return e.kind !== 'aborted' && e.kind !== 'input'

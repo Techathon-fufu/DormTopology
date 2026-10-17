@@ -14,7 +14,7 @@ import { FastForwardToggle } from '@/ui/kit/fast-forward'
  * - 固定 6 步（查看凌乱桌面 → 确认识别物品 → 自动整理 → 规划走线 → 对比前后 → 查看执行指南）；
  * - 步骤切换时自动导航到对应页面；完成后打勾（点击「下一步」即视为完成，演示可跳过）；
  * - 「重置并重播」重新种入示例项目并清空关联状态，可重复播放；
- * - 卡片常驻「演示模式」标识；核心流程全部本地模拟，不依赖实时外部 API。
+ * - 示例数据与算法来源分别标记；整理与理线步骤依赖后端服务。
  */
 export function DemoTour({ className }: { className?: string }) {
   const navigate = useNavigate()
@@ -28,13 +28,13 @@ export function DemoTour({ className }: { className?: string }) {
   const project = useProject(tourProjectId ?? undefined)
   const step = DEMO_TOUR_STEPS[Math.min(stepIndex, DEMO_TOUR_STEPS.length - 1)]
 
-  // 数据可推导步骤的完成度兜底检测（例：全部线缆已由演示规则规划）
+  // 仅后端验证且仍有效的走线可以完成规划步骤。
   const detected = useMemo(() => {
     const out: Record<string, boolean> = {}
     if (
       project &&
       project.cables.length > 0 &&
-      project.cables.every((c) => c.planSource === 'demo-rule')
+      project.cables.every((c) => c.planSource === 'algorithm' && c.status === 'planned' && c.route.verification?.status === 'valid')
     ) {
       out.cables = true
     }
@@ -77,7 +77,7 @@ export function DemoTour({ className }: { className?: string }) {
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-primary" />
         <span className="text-[13px] font-semibold">演示导览</span>
-        <DataBadge kind="demo" label="演示模式" />
+        <DataBadge kind="demo" label="示例项目" />
         <span className="ml-auto text-[11px] tabular-nums text-faint">
           {Math.min(stepIndex + 1, DEMO_TOUR_STEPS.length)}/{DEMO_TOUR_STEPS.length} · 已完成{' '}
           {doneCount}

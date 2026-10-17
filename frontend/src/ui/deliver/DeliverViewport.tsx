@@ -10,13 +10,12 @@ import {
 } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
-import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { MonitorOff } from 'lucide-react'
 import type { CableConnection, Project, SceneObject } from '@/types/project'
 import { CABLE_KIND_META } from '@/types/project'
-import { cableDisplayPoints } from '@/scene/cables'
-import { sampleCurve } from '@/scene/cableRoute'
+import { hasUsableCableRoute } from '@/scene/cables'
+import { cablePathSamples, createCableTube } from '@/scene/cableGeometry'
 import { CATEGORY_COLORS, PrimitiveModel } from '@/scene/models'
 import { RoomShell } from '@/scene/RoomShell'
 import { basicMaterial, ringGeometry } from '@/scene/resources'
@@ -181,16 +180,12 @@ function DeliverCableMesh({
   dimmed: boolean
   onFocus: (target: StepTarget | null) => void
 }) {
-  const points = useMemo(
-    () => cableDisplayPoints(cable, objects, 'suggested'),
+  const samples = useMemo(
+    () => cablePathSamples(cable, objects),
     [cable, objects],
   )
-  const samples = useMemo(() => sampleCurve(points, 48), [points])
   const geometry = useMemo(() => {
-    if (samples.length < 2) return null
-    const curve = new THREE.CatmullRomCurve3(samples.map((p) => new THREE.Vector3(...p)))
-    const tubular = Math.min(160, Math.max(24, samples.length * 2))
-    return new THREE.TubeGeometry(curve, tubular, focused ? 0.0075 : 0.005, 8, false)
+    return createCableTube(samples, focused ? 0.0075 : 0.005, 8)
   }, [samples, focused])
 
   useEffect(
@@ -328,7 +323,7 @@ export function DeliverViewport({ project, view, focus, onFocus, captureRef }: D
                 onFocus={onFocus}
               />
             ))}
-          {project.cables.map((cable) => (
+          {project.cables.filter(hasUsableCableRoute).map((cable) => (
             <DeliverCableMesh
               key={cable.id}
               cable={cable}

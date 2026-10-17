@@ -2,6 +2,7 @@ import type { LayoutPlan, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, OrganizationSceneRef, PlanAssignment, ZoneKind } from '@/types/organization'
 import { exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
 import { roomSolids } from '@/scene/roomCollision'
+import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { BED_UNDERSIDE_Y, computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
 import { allowsFloorPlacement, monitorViewRegion, printerSideRegions, subtractRect } from '@/scene/organizationPolicy'
 import { DESK_GAP, placementIssues } from '@/scene/sceneValidation'
@@ -17,7 +18,7 @@ interface PackingRegion {
   clearance_height_m: number
 }
 
-interface PackingItem {
+export interface PackingItem {
   id: string
   name: string
   category: string
@@ -40,6 +41,31 @@ interface PackingItem {
   socket_count?: number
 }
 
+export interface SceneBox {
+  id: string
+  min: Vec3
+  max: Vec3
+}
+
+export interface RoutingGraph {
+  nodes: Array<{ id: string; position: Vec3; kind: 'corner' | 'slot' | 'fixing_point' | 'endpoint' }>
+  edges: Array<{ id: string; from_node_id: string; to_node_id: string; modes: Array<'slot' | 'backboard'>; clearance_radius_m: number; exposed: boolean }>
+}
+
+export interface RoutingCable {
+  id: string
+  start_port_id: string
+  end_port_id: string
+  cable_type: 'power' | 'usb' | 'network' | 'hdmi'
+  thickness: 'thick' | 'thin'
+  length_m: number | null
+  diameter_m: number
+  min_bend_radius_m: number
+  slack_m: number
+  mode: 'slot' | 'backboard'
+  baseline_path_points?: Vec3[]
+}
+
 export interface PackingScene {
   schema_version: '1.0'
   scene_id: string
@@ -50,19 +76,19 @@ export interface PackingScene {
   wall: { z_m: number; bounds_xy_m: [number, number, number, number] }
   items: PackingItem[]
   regions: PackingRegion[]
-  obstacles: Array<{ id: string; min: Vec3; max: Vec3 }>
-  reserved_zones: []
-  exposure_zones: []
-  routing_graph: { nodes: []; edges: [] }
-  cables: []
+  obstacles: SceneBox[]
+  reserved_zones: SceneBox[]
+  exposure_zones: SceneBox[]
+  routing_graph: RoutingGraph
+  cables: RoutingCable[]
 }
 
 export function toPackingPosition(position: Vec3, room: RoomConfig): Vec3 {
-  return [position[0] + room.desk.width / 2, position[1], position[2] - DESK_GAP]
+  return [position[0] + (hasFixedFurniture(room) ? .45 : room.desk.width / 2), position[1], position[2] - (hasFixedFurniture(room) ? .042 : DESK_GAP)]
 }
 
 export function fromPackingPosition(position: Vec3, room: RoomConfig): Vec3 {
-  return [position[0] - room.desk.width / 2, position[1], position[2] + DESK_GAP]
+  return [position[0] - (hasFixedFurniture(room) ? .45 : room.desk.width / 2), position[1], position[2] + (hasFixedFurniture(room) ? .042 : DESK_GAP)]
 }
 
 function category(object: SceneObject): string {
@@ -86,28 +112,31 @@ export function toPackingScene(input: {
     regions.push({ id, surface_y_m: y, bounds_xz_m: [a[0], b[0], a[2], b[2]], clearance_height_m: clearance })
   }
   // Support regions describe existing planes, even when a storage goal excludes them.
-  addRegion('support-desk', { x0: -room.desk.width / 2, x1: room.desk.width / 2, z0: DESK_GAP, z1: DESK_GAP + room.desk.depth }, room.desk.height, BED_UNDERSIDE_Y - room.desk.height)
+  const ceiling = hasFixedFurniture(room) ? 1.88 : BED_UNDERSIDE_Y
+  if (hasFixedFurniture(room)) furnitureSurfaces(room).forEach((s) => addRegion(s.id, s.rect, s.y, s.clearance))
+  else addRegion('support-desk', { x0: -room.desk.width / 2, x1: room.desk.width / 2, z0: DESK_GAP, z1: DESK_GAP + room.desk.depth }, room.desk.height, ceiling - room.desk.height)
   addRegion('support-floor', { x0: -room.length / 2, x1: room.length / 2, z0: 0, z1: room.width }, 0, room.height)
   for (const solid of solids.filter((s) => s.kind === 'shelfBoard' || s.kind === 'beam')) {
     addRegion(solid.kind === 'beam' ? 'support-beam' : 'support-shelf', {
       x0: solid.min[0], x1: solid.max[0], z0: solid.min[2], z1: solid.max[2],
     }, solid.max[1], solid.kind === 'beam' ? room.desk.height - room.desk.thickness - solid.max[1] : BED_UNDERSIDE_Y - solid.max[1])
   }
-  addRegion('typing', zones.typing.rect, zones.typing.y, BED_UNDERSIDE_Y - zones.typing.y)
-  addRegion('cup', zones.cup.rect, zones.cup.y, BED_UNDERSIDE_Y - zones.cup.y)
-  const safe = [zones.deskSurface.rect].flatMap((r) => subtractRect(r, zones.typing.rect)).flatMap((r) => subtractRect(r, zones.cup.rect))
-  safe.forEach((r, i) => addRegion(`desk-clear-${i}`, r, room.desk.height, BED_UNDERSIDE_Y - room.desk.height))
+  addRegion('typing', zones.typing.rect, zones.typing.y, ceiling - zones.typing.y)
+  addRegion('cup', zones.cup.rect, zones.cup.y, ceiling - zones.cup.y)
+  const safe = (zones.deskSurfaces ?? [zones.deskSurface]).map((s) => s.rect).flatMap((r) => subtractRect(r, zones.typing.rect, hasFixedFurniture(room))).flatMap((r) => subtractRect(r, zones.cup.rect, hasFixedFurniture(room)))
+  safe.forEach((r, i) => addRegion(`desk-clear-${i}`, r, room.desk.height, ceiling - room.desk.height))
   addRegion('under-desk', zones.underDesk.rect, 0, zones.underDesk.clearance)
   const ids = (prefix: string) => regions.filter((r) => r.id.startsWith(prefix)).map((r) => r.id)
   const shelfIds = ids('support-shelf')
+  const storageIds = [...shelfIds, ...ids('support-drawer')]
   const clearIds = ids('desk-clear-')
   printerSideRegions(zones, input.objects.filter((o) => o.model.shape === 'monitor')).forEach((side, index) => {
-    addRegion(`printer-side-${index}`, side.rect, side.y, BED_UNDERSIDE_Y - side.y)
+    addRegion(`printer-side-${index}`, side.rect, side.y, ceiling - side.y)
   })
   const printerIds = ids('printer-side-')
   for (const object of input.objects.filter((o) => o.model.shape === 'monitor')) {
     const view = monitorViewRegion(object, zones)
-    if (view) addRegion(`monitor-view-${object.id}`, view.rect, view.y, BED_UNDERSIDE_Y - view.y)
+    if (view) addRegion(`monitor-view-${object.id}`, view.rect, view.y, ceiling - view.y)
   }
   const items = input.objects.map((object): PackingItem => {
     const shape = object.model.shape
@@ -125,8 +154,8 @@ export function toPackingScene(input: {
     }
     else if (shape === 'laptop' || shape === 'lamp') allowed = clearIds
     else if (object.powerStrip || shape === 'powerStrip') {
-      allowed = ['support-beam', ...clearIds]
-      preferred = ['support-beam']
+      allowed = [...(hasFixedFurniture(room) ? [] : ['support-beam']), ...clearIds]
+      preferred = hasFixedFurniture(room) ? clearIds : ['support-beam']
     } else if (shape === 'computerTower') {
       allowed = ['under-desk', ...clearIds]
       preferred = ['under-desk']
@@ -134,10 +163,10 @@ export function toPackingScene(input: {
       allowed = [...shelfIds, ...clearIds]
       preferred = preferences.preferredStorageZone === 'desk' || object.frequent ? clearIds : shelfIds
     } else if (object.category === 'storage' || shape === 'storageBox') {
-      allowed = [...shelfIds, ...clearIds, ...(allowsFloorPlacement(object, preferences) ? ['under-desk'] : [])]
+      allowed = [...storageIds, ...clearIds, ...(allowsFloorPlacement(object, preferences) ? ['under-desk'] : [])]
       preferred = object.frequent || preferences.preferredStorageZone === 'desk' ? clearIds
-        : preferences.preferredStorageZone === 'underDesk' && allowsFloorPlacement(object, preferences) ? ['under-desk'] : shelfIds
-    } else allowed = [...clearIds, ...(!object.frequent ? shelfIds : [])]
+        : preferences.preferredStorageZone === 'underDesk' && allowsFloorPlacement(object, preferences) ? ['under-desk'] : storageIds
+    } else allowed = [...clearIds, ...(!object.frequent ? storageIds : [])]
     const allowedRegions = allowed.filter((id) => regions.some((r) => r.id === id))
     const source = object.recognition?.dimensionSource === 'user' || object.source === 'manual'
       ? 'user' : object.source === 'demo' ? 'template' : 'estimated'
@@ -169,9 +198,9 @@ export function toPackingScene(input: {
   })
   return {
     schema_version: '1.0', scene_id: input.ref?.sceneId ?? input.projectId, scene_revision: input.ref?.sceneRevision ?? 1,
-    baseline_id: input.ref?.baselineId ?? null, template_id: room.template,
+    baseline_id: input.ref?.baselineId ?? null, template_id: room.furnitureModel ?? room.template,
     desk: { width_m: room.desk.width, depth_m: room.desk.depth, top_height_m: room.desk.height },
-    wall: { z_m: -DESK_GAP, bounds_xy_m: [(room.desk.width - room.length) / 2, (room.desk.width + room.length) / 2, 0, room.height] },
+    wall: { z_m: toPackingPosition([0, 0, 0], room)[2], bounds_xy_m: [toPackingPosition([-room.length / 2, 0, 0], room)[0], toPackingPosition([room.length / 2, 0, 0], room)[0], 0, room.height] },
     items, regions, obstacles: solids.map((s) => ({ id: `furniture:${s.id}`, min: toPackingPosition(s.min, room), max: toPackingPosition(s.max, room) })),
     reserved_zones: [], exposure_zones: [], routing_graph: { nodes: [], edges: [] }, cables: [],
   }
@@ -269,7 +298,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     const original = ctx.scene.items.find((i) => i.id === object.id)!
     if (placement === 'placed' && (!original.allowed_region_ids.includes(String(item.target_region_id)) || !original.allowed_rotations_y_rad.some((r) => Math.abs(r - rotation) < 1e-7))) fail(`${object.name}：目标区域或朝向不符合输入约束`)
     let reason = issues.filter((i) => i.entity_id === object.id).map((i) => i.message).join('；') || (typeof item.reason === 'string' ? item.reason : typeof item.reason_code === 'string' ? item.reason_code : '后端已复核的目标位置')
-    const zone: ZoneKind = Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
+    const zone: ZoneKind = String(item.target_region_id).startsWith('support-drawer') ? 'shelf' : Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
     const target = { ...object, visible: true, transform: { position, rotationY: rotation } }
     if (object.model.shape === 'printer' && !object.fixed && !object.locked) {
       reason = placement === 'unplaced' ? `打印机未找到合法侧部设备位，保留原位；${reason}`

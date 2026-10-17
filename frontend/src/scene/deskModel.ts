@@ -1,17 +1,18 @@
 import * as THREE from 'three'
 import type { RoomConfig, Vec3 } from '@/types/project'
 import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
+import { FURNITURE_OFFSET, hasFixedFurniture } from './fixedFurniture'
 
 /**
- * 桌体 GLB 模型（frontend/public/models/dorm_desk_assembled.glb，源资产 Prefabmodel/dormdesk.glb）接入：
- * 配置、归一化与实测锚点。拆分版资产见 `Prefabmodel/dormdesk_parts/`。
+ * 固定家具使用 dormdesk_parts 四份资产的共同父节点变换。
+ * 通用归一化与锚点工具同时保留给历史资产检查及独立模型导入。
  *
  * 口径说明（与 sceneValidation / deskModelStore 的分工）：
- * - 逻辑坐标（吸附面 / 碰撞边界 / 校验）仍以 RoomConfig 为单一事实来源；
+ * - 固定家具的支撑和碰撞由 fixedFurniture 提供，不依赖异步加载；
  * - GLB 加载后统一换算为米制，并做底部对齐 / 居中 / 坐标轴校正（见下方配置项）；
  * - 模型若带可识别的命名节点（桌面 / 搁板 / 出线孔），实测高度以「锚点」形式经
  *   deskModelStore.metrics 提供给交互层（拖拽 / 校验 / 吸附优先采用实测面）；
- *   整理分区与规则式布局当前仍按 RoomConfig 计算（见 frontend/docs/desk-model.md 已知限制）。
+ *   历史参数化项目保留 RoomConfig 几何（见 frontend/docs/desk-model.md）。
  *
  * 本模块为纯计算（依赖 three 与 RoomConfig），可在无浏览器环境下单测。
  */
@@ -249,6 +250,7 @@ export function configDeskTopY(room: RoomConfig): number {
 
 /** RoomConfig 口径的搁板上表面高度（与 RoomShell / sceneValidation 一致） */
 export function configShelfTopY(room: RoomConfig): number {
+  if (hasFixedFurniture(room)) return 1.46
   return room.desk.height + room.shelf.heightAboveDesk + SHELF_THICKNESS / 2
 }
 
@@ -290,6 +292,14 @@ export interface MountedDeskModel {
 
 /** 挂载前完整归一化流程：单位换算 + 轴校正 → 预提取锚点 → 归一化 → 最终锚点 → 指标 */
 export function mountDeskModel(root: THREE.Object3D, config: DeskModelConfig, room: RoomConfig): MountedDeskModel {
+  if (hasFixedFurniture(room)) {
+    root.position.set(...FURNITURE_OFFSET)
+    root.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(root)
+    const normalize: DeskNormalizeResult = { size: box.getSize(new THREE.Vector3()).toArray() as Vec3, minY: box.min.y, appliedScale: 1, deskTopShiftY: FURNITURE_OFFSET[1], alignUsed: 'deskTop' }
+    const anchors = extractDeskAnchors(root, config.anchorPatterns)
+    return { normalize, anchors, metrics: resolveDeskSurfaceMetrics(room, anchors, normalize) }
+  }
   if (config.unitScale !== 1) root.scale.multiplyScalar(config.unitScale)
   if (config.axisRotationY !== 0) root.rotation.y += config.axisRotationY
   root.updateMatrixWorld(true)

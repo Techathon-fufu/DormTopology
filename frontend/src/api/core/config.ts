@@ -1,16 +1,14 @@
 /**
- * API 运行模式与连接配置（服务适配层唯一配置入口）。
+ * 供应商能力与后端连接配置（服务适配层唯一配置入口）。
  *
- * - `VITE_API_MODE=mock`（默认）：本地模拟服务，界面标注「模拟」
- * - `VITE_API_MODE=real`：调用应用后端（接口路径与载荷见 frontend/docs/api-integration.md）
+ * - 整理与走线始终请求应用后端，旧规划模式变量和浏览器覆盖不再生效。
+ * - `VITE_API_MODE=mock`（默认）：识别与模型生成使用明确标注的模拟结果。
+ * - `VITE_API_MODE=real`：识别与模型生成也调用应用后端。
  * - 兼容旧变量：`VITE_SERVICE_MODE=mock|service`（service 等价 real）；两者同时存在时 VITE_API_MODE 优先
- * - 后端不可用时可在界面「切换到演示模式」：写入 localStorage，刷新后仍生效，可随时恢复真实模式
  * - 第三方密钥（Rodin 等）只允许存在于后端；前端不读取、不存储任何密钥
  */
 
 export type ApiMode = 'mock' | 'real'
-
-const OVERRIDE_KEY = 'dormtopology.api-mode-override'
 
 function readEnvMode(): ApiMode {
   const raw =
@@ -19,44 +17,11 @@ function readEnvMode(): ApiMode {
   return raw === 'real' || raw === 'service' ? 'real' : 'mock'
 }
 
-function readOverride(): ApiMode | null {
-  try {
-    const v = localStorage.getItem(OVERRIDE_KEY)
-    return v === 'mock' || v === 'real' ? v : null
-  } catch {
-    return null
-  }
-}
-
 /** 构建时环境变量指定的模式（不随运行时切换变化） */
 export const envApiMode: ApiMode = readEnvMode()
 
-const override = readOverride()
-
-/** 实际生效模式：运行时切换优先，否则取环境变量 */
-export const resolvedApiMode: ApiMode = override ?? envApiMode
-
-const organizationEnvMode = import.meta.env.VITE_ORGANIZATION_API_MODE as string | undefined
-export const organizationApiMode: ApiMode = override ?? (organizationEnvMode === 'real' || organizationEnvMode === 'mock' ? organizationEnvMode : resolvedApiMode)
-
-/**
- * 是否处于「真实模式被手动切换到演示模式」状态。
- * 用于界面提示与「恢复真实模式」入口；全局或整理能力原本启用 real 时显示。
- */
-export const isDemoFallbackMode: boolean = (envApiMode === 'real' || organizationEnvMode === 'real') && resolvedApiMode === 'mock' && organizationApiMode === 'mock'
-
-/**
- * 写入运行时模式偏好（刷新后仍生效）。
- * mode = null 表示清除切换、恢复环境变量指定的模式。
- */
-export function setApiModeOverride(mode: ApiMode | null): void {
-  try {
-    if (mode === null) localStorage.removeItem(OVERRIDE_KEY)
-    else localStorage.setItem(OVERRIDE_KEY, mode)
-  } catch {
-    /* 隐私模式等存储不可用：仅本次会话不生效，不阻断流程 */
-  }
-}
+/** 仅控制识别和模型生成；不读取旧浏览器模式偏好。 */
+export const resolvedApiMode: ApiMode = envApiMode
 
 /** 后端地址（real 模式）：VITE_API_BASE_URL；空字符串 = 与前端同源部署 */
 export const apiBaseUrl: string = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').replace(
