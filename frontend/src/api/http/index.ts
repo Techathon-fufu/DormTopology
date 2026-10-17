@@ -4,7 +4,8 @@ import { ApiError, isApiError } from '../core/errors'
 import { runRemoteJob } from '../core/jobs'
 import { requestJson } from '../core/client'
 import { canonicalScene, organizationInputSignature, packingBaseline, sceneRef, toPackingScene, type PackingScene } from '../core/packingWire'
-import { knownOrganizationScene, rememberOrganizationScene, withOrganizationSceneLock, type StoredOrganizationScene } from '../core/organizationScenes'
+import { knownOrganizationScene, rememberOrganizationScene, withOrganizationSceneLock } from '../core/organizationScenes'
+import { synchronizeScene } from '../core/sceneSync'
 import { placementIssues } from '@/scene/sceneValidation'
 import {
   mapCablePlanResult,
@@ -38,19 +39,6 @@ function photoExt(blob: Blob): string {
   if (type.includes('webp')) return 'webp'
   if (type.includes('heic') || type.includes('heif')) return 'heic'
   return 'jpg'
-}
-
-function synchronizedScene(raw: unknown, expected: PackingScene, known: StoredOrganizationScene | null, baselineSourceId: string): PackingScene {
-  const canonical = canonicalScene(raw, expected)
-  const ref = sceneRef(canonical)
-  const sameBaseline = known?.baselineSourceId === baselineSourceId
-  const valid = known
-    ? ref.sceneId === known.sceneId && (sameBaseline
-      ? [known.sceneRevision, known.sceneRevision + 1].includes(ref.sceneRevision) && ref.baselineId === known.baselineId
-      : ref.sceneRevision === known.sceneRevision + 1 && ref.baselineId !== known.baselineId)
-    : ref.sceneRevision === 1
-  if (!valid) throw new ApiError('后端同步返回了不匹配的场景标识或版本', { kind: 'malformed' })
-  return canonical
 }
 
 export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
@@ -167,23 +155,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
           const input = { projectId, objects, room, preferences, confirmed, ref: known }
           const scene = toPackingScene(input)
           const baselineScene = packingBaseline(baseline, input)
-          let canonical: PackingScene
-          try {
-            const raw = await requestJson<PackingScene>(`/projects/${encodeURIComponent(projectId)}/scene`, {
-              method: 'PUT', signal,
-              body: { scene, expected_revision: known?.sceneRevision ?? null, baseline_source_id: baseline.id,
-                ...(!known || known.baselineSourceId !== baseline.id ? { baseline: baselineScene } : {}) },
-            })
-            canonical = synchronizedScene(raw, scene, known, baseline.id)
-          } catch (error) {
-            if (signal?.aborted || !isApiError(error) || !(error.kind === 'network' || error.kind === 'timeout' || error.status === 409)) throw error
-            try {
-              // Recover only an exact committed draft with its original baseline source.
-              const saved = await requestJson<{ scene: unknown; baseline_source_id: unknown }>(`/projects/${encodeURIComponent(projectId)}/scene-state`, { signal })
-              if (signal?.aborted || saved.baseline_source_id !== baseline.id) throw error
-              canonical = synchronizedScene(saved.scene, scene, known, baseline.id)
-            } catch { throw error }
-          }
+          const canonical = await synchronizeScene({ projectId, scene, baseline: baselineScene, baselineSourceId: baseline.id, known, signal })
           const ref = sceneRef(canonical)
           rememberOrganizationScene(projectId, { ...ref, baselineSourceId: baseline.id })
           let jobId = ''

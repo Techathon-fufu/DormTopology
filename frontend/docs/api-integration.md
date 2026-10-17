@@ -60,6 +60,8 @@ Vite 将 `/api/v1` 代理到 `http://127.0.0.1:8000`；端口被占用时前端�
 
 后端分配 `scene_id`、`baseline_id`，初始 `scene_revision=1`。后续同步携带已知 `expected_revision`；相同内容保留版本，变更才加一。新 `baseline_source_id` 必须同时提供完整新基线，旧基线不可改写。保存初始凌乱布局只校验结构与引用，允许碰撞等待整理。
 
+场景同步遇到 `409` 时先读取 `scene-state`，保持后端版本条件更新：已知场景在当前后端明确不存在时，携带完整基线以 `expected_revision: null` 最多重建一次；已有内容、约束及基线来源完全一致时只读重新绑定，允许恢复已应用后的较高版本。来源或内容不同则提示冲突，并在整理面板提供「创建独立副本」：复制当前本地场景到新项目、重新采集快照并要求再次确认，保留原项目及后端场景。跨标签页读取最新引用，存储不可写时保留会话缓存；不读取最新版本后无条件覆盖，也不要求清空数据库或浏览器数据。
+
 提交和应用请求均为：
 
 ```json
@@ -124,6 +126,8 @@ node /tmp/check-organization-backend.mjs --plan-demo
 node /tmp/check-monitor-layout.mjs
 ./node_modules/.bin/esbuild scripts/check-monitor-backend.ts --bundle --platform=node --format=esm --outfile=/tmp/check-monitor-backend.mjs '--define:import.meta.env={}'
 node /tmp/check-monitor-backend.mjs
+./node_modules/.bin/esbuild scripts/check-scene-sync.ts --bundle --platform=node --format=esm --outfile=/tmp/check-scene-sync.mjs '--define:import.meta.env={}'
+node /tmp/check-scene-sync.mjs
 ```
 
 后端启动后，另跑真实 HTTP、同步/应用响应中断恢复与完整 17 件样例：
@@ -136,7 +140,7 @@ node /tmp/check-organization-backend-http.mjs --http
 启动上述真实前后端后运行浏览器专项（地址按实际端口替换）：
 
 ```sh
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_REAL_ORGANIZATION=1 npm run test:e2e -- tests/organization-backend.spec.ts tests/workspace.spec.ts
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_REAL_ORGANIZATION=1 npm run test:e2e -- tests/organization-backend.spec.ts tests/scene-sync.spec.ts tests/workspace.spec.ts --workers=1
 ```
 
 真实专项使用独立测试项目，验证 Python 整理、原布局保留、正式版本应用、固定物品保持与过期结果拒绝。普通 `test:e2e` 默认跳过依赖真实后端的专项；独立 `/algorithm-lab` 继续读取离线领域结果，不用它替代产品 API 验收。

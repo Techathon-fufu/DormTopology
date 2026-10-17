@@ -10,6 +10,8 @@ export type ApiErrorKind =
   | 'timeout'
   /** 非 2xx 响应 */
   | 'http'
+  /** 本地场景与后端版本无法安全自动合并 */
+  | 'conflict'
   /** 响应不是有效 JSON，或结构不符合约定 */
   | 'malformed'
   /** 资源 / 任务不存在（404、已过期、后端重启） */

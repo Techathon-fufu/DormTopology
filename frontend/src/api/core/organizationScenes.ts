@@ -8,23 +8,42 @@ export interface StoredOrganizationScene extends OrganizationSceneRef {
 
 const active = new Set<string>()
 const cache = new Map<string, StoredOrganizationScene>()
+const pendingStorage = new Map<string, string | null>()
 const key = (projectId: string) => `dormtopology.organization-scene:${apiBaseUrl}:${projectId}`
 
 export function knownOrganizationScene(projectId: string): StoredOrganizationScene | null {
-  if (cache.has(projectId)) return cache.get(projectId)!
+  let raw: string | null
+  try { raw = localStorage.getItem(key(projectId)) }
+  catch { return cache.get(projectId) ?? null }
+  if (pendingStorage.has(projectId) && pendingStorage.get(projectId) === raw) return cache.get(projectId) ?? null
+  pendingStorage.delete(projectId)
   try {
-    const raw = localStorage.getItem(key(projectId))
-    if (!raw) return null
+    if (!raw) { cache.delete(projectId); return null }
     const value = JSON.parse(raw) as StoredOrganizationScene
-    if (typeof value.sceneId !== 'string' || !value.sceneId || !Number.isInteger(value.sceneRevision) || value.sceneRevision < 1 || typeof value.baselineId !== 'string' || !value.baselineId || typeof value.baselineSourceId !== 'string' || !value.baselineSourceId) return null
+    if (!value || typeof value.sceneId !== 'string' || !value.sceneId || !Number.isInteger(value.sceneRevision) || value.sceneRevision < 1 || typeof value.baselineId !== 'string' || !value.baselineId || typeof value.baselineSourceId !== 'string' || !value.baselineSourceId) { cache.delete(projectId); return null }
     cache.set(projectId, value)
     return value
-  } catch { return null }
+  } catch { cache.delete(projectId); return null }
 }
 
 export function rememberOrganizationScene(projectId: string, ref: StoredOrganizationScene): void {
   cache.set(projectId, ref)
-  try { localStorage.setItem(key(projectId), JSON.stringify(ref)) } catch { /* A missing persisted ref is rejected by the server on the next session. */ }
+  try {
+    const previous = localStorage.getItem(key(projectId))
+    try { localStorage.setItem(key(projectId), JSON.stringify(ref)); pendingStorage.delete(projectId) }
+    catch { pendingStorage.set(projectId, previous) }
+  } catch { /* Keep the reference for this session when storage is unavailable. */ }
+}
+
+export function forgetOrganizationScene(projectId: string, expected?: StoredOrganizationScene): boolean {
+  if (expected) {
+    const current = knownOrganizationScene(projectId)
+    if (current && (['sceneId', 'sceneRevision', 'baselineId', 'baselineSourceId'] as const).some((field) => current[field] !== expected[field])) return false
+  }
+  cache.delete(projectId)
+  pendingStorage.delete(projectId)
+  try { localStorage.removeItem(key(projectId)) } catch { /* The server still rejects stale persisted references. */ }
+  return true
 }
 
 export async function withOrganizationSceneLock<T>(projectId: string, work: () => Promise<T>): Promise<T> {

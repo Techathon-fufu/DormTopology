@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Info,
   Loader2,
   Lock,
@@ -27,6 +29,7 @@ import {
   type OrganizationPreferences,
 } from '@/types/organization'
 import { isOrganizationMockMode as isMockMode, services } from '@/api'
+import { isApiError } from '@/api/core/errors'
 import { SwitchToDemoButton } from '@/ui/service/SwitchToDemoButton'
 import { useJobsStore } from '@/state/jobsStore'
 import { useOrganizeStore } from '@/state/organizeStore'
@@ -34,10 +37,10 @@ import { usePlansStore } from '@/state/plansStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { cn, formatDateTime } from '@/lib/utils'
+import { cn, formatDateTime, uid } from '@/lib/utils'
 import { organizationSource, canApplyOrganization } from '@/lib/organizationSession'
 import { assertOrganizationApplicable, organizationPlanFailure } from '@/lib/organizationValidation'
-import { planFromProject } from '@/lib/plans'
+import { clonePlanData, planFromProject } from '@/lib/plans'
 import { usePrefersReducedMotion } from '@/lib/motion'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
@@ -108,6 +111,7 @@ export function OrganizePanel({
   onPreviewReady?: () => void
   onClose?: () => void
 }) {
+  const navigate = useNavigate()
   const status = useOrganizeStore((s) => s.status)
   const accepting = useOrganizeStore((s) => s.applying)
   const setApplying = useOrganizeStore((s) => s.setApplying)
@@ -142,6 +146,7 @@ export function OrganizePanel({
 
   const [stage, setStage] = useState('')
   const [confirmedSource, setConfirmedSource] = useState<string | null>(null)
+  const [sceneConflict, setSceneConflict] = useState<{ projectId: string; sessionToken: number; message: string } | null>(null)
   const confirmationSource = JSON.stringify([organizationSource(project), baseline])
   const confirmed = confirmedSource === confirmationSource
 
@@ -190,6 +195,7 @@ export function OrganizePanel({
     })
     setStatus('planning')
     setError(null)
+    setSceneConflict(null)
     setStage('准备中')
     updateJob(job.id, { status: 'running', progress: 0.05, stageLabel: '准备中' })
     try {
@@ -243,6 +249,7 @@ export function OrganizePanel({
       if (useOrganizeStore.getState().sessionToken === sessionToken) {
         setStatus('config')
         setError(msg)
+        setSceneConflict(isApiError(err) && err.kind === 'conflict' ? { projectId: p.id, sessionToken, message: msg } : null)
       }
       updateJob(job.id, useOrganizeStore.getState().sessionToken === sessionToken ? { status: 'failed', error: msg } : { status: 'canceled', resultNote: '已取消本次预览' })
     }
@@ -303,7 +310,37 @@ export function OrganizePanel({
     onFlash('已恢复整理前布局（整理的预览未应用）')
   }
 
+  const createIndependentCopy = () => {
+    const session = useOrganizeStore.getState()
+    if (!sceneConflict || sceneConflict.projectId !== project.id || sceneConflict.sessionToken !== session.sessionToken || sceneConflict.message !== session.error || session.applying || session.status === 'planning') return
+    const current = useProjectsStore.getState().projects[project.id]
+    if (!current) return
+    const id = uid('proj')
+    const now = Date.now()
+    const copy: Project = {
+      ...clonePlanData(current),
+      id,
+      name: `${current.name} 独立副本`,
+      isDemo: false,
+      source: 'user',
+      createdAt: now,
+      updatedAt: now,
+      stage: 'organize',
+      objects: clonePlanData(current.objects).map((object) => ({ ...object, projectId: id })),
+      cables: clonePlanData(current.cables).map((cable) => ({ ...cable, projectId: id })),
+    }
+    delete copy.demoSeedVersion
+    delete copy.lastAppliedPlan
+    useProjectsStore.getState().upsert(copy)
+    setConfirmedSource(null)
+    setSceneConflict(null)
+    closePanel()
+    onClose?.()
+    navigate(`/projects/${id}/workspace`, { state: { flash: '已创建独立副本，请核对尺寸及整理前位置后重新生成方案' } })
+  }
+
   const planning = status === 'planning'
+  const canCreateCopy = sceneConflict?.projectId === project.id && sceneConflict.sessionToken === useOrganizeStore.getState().sessionToken && sceneConflict.message === error
   const hasPlan = plan !== null
   const planFailure = plan ? organizationPlanFailure(plan) : null
   const stale = hasPlan && !canApplyOrganization(sourceSignature, project)
@@ -549,8 +586,14 @@ export function OrganizePanel({
             {error ? (
               <div className="flex flex-wrap items-center gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                <span role="alert" className="flex-1">{error}</span>
-                <SwitchToDemoButton />
+                <span role="alert" className="min-w-0 flex-1">{error}</span>
+                {!canCreateCopy ? <SwitchToDemoButton /> : null}
+                {canCreateCopy ? (
+                  <Button variant="outline" size="sm" className="w-full" disabled={planning || accepting} onClick={createIndependentCopy}>
+                    <Copy className="h-3.5 w-3.5" />
+                    创建独立副本
+                  </Button>
+                ) : null}
               </div>
             ) : null}
 
