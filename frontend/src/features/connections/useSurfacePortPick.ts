@@ -8,10 +8,10 @@ import { useConnectionsStore } from './store'
 import { surfaceHit } from './model'
 
 /** Attach to the model group, excluding selection and collision helper meshes. */
-export function useSurfacePortPick(project: Project, object: SceneObject) {
+export function useSurfacePortPick(project: Project, object: SceneObject, isolated = false) {
   const start = useRef<{ id: number; x: number; y: number } | null>(null)
   const active = useConnectionsStore(s => s.projectId === project.id && s.pickingObjectId === object.id)
-  const canPick = () => active && object.visible && useWorkspaceStore.getState().mode === 'cable'
+  const canPick = () => active && object.visible && (isolated || useWorkspaceStore.getState().mode === 'cable')
     && !useOrganizeStore.getState().isPreviewBlocking()
   useEffect(() => {
     const clear = () => { start.current = null; useConnectionsStore.getState().setPointerActive(false) }

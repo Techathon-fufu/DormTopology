@@ -13,7 +13,7 @@ import { useCableStore } from './cableStore'
  *
  * 两层版本，职责不同，不要混用：
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
- * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
+ * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 定向迁移或归档重种。
  */
 const PROJECTS_PERSIST_VERSION = 3
 
@@ -38,7 +38,20 @@ export const useProjectsStore = create<ProjectsState>()(
     (set, get) => ({
       projects: {},
       ensureDemo() {
-        const existing = get().projects[DEMO_PROJECT_ID]
+        let existing = get().projects[DEMO_PROJECT_ID]
+        // v6 → v7 只移除演示书本，保留用户对其余物品、接口和房间的编辑。
+        if (DEMO_SEED_VERSION >= 7 && existing?.demoSeedVersion === 6) {
+          get().update(DEMO_PROJECT_ID, (p) => {
+            const removedIds = new Set(p.objects
+              .filter((o) => o.id === 'demo-books' || o.id.startsWith('demo-book-'))
+              .map((o) => o.id))
+            return { ...p, demoSeedVersion: 7,
+              objects: p.objects.filter((o) => !removedIds.has(o.id)),
+              cables: p.cables.filter((c) => !removedIds.has(c.from.objectId) && !removedIds.has(c.to.objectId)),
+            }
+          })
+          existing = get().projects[DEMO_PROJECT_ID]
+        }
         // 不存在，或仍是旧种子版本的示例场景：按最新示例数据重种。
         // 仅作用于内置示例项目，用户自建项目不受影响。
         if (!existing || isDemoProjectStale(existing)) {

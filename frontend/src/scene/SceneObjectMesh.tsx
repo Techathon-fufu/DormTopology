@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import type { ThreeEvent } from '@react-three/fiber'
+import { useEffect, useRef, useState } from 'react'
+import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import type { Group } from 'three'
 import type { Project, SceneObject } from '@/types/project'
 import type { SceneIssue } from '@/scene/sceneValidation'
 import { useOrganizeStore } from '@/state/organizeStore'
@@ -12,6 +13,9 @@ import { basicMaterial, boxGeometry } from './resources'
 import { useObjectDrag } from './useObjectDrag'
 import { useSurfacePortPick } from '@/features/connections/useSurfacePortPick'
 import { useConnectionsStore } from '@/features/connections/store'
+import { drawerSlotForObject } from './fixedFurniture'
+import { drawerSlideX, DORM_DESK_DRAWERS } from './dormDeskDrawers'
+import { useDrawerStore } from '@/state/drawerStore'
 
 /**
  * 场景对象网格：点击 / 拖拽选中与移动、悬停高亮、选中青绿外框、校验问题红框。
@@ -35,6 +39,7 @@ export function SceneObjectMesh({
   onContextMenu?: (objectId: string, clientX: number, clientY: number) => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const groupRef = useRef<Group>(null)
   const drag = useObjectDrag(project, object)
   const pick = useSurfacePortPick(project, object)
   const resizePreview = useObjectResizeStore((s) =>
@@ -67,13 +72,21 @@ export function SceneObjectMesh({
     }
   }, [hovered, dragging])
 
-  if (!object.visible) return null
-
   const pos = dragPreview?.position ?? organizePose?.position ?? t.position
   const rotationY = dragPreview ? t.rotationY : (organizePose?.rotationY ?? t.rotationY)
 
+  const drawerSlot = drawerSlotForObject(object, pos, project.room, rotationY)
+  useFrame(() => {
+    if (!groupRef.current) return
+    const spec = DORM_DESK_DRAWERS.find((entry) => entry.id === drawerSlot)
+    const progress = drawerSlot ? useDrawerStore.getState().drawers[drawerSlot].progress : 0
+    groupRef.current.position.set(pos[0] + (spec ? drawerSlideX(spec.travelM, progress) : 0), pos[1] + dims.height / 2, pos[2])
+  })
+
+  if (!object.visible) return null
+
   return (
-    <group position={[pos[0], pos[1] + dims.height / 2, pos[2]]} rotation={[0, rotationY, 0]}>
+    <group ref={groupRef} position={[pos[0], pos[1] + dims.height / 2, pos[2]]} rotation={[0, rotationY, 0]}>
       <group
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation()

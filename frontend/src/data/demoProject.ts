@@ -16,15 +16,16 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
 /**
  * 内置示例项目的数据种子版本。
  * 每次修改示例场景（尺寸、物品、线缆等）都要 +1：浏览器里已存在的示例项目会在载入时
- * 按最新数据重种，避免"代码已更新、页面仍是旧场景"。
+ * 按版本定向更新或归档重种，避免"代码已更新、页面仍是旧场景"。
  * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
  * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
  * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
  * v4：来源分支分别接入家具几何和预制物品。
  * v5：合并真实 L 形桌面、书架及抽屉支撑与预制物品尺寸/碰撞；归档两个不同的旧 v4 示例。
  * v6：键鼠区左移 6cm，给真实笔记本留出主桌面侧位，避免与打印机争用回台。
+ * v7：移除三本演示书本；已有 v6 场景仅删书，保留其他编辑。
  */
-export const DEMO_SEED_VERSION = 6
+export const DEMO_SEED_VERSION = 7
 
 export const DEMO_ROOM_NOTE =
   '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
@@ -53,7 +54,7 @@ export function createStandardRoom(): RoomConfig {
   }
 }
 
-/** 扩展演示物品库：独立书本与桌面设备，尺寸为示例值（单位：米）。 */
+/** 扩展演示物品库：桌面设备与用品，尺寸为示例值（单位：米）。 */
 export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject[] {
   const deskY = 0.75
   const base = {
@@ -205,34 +206,6 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       note: '演示物品：LED 台灯',
     },
     {
-      id: 'demo-book-math',
-      ...base,
-      name: '高等数学教材',
-      category: 'nonElectrical',
-      dimensions: { width: 0.21, height: 0.035, depth: 0.15 },
-      transform: { position: [0.33, deskY, 0.33], rotationY: 0.9 },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'book' },
-      ports: [],
-      quantity: 1,
-      needsPower: false,
-      source: 'demo',
-      note: '演示物品：独立教材，可单独移动与整理',
-    },
-    ...[
-      { id: 'demo-book-programming', name: '程序设计教材', width: 0.23, height: 0.028, x: -0.38, z: 0.64, angle: -0.3 },
-      { id: 'demo-book-notebook', name: '课堂笔记本', width: 0.19, height: 0.018, x: 0.14, z: 0.68, angle: 0.25 },
-    ].map((book): SceneObject => ({
-      ...base,
-      id: book.id,
-      name: book.name,
-      category: 'nonElectrical',
-      dimensions: { width: book.width, height: book.height, depth: 0.15 },
-      transform: { position: [book.x, deskY, book.z], rotationY: book.angle },
-      model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'book' },
-      ports: [], quantity: 1, needsPower: false, source: 'demo',
-      note: '演示物品：独立书本，可单独移动与整理',
-    })),
-    {
       ...base, id: 'demo-printer', name: '打印机', category: 'electrical',
       dimensions: { width: 0.38, height: 0.20, depth: 0.30 },
       transform: { position: [-0.58, deskY, 0.48], rotationY: 0 },
@@ -374,11 +347,8 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       'demo-laptop': [-.26, deskY, .23], 'demo-monitor': [.1, deskY, .3],
       'demo-keyboard': [-.15, deskY, .5], 'demo-mouse': [.16, deskY, .5],
       'demo-lamp': [.48, deskY, .47], 'demo-printer': [.795, deskY, .55],
-      'demo-computer-tower': [.4, 0, .34], 'demo-thermos': [.8, deskY, .29],
+      'demo-computer-tower': [.4, 0, .29], 'demo-thermos': [.8, deskY, .29],
       'demo-cup': [.8, deskY, .4], 'demo-storage-box': [.41, 1.46, .17],
-      'demo-book-math': [-.25, deskY, .35], 'demo-book-english': [.16, deskY, .45],
-      'demo-book-programming': [.1, deskY, .4],
-      'demo-book-notebook': [.12, deskY, .5],
     }
     return { ...object, transform: { position: positions[object.id] ?? object.transform.position, rotationY: 0 } } as SceneObject
   })

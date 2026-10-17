@@ -37,7 +37,7 @@ export function describePrimitive(shape: PrimitiveShape | undefined, dims: Objec
       box('base',[w*.36,b,d*.8],[0,b/2,d*.05],'#4A5560')
       box('stem',[w*.075,stem,d*.18],[0,b+stem/2,-d*.25],'#39424C')
       box('panel',[w,panel,Math.min(.022,d*.2)],[0,b+stem+panel/2,0],'#39424C')
-      box('screen',[w*.94,panel*.88,.0005],[0,b+stem+panel/2,Math.min(.022,d*.2)/2-.00025],'#2E4A5A')
+      box('screen',[w*.94,panel*.88,.0005],[0,b+stem+panel/2,Math.min(.022,d*.2)/2+.001],'#2E4A5A')
       break
     }
     case 'laptop': {
@@ -99,16 +99,19 @@ export function describePrimitive(shape: PrimitiveShape | undefined, dims: Objec
       box('keys',[w*.92,h*.12,d*.62],[0,h*.94,0],'#3B444E')
       break
     case 'printer':
-      box('body',[w,h,d],[0,h/2,0],'#DCDDD8')
+      {
+      const gap = Math.min(.004, d*.02)
+      box('body',[w,h,d-8*gap],[0,h/2,-4*gap],'#DCDDD8')
       box('lid',[w*.9,h*.12,d*.86],[0,h*.90,0],'#687681')
-      box('slot',[w*.72,h*.18,d*.01],[0,h*.38,d*.495],'#303A43')
-      box('paper',[w*.55,h*.025,d*.002],[0,h*.34,d*.499],'#F7F3EA')
+      box('slot',[w*.72,h*.18,gap],[0,h*.38,d/2-2.5*gap],'#303A43')
+      box('paper',[w*.55,h*.025,gap],[0,h*.34,d/2-gap/2],'#F7F3EA')
+      }
       break
     case 'computerTower':
-      box('body',[w,h,d],[0,h/2,0],'#39434E')
-      box('front',[w*.86,h*.94,d*.02],[0,h/2,d*.49],'#252D35')
-      for(let i=0;i<5;i++) box(`vent-${i}`,[w*.62,h*.018,d*.002],[0,h*.20+i*h*.065,d*.499],'#647887')
-      box('button',[w*.06,h*.025,d*.002],[w*.22,h*.86,d*.499],'#70C5BA')
+      box('body',[w,h,d*.94],[0,h/2,-d*.03],'#39434E')
+      box('front',[w*.86,h*.94,d*.02],[0,h/2,d*.46],'#252D35')
+      for(let i=0;i<5;i++) box(`vent-${i}`,[w*.62,h*.018,d*.004],[0,h*.20+i*h*.065,d*.482],'#647887')
+      box('button',[w*.06,h*.025,d*.004],[w*.22,h*.86,d*.482],'#70C5BA')
       break
     case 'powerAdapter':
       box('body',[w,h,d],[0,h/2,0],'#323B44')

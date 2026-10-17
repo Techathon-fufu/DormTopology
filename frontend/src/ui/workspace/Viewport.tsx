@@ -22,6 +22,8 @@ import { ZoneOverlay } from '@/scene/ZoneOverlay'
 import { basicMaterial, ringGeometry } from '@/scene/resources'
 import { detectWebGL } from '@/lib/webgl'
 import { DeskModelNotice } from '@/ui/workspace/DeskModelNotice'
+import { useDrawerStore } from '@/state/drawerStore'
+import { drawerSlideX, DORM_DESK_DRAWERS } from '@/scene/dormDeskDrawers'
 
 /** 三维渲染错误边界：渲染失败时给出重试入口，不影响左右面板继续工作 */
 class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -55,11 +57,14 @@ class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: str
 /** 拖拽预览指示环：落在吸附到的支撑面上，红色表示当前位置越界 / 相交 */
 function DragIndicator() {
   const drag = useWorkspaceStore((s) => s.drag)
+  const drawerProgress = useDrawerStore((s) => drag?.drawerSlot ? s.drawers[drag.drawerSlot].progress : 0)
   if (!drag) return null
   const [x, y, z] = drag.position
+  const spec = DORM_DESK_DRAWERS.find((entry) => entry.id === drag.drawerSlot)
+  const visualX = x + (spec ? drawerSlideX(spec.travelM, drawerProgress) : 0)
   const size = Math.max(0.06, 0.13)
   return (
-    <group position={[x, y + 0.004, z]} rotation={[-Math.PI / 2, 0, 0]}>
+    <group position={[visualX, y + 0.004, z]} rotation={[-Math.PI / 2, 0, 0]}>
       <mesh
         geometry={ringGeometry(size * 0.72, size, 32)}
         material={basicMaterial(drag.valid ? '#0F9D8A' : '#D64545', {

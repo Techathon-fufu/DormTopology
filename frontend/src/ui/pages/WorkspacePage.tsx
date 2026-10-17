@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useMatch, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import type { GenerationJob, Project, SceneObject } from '@/types/project'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
@@ -12,7 +12,6 @@ import { useWorkspaceStore } from '@/state/workspaceStore'
 import { isMockMode, services } from '@/api'
 import { cablePlanningInputSignature } from '@/api/core/routingWire'
 import { auditConnections } from '@/features/connections/model'
-import { MarkingPage } from '@/features/connections/MarkingPage'
 import { ObjectContextMenu } from '@/features/connections/ObjectContextMenu'
 import { useRoutingPreviewStore } from '@/features/connections/routingPreview'
 import { useConnectionsStore } from '@/features/connections/store'
@@ -102,17 +101,18 @@ export function WorkspacePage() {
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
   const [plansOpen, setPlansOpen] = useState(false)
-  /** 表面描点页面（会话态，全屏覆盖在工作台上；不切路由、不重挂三维视图） */
-  const [marking, setMarking] = useState<{ objectId: string | null; previousMode: 'organize' | 'cable' } | null>(null)
+  // 保留工作台会话和撤销历史；子路由独立渲染单品视口。
+  const marking = useMatch('/projects/:id/objects/:objectId/ports') !== null
   /** 物品右键菜单的屏幕坐标 */
   const [objectMenu, setObjectMenu] = useState<{ objectId: string; x: number; y: number } | null>(null)
   const flashTimer = useRef<number | null>(null)
   const cablePlanning = useRef(false)
   const [routingConfirmation, setRoutingConfirmation] = useState<string | null>(null)
 
-  /** 打开描点页面：进入走线模式（端点与线缆可见），隐藏左右面板与工具栏，三维视图保持同一实例 */
+  /** 打开所选物品的独立描点路由。 */
   const openMarking = (target?: string | null) => {
     if (!project) return
+    if (busy) { showFlash('走线规划进行中，请完成后再描点'); return }
     if (useOrganizeStore.getState().isPreviewBlocking()) {
       showFlash('整理预览进行中，请先结束整理再描点')
       return
@@ -125,17 +125,9 @@ export function WorkspacePage() {
     setObjectMenu(null)
     setLeftOpen(false)
     setRightOpen(false)
-    // 页面已打开时保留最初进入前的模式，退出后仍能回到原工作台。
-    setMarking({ objectId: next, previousMode: marking?.previousMode ?? (mode === 'cable' ? 'cable' : 'organize') })
-    useWorkspaceStore.getState().setMode('cable')
-    if (next) useWorkspaceStore.getState().select(next)
-  }
-
-  const closeMarking = () => {
-    const previous = marking?.previousMode ?? mode
-    useConnectionsStore.getState().cancelPick()
-    setMarking(null)
-    if (previous !== 'cable') useWorkspaceStore.getState().setMode(previous)
+    if (!next) { showFlash('请先添加需要标记的物品'); return }
+    useWorkspaceStore.getState().select(next)
+    navigate(`/projects/${encodeURIComponent(project.id)}/objects/${encodeURIComponent(next)}/ports`)
   }
 
   const projectId = project?.id
@@ -216,7 +208,7 @@ export function WorkspacePage() {
 
   // 快捷键：Ctrl+Z 撤销 / Ctrl+Shift+Z 重做 / F 重置视角 / Q·E 旋转 / 方向键微调 / Delete 删除 / Esc 取消选中
   useEffect(() => {
-    if (!projectId) return
+    if (!projectId || marking) return
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
@@ -275,7 +267,7 @@ export function WorkspacePage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [projectId])
+  }, [projectId, marking])
 
   // 整理动画驱动器：playing 状态下按帧推进批次进度（只更新会话内覆盖位姿，不写项目存储）
   useEffect(() => {
@@ -493,9 +485,10 @@ export function WorkspacePage() {
     )
   }
 
+  if (marking) return <Outlet />
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      {marking ? null : (
         <Toolbar
           project={project}
           onOpenOrganize={handleOpenOrganize}
@@ -507,10 +500,7 @@ export function WorkspacePage() {
           onToggleLeftPanel={() => { setRightOpen(false); setLeftOpen((v) => !v) }}
           onToggleRightPanel={() => { setLeftOpen(false); setRightOpen((v) => !v) }}
         />
-      )}
-
       <div className="relative flex min-h-0 flex-1">
-        {marking ? null : (
           <WorkspaceToolPanel
             project={project}
             issuesById={issuesById}
@@ -523,8 +513,6 @@ export function WorkspacePage() {
             onGenerateModel={(o) => void handleGenerateModel(o)}
             className="hidden w-[264px] shrink-0 border-r lg:flex"
           />
-        )}
-
         <div className="relative min-w-0 flex-1">
           <Viewport
             project={project}
@@ -532,24 +520,12 @@ export function WorkspacePage() {
             onObjectContextMenu={(objectId, x, y) => setObjectMenu({ objectId, x, y })}
           />
 
-          {marking ? (
-            <MarkingPage
-              project={project}
-              objectId={marking.objectId}
-              busy={busy === 'cable'}
-              onExit={closeMarking}
-            />
-          ) : null}
-
-          {marking ? null : (
             <div className="pointer-events-none absolute left-4 top-3 flex items-center gap-2">
               {project.isDemo ? <DataBadge kind="demo" label="示例项目" /> : null}
               <span className="rounded-full border border-border bg-surface/90 px-2.5 py-1 text-xs font-medium shadow-xs">
                 {organizeOpen ? organizeStatus === 'planning' ? '生成中 · 原布局保留' : organizeStatus === 'config' ? '设置整理偏好' : '方案预览 · 尚未应用' : mode === 'organize' ? '编辑原布局' : '确认连接与走线'}
               </span>
             </div>
-          )}
-
           {busy === 'cable' ? (
             <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 text-xs shadow-sm">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -557,7 +533,6 @@ export function WorkspacePage() {
             </div>
           ) : null}
 
-          {marking ? null : (
             <>
               <div className="pointer-events-none absolute bottom-10 left-1/2 -translate-x-1/2">
                 <DragHintChip />
@@ -572,10 +547,9 @@ export function WorkspacePage() {
                 单指旋转 · 双指缩放 · 顶部打开物品与属性
               </p>
             </>
-          )}
         </div>
 
-        {marking ? null : plansOpen ? (
+        {plansOpen ? (
           <PlanPanel
             project={project}
             onFlash={showFlash}
@@ -604,14 +578,12 @@ export function WorkspacePage() {
         )}
       </div>
 
-      {marking ? null : (
         <StatusBar
           project={project}
           flash={flash}
           issuesById={issuesById}
           onRetryJob={handleRetryJob}
         />
-      )}
 
       {/* 物品右键菜单：唯一入口是进入描点页面，不在一般模式里展示描点控件 */}
       {objectMenu ? (

@@ -16,6 +16,9 @@ import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
 import { useOrganizeStore } from './organizeStore'
+import { useDrawerStore } from './drawerStore'
+import { drawerSlotForObject } from '@/scene/fixedFurniture'
+import type { DrawerSlotId } from '@/scene/dormDeskDrawers'
 
 export type WorkspaceMode = 'organize' | 'cable'
 export type ViewPreset = 'persp' | 'front' | 'top' | 'left' | 'right' | 'desk'
@@ -31,6 +34,7 @@ export interface DragState {
   position: Vec3
   /** 吸附到的支撑面 */
   support: 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'none'
+  drawerSlot?: DrawerSlotId
   /** 预览位置是否通过越界 / 相交校验 */
   valid: boolean
   /** 上一次有效预览位置（指针未命中支撑面时回退用） */
@@ -203,6 +207,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       objects: patch.objects ?? p.objects,
       cables,
     }))
+    if (patch.objects) {
+      const previous = new Map(project.objects.map((object) => [object.id, object]))
+      for (const object of patch.objects) {
+        const before = previous.get(object.id)
+        if (before === object) continue
+        const slot = drawerSlotForObject(object, object.transform.position, project.room)
+        if (slot && (!before || drawerSlotForObject(before, before.transform.position, project.room) !== slot)) {
+          useDrawerStore.getState().open(slot)
+        }
+      }
+    }
   }
 
   return {

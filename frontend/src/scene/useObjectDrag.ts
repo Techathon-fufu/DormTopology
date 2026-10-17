@@ -8,6 +8,7 @@ import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
+import { useDrawerStore } from '@/state/drawerStore'
 
 /** 拖拽判定阈值（像素）：小于该位移视为点击选中 */
 const DRAG_THRESHOLD_PX = 4
@@ -80,7 +81,10 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       raycaster.setFromCamera(ndc, camera)
       // 吸附面高度优先采用桌体 GLB 实测锚点（未加载 / 失败时回退 RoomConfig）
       const metrics = useDeskModelStore.getState().metrics
-      const hit = raycastSupports(raycaster.ray, project.room, metrics)
+      const progress = useDrawerStore.getState().drawers
+      const hit = raycastSupports(raycaster.ray, project.room, metrics, {
+        bot: progress.bot.progress, mid: progress.mid.progress, top: progress.top.progress,
+      })
       if (!hit) return // 指针未指向任何支撑面：保持上一次预览
       const position: Vec3 = [
         Math.round(hit.x / GRID) * GRID,
@@ -98,6 +102,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
         objectId: object.id,
         position,
         support: hit.kind,
+        drawerSlot: hit.drawerSlot,
         valid,
         lastValid: lastValidPos,
       })

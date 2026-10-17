@@ -28,6 +28,7 @@ interface DrawerStoreState {
   snapAfterDrag: (id: DrawerSlotId) => void
   /** 单击开 / 关切换（按当前目标取反） */
   toggle: (id: DrawerSlotId) => void
+  open: (id: DrawerSlotId) => void
   reset: () => void
 }
 
@@ -65,5 +66,8 @@ export const useDrawerStore = create<DrawerStoreState>((set) => ({
         [id]: { ...s.drawers[id], target: s.drawers[id].target === 1 ? 0 : 1 },
       },
     })),
+  open: (id) => set((s) => ({
+    drawers: { ...s.drawers, [id]: { ...s.drawers[id], target: 1 } },
+  })),
   reset: () => set({ drawers: closedAll(), loadedIds: [], draggingId: null, hoveredId: null }),
 }))

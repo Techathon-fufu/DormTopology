@@ -3,7 +3,8 @@ import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { DeskSurfaceMetrics } from '@/scene/deskModel'
 import { bottomContacts, containedInCavity, objectRoomHits, objectsCollide, worldCollision } from './collisionGeometry'
 import { cachedRoomSolids } from './roomCollision'
-import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
+import { blockingDrawerOpening, drawerSlotForSurface, furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
+import { drawerSlideX, type DrawerSlotId } from './dormDeskDrawers'
 
 /**
  * 场景摆放校验与支撑面计算（本地真实计算，非模拟）。
@@ -118,6 +119,8 @@ export function nearestSupport(
 export interface SupportHit extends SupportInfo {
   x: number
   z: number
+  drawerSlot?: DrawerSlotId
+  distanceSquared?: number
 }
 
 const _plane = new THREE.Plane()
@@ -132,20 +135,26 @@ export function raycastSupports(
   ray: THREE.Ray,
   room: RoomConfig,
   metrics?: DeskSurfaceMetrics | null,
+  drawerProgress?: Partial<Record<DrawerSlotId, number>>,
 ): SupportHit | null {
   const hits: SupportHit[] = []
 
-  const tryPlane = (y: number, kind: SupportKind, label: string, contains: (x: number, z: number) => boolean) => {
+  const tryPlane = (y: number, kind: SupportKind, label: string, contains: (x: number, z: number) => boolean, drawerSlot?: DrawerSlotId) => {
     _plane.set(_normal, -y)
     if (!ray.intersectPlane(_plane, _hit)) return
     if (!contains(_hit.x, _hit.z)) return
-    hits.push({ kind, y, label, x: _hit.x, z: _hit.z })
+    const offset = drawerSlot ? drawerSlideX(.3, drawerProgress?.[drawerSlot] ?? 0) : 0
+    hits.push({ kind, y, label, x: _hit.x - offset, z: _hit.z, drawerSlot, distanceSquared: ray.origin.distanceToSquared(_hit) })
   }
 
   tryPlane(0, 'floor', '地面', (x, z) => Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width)
   if (hasFixedFurniture(room)) {
-    furnitureSurfaces(room).forEach((s) => tryPlane(s.y, s.kind, s.label, (x, z) => x >= s.rect.x0 && x <= s.rect.x1 && z >= s.rect.z0 && z <= s.rect.z1))
-    return hits.sort((a, b) => ray.origin.distanceToSquared(new THREE.Vector3(a.x, a.y, a.z)) - ray.origin.distanceToSquared(new THREE.Vector3(b.x, b.y, b.z)))[0] ?? null
+    furnitureSurfaces(room).forEach((s) => {
+      const slot = drawerSlotForSurface(s.id) ?? undefined
+      const offset = slot ? drawerSlideX(.3, drawerProgress?.[slot] ?? 0) : 0
+      tryPlane(s.y, s.kind, s.label, (x, z) => x >= s.rect.x0 + offset && x <= s.rect.x1 + offset && z >= s.rect.z0 && z <= s.rect.z1, slot)
+    })
+    return hits.sort((a, b) => (a.distanceSquared ?? 0) - (b.distanceSquared ?? 0))[0] ?? null
   }
   tryPlane(
     deskTopY(room, metrics),
@@ -260,6 +269,8 @@ export function placementIssues(
       relatedId: roomHits[0].id,
     })
   }
+  const blockedDrawer = blockingDrawerOpening(object, position, room)
+  if (blockedDrawer) issues.push({ type: 'roomCollision', message: `挡住${blockedDrawer}开口或滑出路径` })
 
   // Every bottom contact must rest on a declared room plane or a real horizontal solid face.
   const contacts = bottomContacts(object, position)
