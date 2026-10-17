@@ -6,7 +6,8 @@ import type { ZoneKind } from '@/types/organization'
 import { ZONE_COLORS } from '@/types/organization'
 import { cableDisplayPoints, resolveCableThickness } from '@/scene/cables'
 import { sampleCurve } from '@/scene/cableRoute'
-import { CATEGORY_COLORS, PrimitiveModel } from '@/scene/models'
+import { CATEGORY_COLORS } from '@/scene/models'
+import { ObjectModel } from '@/scene/ObjectModel'
 import { basicMaterial, boxGeometry } from './resources'
 
 /**
@@ -38,9 +39,9 @@ export function CompareObjectMesh({
   const color = zoneTint && zone ? ZONE_COLORS[zone] : CATEGORY_COLORS[object.category]
   return (
     <group position={[t.position[0], t.position[1] + dims.height / 2, t.position[2]]} rotation={[0, t.rotationY, 0]}>
-      <PrimitiveModel
+      <ObjectModel
+        object={object}
         shape={object.model.shape}
-        dims={dims}
         color={color}
         sockets={object.powerStrip?.socketCount}
       />

@@ -4,7 +4,8 @@ import type { Project, SceneObject } from '@/types/project'
 import type { SceneIssue } from '@/scene/sceneValidation'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { CATEGORY_COLORS, PrimitiveModel } from './models'
+import { CATEGORY_COLORS } from './models'
+import { ObjectModel } from './ObjectModel'
 import { basicMaterial, boxGeometry } from './resources'
 import { useObjectDrag } from './useObjectDrag'
 
@@ -73,9 +74,9 @@ export function SceneObjectMesh({
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <PrimitiveModel
+        <ObjectModel
+          object={object}
           shape={modelDone ? object.model.shape : 'genericBox'}
-          dims={dims}
           color={CATEGORY_COLORS[object.category]}
           sockets={object.powerStrip?.socketCount}
         />
