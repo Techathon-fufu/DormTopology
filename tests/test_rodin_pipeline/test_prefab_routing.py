@@ -1,25 +1,30 @@
 """校验 Prefabmodel/ 下的模型资产路由与分层约定。
 
-背景：全部 GLB 资产统一放在仓库根的 Prefabmodel/ 下，其中
+背景：Git 跟踪的归档 GLB 资产放在仓库根的 Prefabmodel/ 下，其中
 - 低模 prefab：由 VLM 感知结果按关键词匹配，走 resolve_prefab_rel_path 路由；
 - Rodin 真实资产：关键词无匹配时的回退产物，或重名高模（带 _detail 后缀），不参与路由。
 
-本脚本锁定三件事：
+本脚本锁定四件事：
 1. PREFAB_KEYWORDS 的每个 key 都能解析到一个真实存在的文件；
 2. 每个 prefab 目标文件确实是轻量低模（体积上限），避免高模误入路由；
 3. _detail 高模与 Rodin 资产存在且不与 prefab 命名冲突。
+4. 已跟踪 GLB 仅位于归档目录或 frontend/public/ 运行时目录；本地未跟踪导出不参与检查。
 
 运行：python tests/test_rodin_pipeline/test_prefab_routing.py
 """
 
+import os
+import subprocess
 import sys
-from pathlib import Path
+import tempfile
+import unittest
+from pathlib import Path, PurePosixPath
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.app.adapters.vlm_adapter import (  # noqa: E402
+from backend.app.adapters.vlm_adapter import (
     ASSET_DIR_NAME,
     PREFAB_KEYWORDS,
     VLMClient,
@@ -105,19 +110,67 @@ def check_rodin_fallback_assets() -> list[str]:
     return errors
 
 
-def check_no_stray_glb_outside_asset_dir() -> list[str]:
-    """除 Prefabmodel/ 外，仓库内不应出现其它 .glb（objects/ 只保留 Blender/OBJ 源文件）。"""
+def check_no_stray_glb_outside_asset_dir(project_root: Path = PROJECT_ROOT) -> list[str]:
+    """归档约束仅检查 Git 跟踪资产，允许 frontend/public/ 运行时 GLB。"""
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z", "--", "*.glb"],
+            cwd=project_root,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return [f"Unable to list tracked GLB assets with Git: {exc}"]
     errors: list[str] = []
-    skip = {".git", "node_modules", "dist", ".work"}
-    for p in PROJECT_ROOT.rglob("*.glb"):
-        if any(part in skip for part in p.relative_to(PROJECT_ROOT).parts):
+    for name in tracked.stdout.split(b"\0"):
+        if not name:
             continue
-        if p.parent == PREFAB_DIR:
+        path = PurePosixPath(os.fsdecode(name))
+        if path.parent == PurePosixPath(ASSET_DIR_NAME) or path.parts[:2] == ("frontend", "public"):
             continue
-        errors.append(f"GLB outside {ASSET_DIR_NAME}/: {p.relative_to(PROJECT_ROOT)}")
+        errors.append(f"Tracked GLB outside {ASSET_DIR_NAME}/ or frontend/public/: {path}")
     if not errors:
-        print(f"[PASS] all .glb assets live under {ASSET_DIR_NAME}/")
+        print(f"[PASS] tracked .glb assets live under {ASSET_DIR_NAME}/ or frontend/public/")
     return errors
+
+
+class AssetLayoutScopeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        subprocess.run(["git", "init", "--quiet"], cwd=self.root, check=True, capture_output=True)
+
+    def stage_asset(self, relative: str):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"layout-only fixture")
+        subprocess.run(["git", "add", "--", relative], cwd=self.root, check=True, capture_output=True)
+
+    def test_untracked_local_glb_is_not_an_archived_asset(self):
+        local = self.root / "objects" / "dormdesk.glb"
+        local.parent.mkdir()
+        local.write_bytes(b"untracked local export")
+        self.assertEqual(check_no_stray_glb_outside_asset_dir(self.root), [])
+        self.assertTrue(local.exists())
+
+    def test_tracked_archives_and_runtime_glb_are_allowed(self):
+        self.stage_asset(f"{ASSET_DIR_NAME}/fixture.glb")
+        self.stage_asset("frontend/public/models/runtime.glb")
+        self.stage_asset("frontend/public/generated/模型 export.glb")
+        self.assertEqual(check_no_stray_glb_outside_asset_dir(self.root), [])
+
+    def test_tracked_glb_in_source_directory_is_rejected(self):
+        self.stage_asset("objects/stray.glb")
+        errors = check_no_stray_glb_outside_asset_dir(self.root)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("objects/stray.glb", errors[0])
+
+    def test_git_enumeration_failure_is_not_a_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            errors = check_no_stray_glb_outside_asset_dir(Path(directory))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Unable to list tracked GLB assets with Git", errors[0])
 
 
 def main() -> int:
@@ -142,7 +195,7 @@ def main() -> int:
         return 1
 
     print(f"\n[SUCCESS] {len(PREFAB_KEYWORDS)} prefab keys resolve to lightweight assets; "
-          "detail tiers and Rodin fallbacks present; no stray GLB outside the asset directory.")
+          "detail tiers and Rodin fallbacks present; tracked GLB locations are valid.")
     return 0
 
 
