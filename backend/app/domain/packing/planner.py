@@ -9,6 +9,7 @@ from ..geometry import (
     aabb_from_zone,
     fits_region,
     items_overlap,
+    pose_extent,
     support_region,
     validate_item_geometry,
 )
@@ -19,6 +20,23 @@ from .check import WALL_CATEGORIES, check_layout, issue, item_geometry_issues
 
 MAX_CANDIDATES_PER_REGION_ROTATION = 128
 FREQUENCY_WEIGHT = {"high": 3.0, "medium": 1.0, "low": 0.2}
+
+
+def _rotated_extent(item: dict, angle: float) -> tuple[float, float, float]:
+    """Real half-width / half-depth / height of the collision volume at ``angle``.
+
+    The rotation is applied to the real geometry, then measured: a rotated L-shape needs
+    its rotated AABB, which is what the region scan and the blocker offsets consume.
+    """
+    half_width, half_depth, height = pose_extent(item)
+    if not angle:
+        return half_width, half_depth, height
+    cosine, sine = abs(math.cos(angle)), abs(math.sin(angle))
+    return (
+        half_width * cosine + half_depth * sine,
+        half_width * sine + half_depth * cosine,
+        height,
+    )
 
 
 def _pose(item: dict, position, angle: float) -> dict:
@@ -52,12 +70,12 @@ def _candidates(scene: Scene, original: dict, region: dict, placed: list[dict]):
         aabb_from_zone(z) for key in ("obstacles", "reserved_zones") for z in scene[key]
     )
     for angle in sorted(set(original["allowed_rotations_y_rad"])):
-        base = _pose(original, (0, y, 0), angle)
-        bounds = aabb_from_item(base)
-        hw, hd = bounds.maximum[0], bounds.maximum[2]
+        # Real collision extents (rotated), not the declared box: a lamp's arm or a
+        # monitor's panel is narrower than size_m, so the declared box over-reserves.
+        hw, hd, height = _rotated_extent(original, angle)
         if 2 * hw > x1 - x0 + 1e-10 or 2 * hd > z1 - z0 + 1e-10:
             continue
-        if original["size_m"][1] > region["clearance_height_m"] + 1e-10:
+        if height > region["clearance_height_m"] + 1e-10:
             continue
         xs = {
             x0 + hw,
@@ -73,7 +91,7 @@ def _candidates(scene: Scene, original: dict, region: dict, placed: list[dict]):
         }
         for box in blockers:
             if (
-                min(y + original["size_m"][1], box.maximum[1])
+                min(y + height, box.maximum[1])
                 <= max(y, box.minimum[1]) + 1e-10
             ):
                 continue

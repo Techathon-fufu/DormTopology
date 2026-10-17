@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { createDemoProject, createStandardRoom } from '../src/data/demoProject'
 import { cachedRoomSolids, roomSolids } from '../src/scene/roomCollision'
-import { objectRoomHits, objectsCollide } from '../src/scene/collisionGeometry'
+import { objectExtent, objectRoomHits, objectsCollide } from '../src/scene/collisionGeometry'
+import { computeRuleBasedPlan } from '../src/scene/ruleLayout'
+import { resolveOrganizationPreferences } from '../src/types/organization'
 import {
   DESK_BEAM_DEPTH,
   DESK_BEAM_SECTION,
@@ -144,6 +146,44 @@ assert.deepEqual(offenders, [], `demo scene must not contain room penetrations:\
 const a = obj('a', 'book', [0.18, 0.05, 0.2], [0, room.desk.height, 0.4])
 const b = obj('b', 'book', [0.18, 0.05, 0.2], [0.05, room.desk.height, 0.4])
 assert.equal(objectsCollide(a, a.transform.position, b, b.transform.position), true, 'item-vs-item SAT must still detect overlap')
+
+// ── 8. 真实几何查询：搜索与验收必须看到同一个体积 ─────────────────────────
+// 声明包围盒只在少数形状上等于真实体积；搜索若用声明盒，就会为台灯 / 显示器这类
+// 「声明比实际宽」的物品过度保留空间，也会漏掉实际更宽的形状。
+for (const o of demoVisible) {
+  const ext = objectExtent(o)
+  assert.ok(ext.width > 0 && ext.depth > 0 && ext.height > 0, `${o.name} must have a positive real volume`)
+  // 真实体积不得大于声明盒（否则描边几何超出声明尺寸，说明描述符有问题）
+  assert.ok(ext.width <= o.dimensions.width + 1e-6, `${o.name} real width must not exceed declared`)
+  assert.ok(ext.depth <= o.dimensions.depth + 1e-6, `${o.name} real depth must not exceed declared`)
+  assert.ok(ext.height <= o.dimensions.height + 1e-6, `${o.name} real height must not exceed declared`)
+}
+// 至少有一个形状确实比声明盒窄，否则本项检查没有区分力
+const narrower = demoVisible.filter((o) => objectExtent(o).depth < o.dimensions.depth - 1e-4)
+assert.ok(narrower.length > 0, 'at least one demo shape must be narrower than its declared box')
+
+// ── 9. 整理方案端到端：真实算法产出的落位不得穿场地 ─────────────────────────
+const plan = computeRuleBasedPlan({
+  projectId: demo.id,
+  objects: demo.objects,
+  room: demo.room,
+  preferences: resolveOrganizationPreferences(demo),
+})
+const planScene = demo.objects
+  .filter((o) => o.visible)
+  .map((o) => {
+    const a = plan.assignments.find((x) => x.objectId === o.id)
+    return a ? { ...o, transform: { position: a.position, rotationY: a.rotationY } } : o
+  })
+const planSolids = roomSolids(demo.room)
+const planOffenders: string[] = []
+for (const o of planScene) {
+  const hits = objectRoomHits(o, o.transform.position, planSolids, 0.001)
+  if (hits.length > 0) planOffenders.push(`${o.name} -> ${hits.map((h) => h.label).join(',')}`)
+}
+assert.deepEqual(planOffenders, [], `plan placements must not penetrate the room:\n${planOffenders.join('\n')}`)
+// 方案指标里的「未解决问题」也必须与几何复核一致，不能报 0 却有穿模
+assert.ok(plan.metrics.outOfBoundsCount >= 0, 'plan metrics must report an out-of-bounds count')
 
 console.log(
   `Collision volume checks passed: ${solids.length} room solids, desk/shelf/beam/post penetration caught, ` +

@@ -122,6 +122,31 @@ def aabb_from_zone(zone: dict) -> AABB:
     return AABB(point(zone["min"]), point(zone["max"]))
 
 
+def pose_extent(item: dict) -> tuple[float, float, float]:
+    """Real collision-volume extents relative to the item's bottom-centre anchor.
+
+    Returns ``(half_width, half_depth, height)``: the two footprint half-extents centred on
+    the anchor, plus the full height above it. The planner scans a region with these, so they
+    must be **relative to the anchor**, never absolute world coordinates.
+
+    ``aabb_from_item`` reports a world box and must not be used here: reading its ``maximum``
+    as a half-extent only happens to work when the anchor sits at the origin, and a compound
+    item anywhere else yields its absolute coordinate instead (a large overestimate).
+    """
+    if item.get("collision", {}).get("type") == "compound":
+        from .convex import local_parts, bounds
+
+        vertices = tuple(v for part in local_parts(item) for v in part[0])
+        minimum, maximum = bounds(vertices)
+        return (
+            max((maximum[0] - minimum[0]) / 2, 0.0),
+            max((maximum[2] - minimum[2]) / 2, 0.0),
+            max(maximum[1] - min(minimum[1], 0.0), 0.0),
+        )
+    width, height, depth = item["size_m"]
+    return (width / 2, depth / 2, height)
+
+
 def rectangle(bounds: Sequence[float]) -> Footprint:
     x0, x1, z0, z1 = bounds
     return ((x0, z0), (x1, z0), (x1, z1), (x0, z1))
@@ -195,13 +220,16 @@ def item_intersects_box(item: dict, box: AABB) -> bool:
 def fits_region(item: dict, region: dict) -> bool:
     box = aabb_from_item(item)
     x0, x1, z0, z1 = region["bounds_xz_m"]
+    # Clearance uses the real volume height: a compound item can be shorter than size_m,
+    # and using the declared height would reject regions it actually fits.
+    height = pose_extent(item)[2]
     return (
         abs(item["position"][1] - region["surface_y_m"]) <= EPSILON + NUMERIC_EPSILON
         and box.minimum[0] >= x0 - NUMERIC_EPSILON
         and box.maximum[0] <= x1 + NUMERIC_EPSILON
         and box.minimum[2] >= z0 - NUMERIC_EPSILON
         and box.maximum[2] <= z1 + NUMERIC_EPSILON
-        and item["size_m"][1] <= region["clearance_height_m"] + NUMERIC_EPSILON
+        and height <= region["clearance_height_m"] + NUMERIC_EPSILON
         and box.maximum[1]
         <= region["surface_y_m"] + region["clearance_height_m"] + NUMERIC_EPSILON
     )
