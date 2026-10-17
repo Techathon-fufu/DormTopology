@@ -23,6 +23,12 @@ test.beforeEach(async ({page}) => {
   await page.evaluate(url => { (window as any).__projectsUrl = url }, url)
 })
 
+/** 走线模式入口：工作台左侧工具面板的「连线」标签；手机端先打开物体与线缆抽屉。 */
+async function openCableMode(page: Page, mobile = false) {
+  if (mobile) await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
+  await page.getByRole('button', { name: '连线', exact: true }).click()
+}
+
 async function moduleUrl(page: Page, pathname: string): Promise<string> {
   return page.evaluate((path) => {
     const resource = performance
@@ -314,7 +320,7 @@ test.describe('surface port marking', () => {
     await bindCamera(page)
     await setFrontView(page)
 
-    await page.getByRole('button', { name: '规划走线', exact: true }).click()
+    await openCableMode(page)
     await page.getByRole('button', { name: '描点与连接检查' }).click()
     await expect(page.getByRole('region', { name: '表面描点页面' })).toBeVisible()
     await page.getByRole('button', { name: '在表面标记接口' }).click()
@@ -383,7 +389,7 @@ test.describe('surface port marking', () => {
     await page.goto(`/projects/${id}/workspace`, {waitUntil:'domcontentloaded'})
     await expect(page.locator('canvas')).toBeVisible()
 
-    await page.getByRole('button', { name: '规划走线', exact: true }).click()
+    await openCableMode(page)
     await page.getByRole('button', { name: '描点与连接检查' }).click()
     const select = page.getByLabel('标记物品')
     await select.selectOption(`${id}-a`)
@@ -467,7 +473,7 @@ test.describe('real service routing', () => {
     await expect(page.locator('canvas')).toBeVisible()
     await bindCamera(page)
 
-    await page.getByRole('button', { name: '规划走线', exact: true }).click()
+    await openCableMode(page)
     await page.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).check()
 
     const before = await readProject(page,id)
@@ -506,8 +512,7 @@ test('mobile can inspect saved endpoint annotations and scene connection review'
   },{url,id})
   await page.goto(`/projects/${id}/workspace`,{waitUntil:'domcontentloaded'})
   await expect(page.locator('canvas')).toBeVisible()
-  await page.getByRole('button',{name:'规划走线',exact:true}).click()
-  if (!await page.getByRole('button',{name:'描点与连接检查'}).first().isVisible()) await page.getByRole('button',{name:'打开物品面板',exact:true}).click()
+  await openCableMode(page, true)
   const drawer=page.getByRole('dialog',{name:'物品与线缆面板'})
   await drawer.getByRole('button',{name:'描点与连接检查'}).click()
   const marking=page.getByRole('region',{name:'表面描点页面'})

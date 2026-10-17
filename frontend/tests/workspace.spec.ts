@@ -208,6 +208,8 @@ test('updates the status bar when project jobs change and excludes other project
   await expect(statusBar).toContainText('工作台模型任务 · 等待尺寸确认 · 1 待确认')
   await mutateJob(page, { action: 'update', id: jobId!, patch: { status: 'failed', error: '测试失败状态' } })
   await expect(statusBar).toContainText('1 个任务未完成')
+  // 状态栏把失败重试收进「服务与任务」折叠区，展开后断言可见
+  await statusBar.locator('summary').click()
   await expect(statusBar.getByRole('button', { name: '重试', exact: true })).toBeVisible()
   await expect(statusBar).not.toContainText('工作台模型任务')
 
@@ -216,6 +218,8 @@ test('updates the status bar when project jobs change and excludes other project
   await expect(statusBar.getByRole('button', { name: '重试', exact: true })).toHaveCount(0)
   await expect(statusBar).not.toContainText('其他项目模型任务')
   await mutateJob(page, { action: 'remove', id: otherId! })
+  // 收起「服务与任务」折叠区，避免展开的任务面板遮挡画布像素采样
+  if (await statusBar.locator('details[open]').count()) await statusBar.locator('summary').click()
   await expectNonblankCanvas(page)
   await attachViewport(page, testInfo, 'workspace-jobs-updated')
   expect(failures).toEqual([])
