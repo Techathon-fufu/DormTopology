@@ -93,7 +93,7 @@ function RouteNodeMarker({
         }}
       />
       {showLabel ? (
-        <Html position={[0, 0.035, 0]} center distanceFactor={8} zIndexRange={[20, 0]}>
+        <Html position={[0, 0.035, 0]} center zIndexRange={[20, 0]}>
           <div className="pointer-events-none whitespace-nowrap rounded-md border border-border bg-surface/95 px-2 py-0.5 text-[11px] shadow-sm">
             <span style={{ color: meta.color }}>{meta.label}</span>
             <span className="text-muted-foreground"> · {node.label}</span>
@@ -127,7 +127,7 @@ function AvoidZoneOverlay({ zone, surfaceY }: { zone: CableAvoidZone; surfaceY: 
         material={basicMaterial(meta, { opacity: 0.07, doubleSide: true })}
       />
       <Line points={loop} color={meta} lineWidth={1.2} transparent opacity={0.55} />
-      <Html position={[cx, surfaceY + 0.02, cz]} center distanceFactor={9} zIndexRange={[10, 0]}>
+      <Html position={[cx, surfaceY + 0.02, cz]} center zIndexRange={[10, 0]}>
         <div
           className="pointer-events-none whitespace-nowrap rounded-full border bg-surface/90 px-2 py-0.5 text-[10px] font-medium shadow-sm"
           style={{ borderColor: `${meta}66`, color: meta }}

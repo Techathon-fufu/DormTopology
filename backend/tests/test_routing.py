@@ -335,6 +335,46 @@ class CableRoutingTests(unittest.TestCase):
         self.assertIsNone(cable["path_length_m"])
         self.assertIsNone(result["metrics"]["exposed_length_m"])
 
+    def test_unknown_length_computes_the_same_verified_curve_in_both_modes(self):
+        for mode in ("slot", "backboard"):
+            with self.subTest(mode=mode):
+                scene = scene_for(mode)
+                known = plan_routes(scene)
+                scene["cables"][0]["length_m"] = None
+                original = copy.deepcopy(scene)
+                result = plan_routes(scene)
+                self.assertEqual(result["status"], "success")
+                self.assertEqual(result["cables"], known["cables"])
+                self.assertGreater(result["cables"][0]["path_length_m"], 0)
+                self.assertEqual(scene, original)
+
+    def test_unknown_length_preserves_obstacle_and_port_checks(self):
+        scene = scene_for()
+        scene["cables"][0]["length_m"] = None
+        scene["obstacles"] = [
+            {"id": "blocked", "min": [0.0, 0.05, 0.05], "max": [0.2, 0.15, 0.15]}
+        ]
+        result = plan_routes(scene)
+        self.assertEqual(result["cables"][0]["status"], "failed")
+        self.assertEqual(result["cables"][0]["path_points"], [])
+        self.assertIsNone(result["cables"][0]["path_length_m"])
+        scene["items"][0]["ports"][0]["confirmed"] = False
+        with self.assertRaises(RoutingInputError):
+            plan_routes(scene)
+
+    def test_only_unknown_length_accepts_null_and_known_specs_stay_positive(self):
+        for key, values in (
+            ("length_m", (0, -1, True, "2", math.nan, math.inf)),
+            ("diameter_m", (None, 0)),
+            ("min_bend_radius_m", (None, 0)),
+        ):
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    scene = scene_for()
+                    scene["cables"][0][key] = value
+                    with self.assertRaises(RoutingInputError):
+                        plan_routes(scene)
+
     def test_empty_request_has_zero_current_exposure(self):
         scene = scene_for()
         scene["cables"] = []

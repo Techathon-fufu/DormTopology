@@ -26,7 +26,6 @@ import { cn, uid } from '@/lib/utils'
 import { mockSleep } from '@/lib/mockPacing'
 import { deleteFile, putFile } from '@/state/storage/idb'
 import { isMockMode, services, type RecognizedItem } from '@/api'
-import { SwitchToDemoButton } from '@/ui/service/SwitchToDemoButton'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
 import { useJobsStore, useProjectJobs } from '@/state/jobsStore'
 import { useTourStore } from '@/state/tourStore'
@@ -676,13 +675,12 @@ export function ImportPage() {
               <span className="flex-1">
                 {isMockMode
                   ? '识别失败（演示异常流程）。可重试；取消勾选「强制失败」后重试即可成功。'
-                  : `识别失败：${recogError ?? '未知原因'}。可重试，或切换到演示模式继续体验。`}
+                  : `识别失败：${recogError ?? '未知原因'}。请检查后端服务后重试。`}
               </span>
               <Button variant="outline" size="sm" onClick={() => void runRecognition()}>
                 <RefreshCw className="h-3.5 w-3.5" />
                 重试识别
               </Button>
-              <SwitchToDemoButton />
             </div>
           ) : null}
 

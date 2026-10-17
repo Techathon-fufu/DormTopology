@@ -124,6 +124,8 @@ export interface Port {
   offset?: Vec3
   /** 接口朝向（局部方向），默认朝后 */
   direction?: PortDirection
+  /** 用户已核对当前局部接口位置、方向及类型；编辑这些字段后须重新确认。 */
+  confirmed?: boolean
 }
 
 // ───────────────────────────── 场景对象 ─────────────────────────────
@@ -364,6 +366,16 @@ export interface CableRoute {
   smooth?: boolean
   /** 本条路径实际采用的走线策略（由线材类型推导；用于「类型变更后需重算」判定） */
   strategy?: CableRouteStrategy
+  /** 真实后端沿已验证连续曲线积分得到的长度，不能重新平滑后沿用。 */
+  pathLengthM?: number
+  verification?: {
+    sceneId: string
+    sceneRevision: number
+    status: 'valid' | 'failed'
+    reasonCode?: string
+    supportStatus: 'verified' | 'not_evaluated'
+    maxUnsupportedSpanM?: number | null
+  }
 }
 
 export type CableRouteStatus = 'existing' | 'planned' | 'adjusted' | 'stale' | 'conflict'
@@ -407,7 +419,7 @@ export interface CableConnection {
    * 未规划过的线缆没有该字段。
    */
   originalRoute?: CableRoute
-  /** 用户填写的实际线长（米；undefined = 未填写） */
+  /** 已知的现有线材长度（米；undefined = 未知），不作为规划必填项。 */
   actualLengthM?: number
   /** 用户填写的预留长度（米；undefined = 按 0 处理） */
   reserveLengthM?: number

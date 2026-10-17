@@ -2,6 +2,10 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutPlan, Project } from '@/types/project'
 import { duplicatePlan, planFromProject } from '@/lib/plans'
+import { invalidateCableRoutes } from '@/scene/cables'
+import { useProjectsStore } from './projectsStore'
+import { useWorkspaceStore } from './workspaceStore'
+import { useCableStore } from './cableStore'
 
 /**
  * 布局方案仓库：
@@ -47,10 +51,16 @@ export const usePlansStore = create<PlansState>()(
         }))
       },
       recaptureBaseline(project) {
+        const current = useProjectsStore.getState().projects[project.id] ?? project
+        const next = { ...current, cables: invalidateCableRoutes(current.cables) }
+        // A new baseline changes the formal scene version even when geometry stays unchanged.
+        useProjectsStore.getState().update(project.id, () => next)
+        useCableStore.getState().resetAnim()
+        useWorkspaceStore.getState().resetHistory()
         set((s) => ({
           baselines: {
             ...s.baselines,
-            [project.id]: planFromProject(project, 'baseline', '整理前状态（重新采集）', { withScene: true }),
+            [project.id]: planFromProject(next, 'baseline', '整理前状态（重新采集）', { withScene: true }),
           },
         }))
       },

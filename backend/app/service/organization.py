@@ -325,6 +325,7 @@ class OrganizationService:
         job = self.get_job(job_id)
         if (
             job["status"] != "succeeded"
+            or job.get("kind") != "organization"
             or job.get("applied")
             or job["scene_id"] != scene_id
             or job["scene_revision"] != scene_revision

@@ -3,6 +3,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Project } from '@/types/project'
 import { createDemoProject, DEMO_PROJECT_ID, DEMO_SEED_VERSION } from '@/data/demoProject'
+import { cableRoutingObjectsSignature, invalidateCableRoutes } from '@/scene/cables'
+import { resolveOrganizationPreferences } from '@/types/organization'
+import { useCableStore } from './cableStore'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -55,8 +58,15 @@ export const useProjectsStore = create<ProjectsState>()(
       update(id, updater) {
         const p = get().projects[id]
         if (!p) return
+        const next = updater(p)
+        const routingChanged = JSON.stringify(p.room) !== JSON.stringify(next.room)
+          || JSON.stringify(resolveOrganizationPreferences(p)) !== JSON.stringify(resolveOrganizationPreferences(next))
+          || cableRoutingObjectsSignature(p.objects) !== cableRoutingObjectsSignature(next.objects)
+        if (routingChanged) useCableStore.getState().resetAnim()
         set((s) => ({
-          projects: { ...s.projects, [id]: { ...updater(p), updatedAt: Date.now() } },
+          projects: { ...s.projects, [id]: { ...next,
+            cables: routingChanged ? invalidateCableRoutes(next.cables) : next.cables,
+            updatedAt: Date.now() } },
         }))
       },
       remove(id) {

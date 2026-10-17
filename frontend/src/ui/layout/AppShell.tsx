@@ -33,7 +33,7 @@ export function AppShell() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-7 sm:px-8 sm:py-10"><Outlet /></main>
-      <footer className="border-t border-border bg-surface/50 py-5 print:hidden"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 sm:px-8"><span className="text-xs text-muted-foreground">寝空拓扑 · 为顺手的宿舍空间而设计</span><details className="group max-w-xl text-xs text-muted-foreground"><summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden"><span className={cn('h-1.5 w-1.5 rounded-full',isMockMode ? 'bg-warning' : 'bg-primary')} />{isMockMode ? '当前为演示模式' : '当前为真实服务模式'}<ChevronDown className="h-3 w-3 group-open:rotate-180" /></summary><p className="mt-2 leading-6">{isMockMode ? '照片识别、外观生成与规划使用本地模拟或规则演示，不能替代真实服务与现场测量。' : '识别、外观生成与规划请求应用后端；失败和数据来源会在对应步骤显示。'}</p></details></div></footer>
+      <footer className="border-t border-border bg-surface/50 py-5 print:hidden"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 sm:px-8"><span className="text-xs text-muted-foreground">寝空拓扑 · 为顺手的宿舍空间而设计</span><details className="group max-w-xl text-xs text-muted-foreground"><summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden"><span className="h-1.5 w-1.5 rounded-full bg-primary" />整理与理线使用后端算法<ChevronDown className="h-3 w-3 group-open:rotate-180" /></summary><p className="mt-2 leading-6">{isMockMode ? '照片识别与外观生成仍使用模拟数据，并在对应步骤单独标注。' : '识别与外观生成请求应用后端；失败和数据来源会在对应步骤显示。'}</p></details></div></footer>
       <DemoTour />
     </div>
   )

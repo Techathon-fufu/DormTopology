@@ -76,7 +76,7 @@ export interface RunRemoteJobOptions<TResult> {
   signal?: AbortSignal
   onAccepted?: (jobId: string) => void
   /** wire 结果 → 内部模型（含本地校验，见 core/wire.ts） */
-  mapResult: (wire: unknown) => TResult
+  mapResult: (wire: unknown) => TResult | Promise<TResult>
 }
 
 interface PollOptions {
@@ -169,7 +169,7 @@ export async function runRemoteJob<TResult>(opts: RunRemoteJobOptions<TResult>):
     if (final.status === 'succeeded') {
       let mapped: TResult
       try {
-        mapped = opts.mapResult(final.result)
+        mapped = await opts.mapResult(final.result)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         patchRecord(jobId, { status: 'failed', error: `结果本地校验失败：${msg}` })

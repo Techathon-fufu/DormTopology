@@ -418,7 +418,9 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             ("mode", {"slot", "backboard"}),
         ):
             _enum(cable[key], choices, path + "." + key)
-        for key in ("length_m", "diameter_m", "min_bend_radius_m"):
+        if cable["length_m"] is not None:
+            _number(cable["length_m"], path + ".length_m", positive=True)
+        for key in ("diameter_m", "min_bend_radius_m"):
             _number(cable[key], path + "." + key, positive=True)
         if _number(cable["slack_m"], path + ".slack_m") < 0:
             _fail(path + ".slack_m", "must be nonnegative")

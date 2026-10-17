@@ -22,18 +22,24 @@ const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [numb
 export function CameraRig({ preset }: { preset: ViewPreset }) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const camera = useThree((s) => s.camera)
+  const size = useThree((s) => s.size)
   const nonce = useWorkspaceStore((s) => s.viewNonce)
   const dragActive = useWorkspaceStore((s) => s.drag !== null)
 
   useEffect(() => {
     const p = PRESETS[preset]
-    camera.position.set(p.pos[0], p.pos[1], p.pos[2])
+    const distanceScale = Math.max(1, 1.1 / (size.width / Math.max(1, size.height)))
+    camera.position.set(
+      p.target[0] + (p.pos[0] - p.target[0]) * distanceScale,
+      p.target[1] + (p.pos[1] - p.target[1]) * distanceScale,
+      p.target[2] + (p.pos[2] - p.target[2]) * distanceScale,
+    )
     const controls = controlsRef.current
     if (controls) {
       controls.target.set(p.target[0], p.target[1], p.target[2])
       controls.update()
     }
-  }, [preset, nonce, camera])
+  }, [preset, nonce, camera, size.width, size.height])
 
   return (
     <OrbitControls

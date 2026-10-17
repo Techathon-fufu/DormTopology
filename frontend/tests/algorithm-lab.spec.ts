@@ -269,6 +269,16 @@ test('renders valid routes only for their matching layout phase and revision', a
   await expect(viewport).toHaveAttribute('data-rendered-cables', '0')
 })
 
+test('accepts verified routes with unknown cable availability while retaining known-length limits', () => {
+  const scene = readFixture<Scene>('routing-slot', 'scene.json')
+  const routing = readFixture<RoutingResult>('routing-slot', 'cable_routing.json')
+  expect(routing.cables.some(cable => cable.status === 'valid')).toBe(true)
+  scene.cables.forEach(cable => { cable.length_m = null })
+  expect(() => parseBundle(scene, undefined, routing)).not.toThrow()
+  scene.cables.forEach(cable => { cable.length_m = 0.001 })
+  expect(() => parseBundle(scene, undefined, routing)).toThrow(/exceeds the source cable length/)
+})
+
 test('rejects applied scenes that alter dimensions, ports, obstacles or cables', async ({ page }) => {
   await openLab(page)
   const applied = readFixture<Scene>('packing-revision-2', 'applied_scene.json')
@@ -284,7 +294,7 @@ test('rejects applied scenes that alter dimensions, ports, obstacles or cables',
     (value: Scene) => { value.items[0].size_m[0] += 0.01 },
     (value: Scene) => { value.items.find(item => item.ports.length)!.ports[0].confirmed = false },
     (value: Scene) => { value.obstacles[0].max[0] += 0.01 },
-    (value: Scene) => { value.cables[0].length_m += 0.1 },
+    (value: Scene) => { value.cables[0].length_m = (value.cables[0].length_m ?? 0) + 0.1 },
   ]) {
     await importJson(page, documents)
     await expect(page.getByRole('alert')).toHaveCount(0)

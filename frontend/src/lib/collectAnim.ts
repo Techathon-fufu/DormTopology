@@ -1,5 +1,5 @@
 import type { Project, Vec3 } from '@/types/project'
-import { cableDisplayPoints } from '@/scene/cables'
+import { cableDisplayPoints, hasUsableCableRoute } from '@/scene/cables'
 import { sampleCurve } from '@/scene/cableRoute'
 import { useCableStore } from '@/state/cableStore'
 import { useTourStore } from '@/state/tourStore'
@@ -14,12 +14,12 @@ import { useTourStore } from '@/state/tourStore'
 export function startCollectAnim(project: Project, onFlash: (msg: string) => void): boolean {
   const from: Record<string, Vec3[]> = {}
   for (const cable of project.cables) {
-    if (!cable.originalRoute) continue
+    if (!cable.originalRoute || !hasUsableCableRoute(cable)) continue
     const points = cableDisplayPoints(cable, project.objects, 'original')
     from[cable.id] = sampleCurve(points, 48)
   }
   if (Object.keys(from).length === 0) {
-    onFlash('暂无可对比的原始走线：请先执行一次「规划走线」（规划前的走线会保留为原始走线）')
+    onFlash('暂无有效的建议走线可对比，请先完成走线规划与检查')
     return false
   }
   useCableStore.getState().setRouteView('suggested')

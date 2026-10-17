@@ -35,8 +35,8 @@ import { CameraRig } from '@/scene/CameraRig'
 import { RoomShell } from '@/scene/RoomShell'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { CompareCables, CompareObjectMesh, DIFF_COLOR } from '@/scene/PlanCompareScene'
-import { cableDisplayPoints, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
-import { estimateCableLength } from '@/scene/cableRoute'
+import { resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
+import { cablePathLength } from '@/scene/cableGeometry'
 import { Badge } from '@/ui/kit/badge'
 import { Button } from '@/ui/kit/button'
 import { EmptyState } from '@/ui/kit/empty-state'
@@ -129,10 +129,10 @@ function PlanMetricsTable({
     },
     {
       label: '走线总长度',
-      title: '按各条线缆路径控制点折线估算（估算值；未规划线缆不计入）',
+      title: '真实曲线采用后端验证长度，演示路径按当前采样估算；任意线路尚无有效路径时总长未知',
       value: (m) => (m?.cableLengthM == null ? '—' : `${m.cableLengthM.toFixed(2)} m`),
       raw: (m) => m?.cableLengthM ?? null,
-      estimate: (m) => m?.cableLengthM != null,
+      estimate: (m) => Boolean(m?.estimated.cableLength),
       better: 'lower',
     },
     {
@@ -150,7 +150,7 @@ function PlanMetricsTable({
     },
     {
       label: '走线来源',
-      title: '按方案各线缆的规划来源汇总（规则式演示 / 真实算法 / 手动调整）',
+      title: '按方案各线缆的来源汇总（历史未验证路径 / 后端算法 / 手动调整）',
       value: (m) =>
         m?.source ? PLAN_CABLE_SOURCE_LABELS[m.source.cable] : '未记录（旧版本方案）',
     },
@@ -231,8 +231,7 @@ function CableRow({
   const visibility = resolveCableVisibility(cable, objects).visibility
   const thickness = resolveCableThickness(cable)
   const strategy = cable.route.strategy ?? CABLE_VISIBILITY_META[visibility].strategy
-  const points = cableDisplayPoints(cable, objects, 'suggested')
-  const lengthM = points.length >= 2 ? estimateCableLength(points) : null
+  const lengthM = cablePathLength(cable, objects)
   return (
     <div
       className={cn(
@@ -253,7 +252,7 @@ function CableRow({
       <div className="text-muted-foreground">
         {CABLE_VISIBILITY_META[visibility].label} · {CABLE_THICKNESS_META[thickness].label} ·{' '}
         {CABLE_STRATEGY_META[strategy].label} · {CABLE_STATUS_META[cable.status].label}
-        {lengthM !== null ? ` · ≈${lengthM.toFixed(2)} m` : ' · 未规划（无路径）'}
+        {lengthM !== null ? ` · ${cable.route.pathLengthM === undefined ? '≈' : ''}${lengthM.toFixed(2)} m` : ' · 路径长度未知'}
       </div>
     </div>
   )
@@ -815,7 +814,7 @@ export function PlanComparePage() {
                                     ? '—'
                                     : `${metrics.cableLengthM.toFixed(2)} m`
                                 }
-                                estimate={metrics?.cableLengthM != null}
+                                estimate={Boolean(metrics?.estimated.cableLength)}
                                 title="按路径控制点折线估算"
                               />
                               <MetricLine

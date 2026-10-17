@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Info,
   Loader2,
   Lock,
@@ -26,18 +28,19 @@ import {
   type CupCorner,
   type OrganizationPreferences,
 } from '@/types/organization'
-import { isOrganizationMockMode as isMockMode, services } from '@/api'
-import { SwitchToDemoButton } from '@/ui/service/SwitchToDemoButton'
+import { services } from '@/api'
+import { isApiError } from '@/api/core/errors'
+import { invalidateCableRoutes } from '@/scene/cables'
 import { useJobsStore } from '@/state/jobsStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { usePlansStore } from '@/state/plansStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { cn, formatDateTime } from '@/lib/utils'
+import { cn, formatDateTime, uid } from '@/lib/utils'
 import { organizationSource, canApplyOrganization } from '@/lib/organizationSession'
 import { assertOrganizationApplicable, organizationPlanFailure } from '@/lib/organizationValidation'
-import { planFromProject } from '@/lib/plans'
+import { clonePlanData } from '@/lib/plans'
 import { usePrefersReducedMotion } from '@/lib/motion'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
@@ -47,7 +50,7 @@ import { Label, Separator } from '@/ui/kit/primitives'
 
 /**
  * 空间整理面板（右侧停靠 / 抽屉复用）：
- * 偏好设置 → 生成整理方案（规则式演示）→ 整理结果预览 → 分批动画（暂停 / 跳过 / 重播）→ 接受 / 恢复原布局。
+ * 偏好设置 → 后端生成整理方案 → 整理结果预览 → 分批动画（暂停 / 跳过 / 重播）→ 接受 / 恢复原布局。
  * 整理前后对比使用同一镜头（不移动相机），指标全部来自本地场景数据计算并附口径说明。
  */
 
@@ -108,6 +111,7 @@ export function OrganizePanel({
   onPreviewReady?: () => void
   onClose?: () => void
 }) {
+  const navigate = useNavigate()
   const status = useOrganizeStore((s) => s.status)
   const accepting = useOrganizeStore((s) => s.applying)
   const setApplying = useOrganizeStore((s) => s.setApplying)
@@ -142,6 +146,7 @@ export function OrganizePanel({
 
   const [stage, setStage] = useState('')
   const [confirmedSource, setConfirmedSource] = useState<string | null>(null)
+  const [sceneConflict, setSceneConflict] = useState<{ projectId: string; sessionToken: number; message: string } | null>(null)
   const confirmationSource = JSON.stringify([organizationSource(project), baseline])
   const confirmed = confirmedSource === confirmationSource
 
@@ -172,11 +177,11 @@ export function OrganizePanel({
     const p = useProjectsStore.getState().projects[project.id]
     if (!p || useOrganizeStore.getState().applying || useOrganizeStore.getState().status === 'planning') return
     const currentBaseline = usePlansStore.getState().baselines[p.id]
-    if (!isMockMode && (!currentBaseline?.scene || currentBaseline.projectId !== p.id)) {
+    if (!currentBaseline?.scene || currentBaseline.projectId !== p.id) {
       setError('整理前快照缺少完整场景，请重新采集')
       return
     }
-    if (!isMockMode && confirmedSource !== JSON.stringify([organizationSource(p), currentBaseline])) {
+    if (confirmedSource !== JSON.stringify([organizationSource(p), currentBaseline])) {
       setError('请先核对并确认物品尺寸及整理前位置')
       return
     }
@@ -185,11 +190,12 @@ export function OrganizePanel({
     const job = createJob({
       projectId: p.id,
       type: 'layout',
-      title: isMockMode ? '生成整理方案（规则式演示）' : '生成整理方案（真实后端）',
-      mock: isMockMode,
+      title: '生成整理方案（真实后端）',
+      mock: false,
     })
     setStatus('planning')
     setError(null)
+    setSceneConflict(null)
     setStage('准备中')
     updateJob(job.id, { status: 'running', progress: 0.05, stageLabel: '准备中' })
     try {
@@ -198,8 +204,8 @@ export function OrganizePanel({
         objects: p.objects,
         room: p.room,
         preferences: resolveOrganizationPreferences(p),
-        baseline: currentBaseline ?? planFromProject(p, 'baseline', '整理前状态', { withScene: true }),
-        confirmed: isMockMode || confirmed,
+        baseline: currentBaseline,
+        confirmed,
         onProgress: (progress, stageLabel) => {
           updateJob(job.id, { status: 'running', progress, stageLabel })
           if (stageLabel) setStage(stageLabel)
@@ -216,6 +222,7 @@ export function OrganizePanel({
         if (useOrganizeStore.getState().open) { setStatus('config'); setError('场景已变更，请重新生成方案') }
         return
       }
+      if (result.kind !== 'algorithm') throw new Error('服务未返回后端算法方案，请检查服务配置后重试')
       setPlan(result, p.objects, source, p.room)
       setShowZones(false)
       useWorkspaceStore.getState().setViewPreset('desk')
@@ -230,19 +237,18 @@ export function OrganizePanel({
       updateJob(job.id, { status: 'success', progress: 1, resultNote: result.summary })
       const warnCount = result.serviceMeta?.warnings?.length ?? 0
       onFlash(
-        isMockMode
-          ? '整理方案已生成（规则式演示）：可播放整理动画、对比前后，再「接受方案」'
-          : `整理方案已生成（真实后端${
-              result.serviceMeta?.algorithmVersion
-                ? `，算法版本 ${result.serviceMeta.algorithmVersion}`
-                : ''
-            }）${warnCount > 0 ? `；本地校验提示 ${warnCount} 条` : ''}：可播放整理动画、对比前后，再「接受方案」`,
+        `整理方案已生成（真实后端${
+          result.serviceMeta?.algorithmVersion
+            ? `，算法版本 ${result.serviceMeta.algorithmVersion}`
+            : ''
+        }）${warnCount > 0 ? `；本地校验提示 ${warnCount} 条` : ''}：可播放整理动画、对比前后，再「接受方案」`,
       )
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (useOrganizeStore.getState().sessionToken === sessionToken) {
         setStatus('config')
         setError(msg)
+        setSceneConflict(isApiError(err) && err.kind === 'conflict' ? { projectId: p.id, sessionToken, message: msg } : null)
       }
       updateJob(job.id, useOrganizeStore.getState().sessionToken === sessionToken ? { status: 'failed', error: msg } : { status: 'canceled', resultNote: '已取消本次预览' })
     }
@@ -260,18 +266,17 @@ export function OrganizePanel({
     setApplying(true)
     setError(null)
     try {
+      if (plan.kind !== 'algorithm') throw new Error('历史方案未经后端验证，请重新生成整理方案')
       assertOrganizationApplicable(plan, current)
-      if (!isMockMode) {
-        const applied = await services.organizationPlanning.applyOrganization({
-          projectId: current.id,
-          plan,
-          objects: current.objects,
-          room: current.room,
-          preferences: resolveOrganizationPreferences(current),
-        })
-        if (!applied || applied.sceneId !== plan.serviceMeta?.sceneId || applied.sceneRevision <= plan.serviceMeta.sceneRevision) {
-          throw new Error('后端未确认正确场景的新版本，整理方案未写入本地')
-        }
+      const applied = await services.organizationPlanning.applyOrganization({
+        projectId: current.id,
+        plan,
+        objects: current.objects,
+        room: current.room,
+        preferences: resolveOrganizationPreferences(current),
+      })
+      if (!applied || applied.sceneId !== plan.serviceMeta?.sceneId || applied.sceneRevision <= plan.serviceMeta.sceneRevision) {
+        throw new Error('后端未确认正确场景的新版本，整理方案未写入本地')
       }
       const latest = useProjectsStore.getState().projects[project.id]
       const session = useOrganizeStore.getState()
@@ -283,7 +288,7 @@ export function OrganizePanel({
       applyAssignments(project.id, plan.assignments, true)
       useProjectsStore.getState().update(project.id, (p) => ({
         ...p,
-        layoutSource: plan.kind === 'algorithm' ? 'algorithm' : 'rule',
+        layoutSource: 'algorithm',
       }))
       closePanel()
       useTourStore.getState().signal(project.id, 'organize')
@@ -303,9 +308,42 @@ export function OrganizePanel({
     onFlash('已恢复整理前布局（整理的预览未应用）')
   }
 
+  const createIndependentCopy = () => {
+    const session = useOrganizeStore.getState()
+    if (!sceneConflict || sceneConflict.projectId !== project.id || sceneConflict.sessionToken !== session.sessionToken || sceneConflict.message !== session.error || session.applying || session.status === 'planning') return
+    const current = useProjectsStore.getState().projects[project.id]
+    if (!current) return
+    const id = uid('proj')
+    const now = Date.now()
+    const copy: Project = {
+      ...clonePlanData(current),
+      id,
+      name: `${current.name} 独立副本`,
+      isDemo: false,
+      source: 'user',
+      createdAt: now,
+      updatedAt: now,
+      stage: 'organize',
+      objects: clonePlanData(current.objects).map((object) => ({ ...object, projectId: id })),
+      cables: clonePlanData(current.cables).map((cable) => ({ ...cable, projectId: id })),
+    }
+    delete copy.demoSeedVersion
+    delete copy.lastAppliedPlan
+    if (copy.cables.some((cable) => cable.route.verification)) copy.cables = invalidateCableRoutes(copy.cables)
+    useProjectsStore.getState().upsert(copy)
+    setConfirmedSource(null)
+    setSceneConflict(null)
+    closePanel()
+    onClose?.()
+    navigate(`/projects/${id}/workspace`, { state: { flash: '已创建独立副本，请核对尺寸及整理前位置后重新生成方案' } })
+  }
+
   const planning = status === 'planning'
+  const canCreateCopy = sceneConflict?.projectId === project.id && sceneConflict.sessionToken === useOrganizeStore.getState().sessionToken && sceneConflict.message === error
   const hasPlan = plan !== null
-  const planFailure = plan ? organizationPlanFailure(plan) : null
+  const planFailure = !plan ? null : plan.kind === 'rule-demo'
+    ? '历史方案未经后端验证，请取消预览后重新生成。'
+    : organizationPlanFailure(plan)
   const stale = hasPlan && !canApplyOrganization(sourceSignature, project)
   const batches = commands
   const currentBatch = batches.length > 0 ? batches[Math.min(batchIndex, batches.length - 1)] : null
@@ -321,11 +359,7 @@ export function OrganizePanel({
           空间整理
         </h2>
         <div className="flex items-center gap-1.5">
-          {isMockMode ? (
-            <DataBadge kind="computed" label="规则式演示" />
-          ) : (
-            <DataBadge kind="real" label="真实后端算法" />
-          )}
+          <DataBadge kind={plan?.kind === 'rule-demo' ? 'computed' : 'real'} label={plan?.kind === 'rule-demo' ? '历史方案 · 未验证' : '真实后端算法'} />
           {onClose ? (
             <Button variant="ghost" size="icon" className="h-7 w-7" title="关闭面板" disabled={accepting} onClick={onClose}>
               <X className="h-3.5 w-3.5" />
@@ -346,7 +380,7 @@ export function OrganizePanel({
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
-        {hasPlan ? <p className="rounded-lg border border-primary/20 bg-primary-soft px-3 py-2 text-xs leading-6 text-primary">{planFailure ? '当前结果不可应用，请根据失败原因调整场景。' : '方案仅在预览中。关闭面板会保留进度；接受后才写入项目。'}</p> : null}
+        {hasPlan ? <p className="rounded-lg border border-primary/20 bg-primary-soft px-3 py-2 text-xs leading-6 text-primary">{planFailure ?? '方案仅在预览中。关闭面板会保留进度；接受后才写入项目。'}</p> : null}
         {hasPlan && (error || stale) ? <p role="alert" className="rounded-lg bg-warning/10 px-3 py-2 text-xs leading-6 text-warning">{error ?? '场景已变更，请取消预览后重新生成。'}</p> : null}
         {/* 分区说明 */}
         <section className="space-y-2 rounded-lg border border-border p-3">
@@ -515,7 +549,7 @@ export function OrganizePanel({
                       size="sm"
                       variant="ghost"
                       disabled={planning}
-                      title="把当前布局记录为新的「整理前状态」快照（演示可重新开始对比）"
+                      title="把当前布局记录为新的「整理前状态」快照"
                       onClick={() => {
                         if (!window.confirm('将当前布局记录为新的「整理前状态」快照？')) return
                         const p = useProjectsStore.getState().projects[project.id]
@@ -533,36 +567,37 @@ export function OrganizePanel({
               )}
             </section>
 
-            {!isMockMode ? (
-              <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-xs leading-6">
-                <input
-                  type="checkbox"
-                  className="mt-1.5 accent-[#0F9D8A]"
-                  checked={confirmed}
-                  disabled={planning}
-                  onChange={(event) => setConfirmedSource(event.target.checked ? confirmationSource : null)}
-                />
-                我已核对物品尺寸及整理前位置
-              </label>
-            ) : null}
+            <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-xs leading-6">
+              <input
+                type="checkbox"
+                className="mt-1.5 accent-[#0F9D8A]"
+                checked={confirmed}
+                disabled={planning}
+                onChange={(event) => setConfirmedSource(event.target.checked ? confirmationSource : null)}
+              />
+              我已核对物品尺寸及整理前位置
+            </label>
 
             {error ? (
               <div className="flex flex-wrap items-center gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                <span role="alert" className="flex-1">{error}</span>
-                <SwitchToDemoButton />
+                <span role="alert" className="min-w-0 flex-1">{error}</span>
+                {canCreateCopy ? (
+                  <Button variant="outline" size="sm" className="w-full" disabled={planning || accepting} onClick={createIndependentCopy}>
+                    <Copy className="h-3.5 w-3.5" />
+                    创建独立副本
+                  </Button>
+                ) : null}
               </div>
             ) : null}
 
-            <Button className="w-full" size="sm" disabled={planning || accepting || (!isMockMode && !confirmed)} onClick={() => void generate()}>
+            <Button className="w-full" size="sm" disabled={planning || accepting || !confirmed} onClick={() => void generate()}>
               {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {planning ? `生成中 · ${stage || '准备中'}` : '生成整理方案'}
             </Button>
             {planning ? <Button variant="ghost" size="sm" className="w-full" onClick={discard}>取消本次预览</Button> : null}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              {isMockMode
-                ? '规则式演示方案使用当前场景计算，接受前会复查完整布局。'
-                : '方案由后端布局算法生成；无法完成时会保留当前布局并显示原因。'}
+              方案由后端布局算法生成；无法完成时会保留当前布局并显示原因。
             </p>
           </>
         ) : (
@@ -710,7 +745,7 @@ export function OrganizePanel({
                 ]}
               />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                一键切换即时对比；相机保持同一视角不变。切换到「整理前」会暂停演示；继续播放会回到操作预览。
+                一键切换即时对比；相机保持同一视角不变。切换到「整理前」会暂停预览；继续播放会回到操作预览。
               </p>
             </section>
 

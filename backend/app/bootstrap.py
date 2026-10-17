@@ -14,6 +14,7 @@ from .api.routes import create_router
 from .db.sqlite import SQLiteOrganizationRepository
 from .service.executor import LimitedExecutor
 from .service.organization import OrganizationService
+from .service.routing import RoutingService
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await run_in_threadpool(repository.recover_incomplete_jobs)
             service = OrganizationService(repository, executor)
             app.state.organization_service = service
+            app.state.routing_service = RoutingService(repository, executor)
             yield
         finally:
             try:
@@ -67,7 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             finally:
                 await run_in_threadpool(repository.close)
 
-    app = FastAPI(title="DormTopology organization service", lifespan=lifespan)
+    app = FastAPI(title="DormTopology planning service", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
@@ -79,5 +81,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def get_service() -> OrganizationService:
         return app.state.organization_service
 
-    app.include_router(create_router(get_service))
+    def get_routing_service() -> RoutingService:
+        return app.state.routing_service
+
+    app.include_router(create_router(get_service, get_routing_service))
     return app

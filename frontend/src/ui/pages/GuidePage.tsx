@@ -28,7 +28,6 @@ import { useTourStore } from '@/state/tourStore'
 import { buildGuideBundle, type GuideIssue, type GuideStep, type StepTarget } from '@/lib/guide'
 import { cn, downloadJson, formatDateTime } from '@/lib/utils'
 import { formatMeters, mToMm } from '@/lib/units'
-import { isMockMode } from '@/api'
 import { PageIntro } from '@/ui/layout/PageIntro'
 import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { Badge } from '@/ui/kit/badge'
@@ -379,7 +378,7 @@ export function GuidePage() {
       app: 'DormTopology 3D',
       kind: 'delivery-guide',
       exportedAt: new Date().toISOString(),
-      mode: isMockMode ? 'mock' : 'real',
+      mode: 'real',
       project: {
         id: project.id,
         name: project.name,
@@ -413,8 +412,8 @@ export function GuidePage() {
         : null,
       notes: [
         '所有步骤由当前项目数据实时推导，未写死演示步骤',
-        '线长为本地估算（平滑采样折线 + 用户预留），配件数量为规则式估算（见各条目 reason）',
-        '三维检查为本地几何规则（非真实算法验证）；GLB 为外观预览模型，STL 尚未接入',
+        '线长采用当前有效路径及用户预留，完整路径缺失时总长未知；配件数量含估算（见各条目 reason）',
+        '后端算法验证与本地几何复查按来源分别标注；GLB 为外观预览模型，STL 尚未接入',
       ],
     })
   }
@@ -425,8 +424,8 @@ export function GuidePage() {
       <div className="hidden print:block">
         <h1 className="text-lg font-semibold">方案交付 · {project.name}</h1>
         <p className="mt-1 text-xs text-muted-foreground">
-          生成时间：{entry ? formatDateTime(entry.generatedAt) : '—'} · DormTopology 3D（演示模式：
-          数值为本地计算 / 估算，界面已标注）
+          生成时间：{entry ? formatDateTime(entry.generatedAt) : '—'} · DormTopology 3D
+          （数据来源与估算项已分别标注）
         </p>
         {shot ? (
           <img
@@ -491,9 +490,9 @@ export function GuidePage() {
             线缆总长（含预留） <DataBadge kind="computed" />
           </p>
           <p className="mt-1 text-lg font-semibold tabular-nums">
-            {formatMeters(stats.requiredLengthM)}
+            {stats.requiredLengthM === null ? '未知' : formatMeters(stats.requiredLengthM)}
           </p>
-          <p className="text-xs text-faint">净估算 {formatMeters(stats.totalLengthM)}</p>
+          <p className="text-xs text-faint">{stats.totalLengthM === null ? '部分线缆尚无有效路径' : `路径总长 ${formatMeters(stats.totalLengthM)}`}</p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
           <p className="text-xs text-muted-foreground">待解决问题</p>
@@ -501,7 +500,7 @@ export function GuidePage() {
             {stats.warningCount} 处
             <span className="ml-1 text-xs font-normal text-faint">提示 {stats.infoCount}</span>
           </p>
-          <p className="text-xs text-faint">本地几何检查结果</p>
+          <p className="text-xs text-faint">当前场景复查与规划状态</p>
         </div>
       </section>
 

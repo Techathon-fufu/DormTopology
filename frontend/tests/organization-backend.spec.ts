@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-test.skip(process.env.PLAYWRIGHT_REAL_ORGANIZATION !== '1', 'Requires a running Python backend and VITE_ORGANIZATION_API_MODE=real.')
+test.skip(process.env.PLAYWRIGHT_REAL_ORGANIZATION !== '1', 'Requires a running Python backend and the Vite source development server.')
 
 async function moduleUrl(page: Page, path: string) {
   return page.evaluate((pathname) => {
@@ -144,7 +144,7 @@ test('rejects a consumed result after a later backend edit without changing loca
   expect((await readProject(page, id)).objects).toEqual(original.objects)
 })
 
-test('keeps ordinary demo objects above the floor through Python planning and apply', async ({ page }, testInfo) => {
+test('centres the monitor, places the printer beside it and keeps ordinary objects above the floor', async ({ page }, testInfo) => {
   test.setTimeout(120_000)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/projects/demo-dorm-101/workspace')
@@ -171,6 +171,17 @@ test('keeps ordinary demo objects above the floor through Python planning and ap
   expect(plan.serviceMeta.status).toBe('success')
   expect(plan.serviceMeta.applicable).toBe(true)
   expect(plan.unplaced).toEqual([])
+  const monitor = plan.assignments.find((assignment: { objectId: string }) => assignment.objectId === 'demo-monitor')
+  expect(monitor.position[0]).toBeCloseTo(plan.preferences.typingOffsetX, 3)
+  expect(monitor.rotationY).toBe(0)
+  expect(monitor.reason).toContain('中央主视位')
+  expect(plan.serviceMeta.warnings ?? []).not.toContainEqual(expect.stringContaining('显示器'))
+  const printer = plan.assignments.find((assignment: { objectId: string }) => assignment.objectId === 'demo-printer')
+  expect(printer.targetRegionId).toMatch(/^printer-side-/)
+  expect(printer.rotationY).toBe(0)
+  const screenWidth = original.objects.find((object: { id: string }) => object.id === 'demo-monitor').dimensions.width
+  const printerWidth = original.objects.find((object: { id: string }) => object.id === 'demo-printer').dimensions.width
+  expect(Math.abs(printer.position[0] - monitor.position[0])).toBeGreaterThan((screenWidth + printerWidth) / 2)
   expect((await readProject(page, id)).objects).toEqual(original.objects)
   for (const assignment of plan.assignments) {
     const object = original.objects.find((entry: { id: string }) => entry.id === assignment.objectId)
@@ -181,19 +192,37 @@ test('keeps ordinary demo objects above the floor through Python planning and ap
   if (!await page.getByRole('button', { name: '接受方案', exact: true }).isVisible()) {
     await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
   }
+  const appliedResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith(`/jobs/${plan.serviceMeta.jobId}/apply`))
   await page.getByRole('button', { name: '接受方案', exact: true }).click()
+  const response = await appliedResponse
+  expect(response.status()).toBe(200)
+  const canonical = await response.json()
+  expect(canonical.scene_revision).toBe(plan.serviceMeta.sceneRevision + 1)
   await expect.poll(async () => (await readProject(page, id)).layoutSource).toBe('algorithm')
   const applied = await readProject(page, id)
+  const appliedMonitor = applied.objects.find((object: { id: string }) => object.id === 'demo-monitor')
+  expect(appliedMonitor.transform.position[0]).toBeCloseTo(plan.preferences.typingOffsetX, 3)
+  expect(appliedMonitor.transform.rotationY).toBe(0)
+  const appliedPrinter = applied.objects.find((object: { id: string }) => object.id === 'demo-printer')
+  expect(appliedPrinter.transform.position).toEqual(printer.position)
+  expect(appliedPrinter.transform.rotationY).toBe(0)
   const saved = await page.request.get(`/api/v1/projects/${id}/scene`)
   expect(saved.status()).toBe(200)
   const scene = await saved.json()
+  expect(scene).toEqual(canonical)
   for (const object of applied.objects) {
+    const assignment = plan.assignments.find((entry: { objectId: string }) => entry.objectId === object.id)
+    expect(object.transform.position).toEqual(assignment.position)
+    expect(object.transform.rotationY).toBe(assignment.rotationY)
     const stored = scene.items.find((item: { id: string }) => item.id === object.id)
+    expect(stored.position[0]).toBeCloseTo(object.transform.position[0] + applied.room.desk.width / 2)
     expect(stored.position[1]).toBeCloseTo(object.transform.position[1])
+    expect(stored.position[2]).toBeCloseTo(object.transform.position[2] - 0.05)
+    expect(stored.rotation_y_rad).toBeCloseTo(object.transform.rotationY)
     if (!object.fixed && !object.locked && object.transform.position[1] === 0) expect(object.model.shape).toBe('computerTower')
   }
   await page.keyboard.press('Escape')
-  const screenshot = testInfo.outputPath('floor-policy-demo-applied.png')
+  const screenshot = testInfo.outputPath('devices-demo-applied.png')
   await page.screenshot({ path: screenshot, animations: 'disabled' })
-  await testInfo.attach('floor-policy-demo-applied', { path: screenshot, contentType: 'image/png' })
+  await testInfo.attach('devices-demo-applied', { path: screenshot, contentType: 'image/png' })
 })
