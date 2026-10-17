@@ -16,9 +16,24 @@ function collectRuntimeFailures(page: Page) {
 
 async function openWorkspace(page: Page) {
   await page.goto(`/projects/${demoProjectId}/workspace`)
-  await expect(page.getByTitle('示例：上床下桌·四人间')).toBeVisible()
+  await expect(page.getByRole('banner').getByTitle('示例：上床下桌·四人间')).toBeVisible()
   await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
   await expect(page.locator('canvas')).toBeVisible()
+}
+
+async function setWorkspaceView(page: Page, value: 'top' | 'front') {
+  const desktop = page.getByRole('banner').getByLabel('场景视角', { exact: true })
+  if (await desktop.isVisible()) {
+    await desktop.selectOption(value)
+    await expect(desktop).toHaveValue(value)
+  } else {
+    const more = page.getByLabel('更多操作', { exact: true })
+    await more.click()
+    const mobile = page.getByLabel('更多操作中的场景视角', { exact: true })
+    await mobile.selectOption(value)
+    await expect(mobile).toHaveValue(value)
+    await more.click()
+  }
 }
 
 async function expectNonblankCanvas(page: Page) {
@@ -79,9 +94,9 @@ test('opens the example workspace without a render loop and keeps its scene visi
   const failures = collectRuntimeFailures(page)
   await openWorkspace(page)
   await expectNonblankCanvas(page)
-  await page.getByRole('button', { name: '俯视', exact: true }).click()
+  await setWorkspaceView(page, 'top')
   await expectNonblankCanvas(page)
-  await page.getByRole('button', { name: '正视', exact: true }).click()
+  await setWorkspaceView(page, 'front')
   await expectNonblankCanvas(page)
   await attachViewport(page, testInfo, 'workspace-rendered')
   await page.reload()

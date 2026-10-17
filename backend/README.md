@@ -2,6 +2,8 @@
 
 本目录包含 DormTopology 3D 的核心外部服务适配器与可执行流水线。
 
+2026-10-17 新增最小 FastAPI 应用：`app/bootstrap.py` 统一装配 `service`、SQLite `db` 与 `api`，供前端 `/workflow` 调用真实布局和走线算法。根目录安装 `python -m pip install -r backend/requirements.txt`，再运行 `python backend/scripts/serve.py --port 8000`。场景与照片保存在 Git 忽略的 `backend/data/`。完整接口、版本事务、测试与当前限制见[真实整理闭环](../docs/closed_loop_acceptance.md)。下方供应商命令仍为独立实验脚本，不代表已接入新产品入口。
+
 ---
 
 ## 目录结构

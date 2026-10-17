@@ -1,6 +1,6 @@
 # DormTopology 3D 前端（成员 A）
 
-React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线演示应用。默认为**本地演示模式**（`VITE_API_MODE=mock`）：照片识别、模型生成、布局整理与走线规划由本地 Mock 适配器与规则式演示实现；`VITE_API_MODE=real` 时切换为真实后端适配层（统一 HTTP 客户端 + jobId 长任务轮询 + 结果本地校验，契约见 [docs/api-integration.md](docs/api-integration.md)），后端 FastAPI 服务尚未实现、暂无法联调。界面已就地标注各处数据的真实来源（演示数据 / 模拟 / 计算值 / 真实服务 / 未接入）。
+React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面整理与理线应用。旧产品工作台默认**本地演示模式**（`VITE_API_MODE=mock`）；其 HTTP 适配协议见 [docs/api-integration.md](docs/api-integration.md)，尚未接入本轮场景 API。新增 `/workflow` **真实整理工作台**，直接使用 FastAPI + SQLite 和完整数据契约，接通基线确认、实时算法、原子应用、重新走线、指标与指南；照片仅作参照、外观仍为简化几何。[启动与验收](../docs/closed_loop_acceptance.md)明确两类入口的能力边界。新入口无需切换旧服务模式。
 
 独立的 `/algorithm-lab` 可读取真实 Python 领域算法导出的 JSON，查看布局、路径和失败原因；这不代表产品流程或 Rodin 真实联调已完成。
 
