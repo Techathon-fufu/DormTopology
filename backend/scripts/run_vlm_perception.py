@@ -61,6 +61,16 @@ def main():
         print(f"{it.get('id',''):8s} {it.get('name',''):12s} {it.get('pose',''):10s} {source_label:14s} {prefab_key:16s} {it.get('current_pos')}")
     print("-" * 88)
 
+    # Generate initial conservative AABB collision volumes for detected items
+    from backend.app.domain.geometry.collision_generator import generate_compound_box
+    for it in items:
+        dims = it.get("estimated_size_m") or it.get("size_m")
+        if dims and "collision" not in it:
+            try:
+                it["collision"] = generate_compound_box(dims[0], dims[1], dims[2])
+            except Exception as e:
+                print(f"[!] Warning: Failed to generate initial collision for {it.get('id')}: {e}")
+
     # Save output contract JSON
     out_path = Path(args.output)
     if not out_path.is_absolute():
@@ -69,7 +79,7 @@ def main():
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump({"items": items}, f, ensure_ascii=False, indent=2)
-    print(f"\n[+] 结构化数据契约已保存至: {out_path}")
+    print(f"\n[+] 结构化数据契约 (含碰撞体积) 已保存至: {out_path}")
 
     # Generate visualization image
     vis_path = Path(args.vis)
