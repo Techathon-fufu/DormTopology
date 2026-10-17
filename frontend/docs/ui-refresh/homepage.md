@@ -61,7 +61,7 @@
 
 ## 未验证 / 边界
 
-- 只有 Chromium（含 Playwright 自带 1440×1000 与 Pixel 7 模拟）；Firefox、WebKit 与真机未跑。`color-mix()`、`svh` 在旧浏览器会退化，尚未实测。
+- 只有 Chromium（含 Playwright 自带 1440×1000 与 Pixel 7 模拟）；Firefox、WebKit 与真机未跑。`color-mix()` 与 `svh` 都已写好兜底，但兜底分支没有在旧内核里实测。
 - 首页保存的是临时夹具项目，不涉及真实识别或 Rodin 生成；插图与项目 GLB 家具并不完全一致，页面已标注为示意。
 - 深夜模式当前只覆盖首页；工作台与其余页面仍是浅色，是否扩展到整站仍需用户决定。
 - 本轮没有向 DeepSeek worker 提交实现或测试任务；`.work/home-refresh` 里已有的回执保持原状。其中 `tests-run` 的完整对象已恢复后逐行审查，其移动端断言（窄屏下表头“我的空间”是 `display:none`）与伪跨标签页步骤不成立，测试按实际行为重写。之后提交过一次只读评审任务，结论见下。
