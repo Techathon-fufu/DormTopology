@@ -160,6 +160,10 @@ node /tmp/check-organization-backend.mjs --plan-demo
 node /tmp/check-cable-validation.mjs
 ./node_modules/.bin/esbuild scripts/check-cable-geometry.ts --bundle --platform=node --format=esm --outfile=/tmp/check-cable-geometry.mjs
 node /tmp/check-cable-geometry.mjs
+./node_modules/.bin/esbuild scripts/check-monitor-layout.ts --bundle --platform=node --format=esm --outfile=/tmp/check-monitor-layout.mjs
+node /tmp/check-monitor-layout.mjs
+./node_modules/.bin/esbuild scripts/check-monitor-backend.ts --bundle --platform=node --format=esm --outfile=/tmp/check-monitor-backend.mjs '--define:import.meta.env={}'
+node /tmp/check-monitor-backend.mjs
 ```
 
 后端启动后，另跑真实 HTTP、同步/应用响应中断恢复与完整 17 件样例：
@@ -190,6 +194,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_REAL_ORGANIZATION=1 npm run
 此前 `check-cable-validation` 与 `check-cable-geometry` 已通过，覆盖连接兼容与占用、线长与预留、线径扫掠及局部弯曲、全场景失效和重新确认、301 个采样点逐点保留、验证积分长度、失败总长未知与执行步骤过滤。`npm run typecheck` 和整理播放、碰撞体、持久化迁移脚本通过；这些结果不计为完整浏览器流程、实体手机或实际安装支撑验收。
 
 真实理线接入另通过 187 项后端测试、前端构建及真实 HTTP 成功/短线/版本变更/锁/同步恢复回归。浏览器实测范围和桌面、手机模拟视口记录见[前端验证记录](../README.md#验证记录)，综合演示的接口受阻不计为三线成功验收。
+设备专项验证完整 17 件场景的显示器中央主视位与打印机侧部位置、键鼠区偏移、原侧向屏幕、固定和锁定姿态，以及中央受阻后的合法回退与明确提示。真实专项同时调用 Python 规划和最终几何复查，再经前端结果转换，检查应用目标变换不改变正式区域及约束；浏览器完整演示检查居中、侧放与朝向在正式应用和持久化回读后保持一致。Mock 另检查物品顺序、全桌阻挡与残留物品、非对称碰撞偏移，打印机无合法侧位时不回退到屏幕后方。
 
 2026-10-17 验证：领域 144 项、整理 service/API 22 项、旧入口兼容 1 项通过；构建、5 个前端转换/状态脚本及新增后端 Ruff 通过。浏览器分轮通过算法工作台 76 项、工作台与真实整理专项 8 项，已复核桌面和模拟手机截图及非空 Canvas。真实 HTTP 故障注入通过 16 个场景同步恢复/拒绝案例，并保留应用响应中断恢复检查。未执行实体手机、真实走线及 Rodin 的完整流程验收。
 

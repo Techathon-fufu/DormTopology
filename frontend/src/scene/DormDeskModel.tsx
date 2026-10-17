@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Group } from 'three'
 import type { RoomConfig, Vec3 } from '@/types/project'
-import { DORM_DESK_MODEL_CONFIG, mountDeskModel } from '@/scene/deskModel'
+import { applyBedCutaway, DORM_DESK_MODEL_CONFIG, mountDeskModel } from '@/scene/deskModel'
 import { disposeObject3D, loadModelFromUrl } from '@/scene/modelLoader'
 import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
@@ -20,6 +20,8 @@ export function DormDeskModel({
   position = [0, 0, 0],
   rotationY = 0,
   visible = true,
+  respectToolbar = true,
+  hideBedParts = false,
 }: {
   room: RoomConfig
   /** 额外位置偏移（米；叠加在归一化结果之上） */
@@ -28,6 +30,10 @@ export function DormDeskModel({
   rotationY?: number
   /** 组件级显示开关（与工具栏「显示桌体」开关取与） */
   visible?: boolean
+  /** 是否叠加工具栏「显示桌体」总开关：工作台 / 对比页 true；空间配置预览 false 始终显示家具 */
+  respectToolbar?: boolean
+  /** 显示-only 剖切：俯视时隐藏床体 / 护栏 / 爬梯（整组家具模型；碰撞与校验几何不变） */
+  hideBedParts?: boolean
 }) {
   const forceFallback = useDeskModelStore((s) => s.forceFallback)
   const retryNonce = useDeskModelStore((s) => s.retryNonce)
@@ -90,6 +96,12 @@ export function DormDeskModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceFallback, retryNonce, roomShapeKey])
 
+  // 显示-only 剖切（俯视）：隐藏床体 / 护栏 / 爬梯，便于查看桌面与地面布局
+  useEffect(() => {
+    if (!model) return
+    applyBedCutaway(model, hideBedParts)
+  }, [model, hideBedParts])
+
   // 卸载时释放当前模型
   useEffect(
     () => () => {
@@ -103,7 +115,7 @@ export function DormDeskModel({
 
   const useGlb = !forceFallback && status === 'loaded' && model !== null
   return (
-    <group position={position} rotation={[0, rotationY, 0]} visible={showDesk && visible}>
+    <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
       {useGlb && model ? <primitive object={model} /> : <ParametricDesk room={room} />}
     </group>
   )

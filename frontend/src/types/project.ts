@@ -48,11 +48,18 @@ export interface CableHole {
   diameter: number
 }
 
-/** 电源插座 / 插排固定点 */
+/**
+ * 后墙插座面板：离地高度固定（米），仅可沿后墙左右移动。
+ * 2026-10-17 需求修订：墙面上只有一块面板，含两个「双插孔」插座（不再有左右两个独立插座）。
+ */
+export const OUTLET_FIXED_Y_M = 0.35
+
+/** 墙面插座面板（固定模型）：一块面板含 slots 个「双插孔」插座，每个插座可插 1 个插头 */
 export interface PowerOutlet {
   id: string
   position: Vec3
   label: string
+  /** 面板上的双插孔插座数量 */
   slots: number
 }
 
@@ -69,7 +76,7 @@ export interface RoomConfig {
   posts: PostConfig[]
   cableHoles: CableHole[]
   outlets: PowerOutlet[]
-  /** 创建时的说明（如：示例尺寸可修改） */
+  /** 创建时的说明（如：固定标准模型 / 可调范围） */
   note?: string
 }
 

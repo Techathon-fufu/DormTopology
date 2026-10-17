@@ -611,7 +611,7 @@ function ProjectSummary({ project }: { project: Project }) {
           />
           <Row label="书架" value={project.room.shelf.enabled ? `${project.room.shelf.levels} 层` : '无'} />
           <Row label="出线孔" value={`${project.room.cableHoles.length} 个`} />
-          <Row label="电源" value={`${project.room.outlets.length} 处`} />
+          <Row label="后墙插座" value={`${project.room.outlets.length} 块 · 双插孔 ×2`} />
         </dl>
         {project.room.note ? (
           <p className="mt-2 rounded-md bg-warning/10 px-2 py-1.5 text-[11px] leading-relaxed text-warning">

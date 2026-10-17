@@ -1,10 +1,11 @@
-import type {
-  CableConnection,
-  CableEndpoint,
-  Project,
-  RoomConfig,
-  SceneObject,
-  Vec3,
+import {
+  OUTLET_FIXED_Y_M,
+  type CableConnection,
+  type CableEndpoint,
+  type Project,
+  type RoomConfig,
+  type SceneObject,
+  type Vec3,
 } from '@/types/project'
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
 import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
@@ -18,11 +19,12 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
  * 按最新数据重种，避免"代码已更新、页面仍是旧场景"。
  * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
  * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
+ * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
  */
-export const DEMO_SEED_VERSION = 2
+export const DEMO_SEED_VERSION = 3
 
 export const DEMO_ROOM_NOTE =
-  '示例尺寸（可修改）：桌面 1600 × 800 × 750 mm，仅为演示默认值，请以实际测量为准'
+  '固定标准空间：床桌 / 房间 / 立柱为预设固定模型（不可编辑）；书架 / 出线孔 / 插座可在「空间配置」中调整'
 
 /** 默认空间：上床下桌标准款（单位：米） */
 export function createStandardRoom(): RoomConfig {
@@ -41,8 +43,7 @@ export function createStandardRoom(): RoomConfig {
     ],
     cableHoles: [{ id: 'hole-1', position: [0.65, 0.75, 0.12], diameter: 0.05 }],
     outlets: [
-      { id: 'outlet-l', position: [-0.6, 0.35, 0.01], label: '后墙插座·左', slots: 2 },
-      { id: 'outlet-r', position: [0.6, 0.35, 0.01], label: '后墙插座·右', slots: 2 },
+      { id: 'outlet-1', position: [0, OUTLET_FIXED_Y_M, 0.01], label: '后墙插座（双插孔 ×2）', slots: 2 },
     ],
     note: DEMO_ROOM_NOTE,
   }

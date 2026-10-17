@@ -35,7 +35,7 @@ npm run build      # tsc --noEmit && vite build
 
 - **整理操作演示**：方案编译为逐件模型移动 / 旋转指令，自动播放、暂停、重播与最终效果；实现边界与检查见 [整理操作演示](docs/organization-playback.md)。
 
-- **空间配置**（`/projects/:id/setup`）：桌体、房间、立柱、穿线孔、墙面接口的表单配置，表单为毫米制（与三维内部米制通过 `@/lib/units` 换算），配置冲突有就地校验；墙面接口高度支持滑块 + 数值调整（钳制在墙内，默认 350mm，可恢复默认，变更后相关走线提示需重算）。
+- **空间配置**（`/projects/:id/setup`）：床桌 / 房间 / 立柱为固定标准模型（0.9.0 起不再提供尺寸编辑，正式模型资产接入中），只调整书架分层、出线孔与插座；表单为毫米制（与三维内部米制通过 `@/lib/units` 换算），配置冲突有就地校验；墙面插座为一块「双插孔 ×2」面板，仅沿后墙左右移动（高度固定 350mm，滑块 + 数值），变更后相关走线提示需重算。
 - **照片导入**（`/projects/:id/import`）：示例照片与上传（IndexedDB 保存）、识别 Mock 输出候选清单、物品增删改与尺寸确认、模型生成任务 Mock（等待/失败/重试/部分成功）、物品落位到桌面。
 - **三维工作台**（`/projects/:id/workspace`）：
   - 场景与交互：桌体优先加载 GLB（`dorm_desk_assembled.glb`，GLTFLoader + 米制归一化 + 命名锚点实测；资产缺失 / 失败自动回退参数化桌体并可重试，工具栏可显示 / 隐藏）；相机预设（透视/正面/俯视/左右/桌面）、选择、左键拖动与支撑面吸附（优先实测桌面 / 搁板高度）、旋转与数值编辑、摆放校验（越界/相交/悬空）就地标注、撤销重做。
@@ -82,7 +82,7 @@ frontend/src/
 
 ## 未完成事项（对应[任务清单](../docs/project_tasks.md)成员 A）
 
-- 桌体 `dorm_desk_assembled.glb` 实际资产未入库：加载管线、归一化与 `importModel(url, name, position)` 动态导入已实现（0.5.1，见 [docs/desk-model.md](docs/desk-model.md)），资产放入 `frontend/public/models/` 后自动启用；期间回退参数化简化几何。独立单品 GLB（Rodin）仍未接入。
+- 桌体固定模型已接入运行时（0.9.0 起空间为固定模型口径）：源资产 `Prefabmodel/dormdesk.glb`，运行时副本 `frontend/public/models/dorm_desk_assembled.glb`（整组上床下桌：床架 / 上层四格书架 / L 形桌面 / 三抽屉侧柜 / 衣柜 / 护栏 / 爬梯 / 四立柱）。归一化按固定模型定制：x 居中、背面贴后墙、桌面锚点对齐 750mm；工作台 / 对比页 / 空间配置三维预览在 GLB 就绪时隐藏参数化床架并叠加逻辑出线孔标记（预览与工作台同源，另叠加书架搁板 / 插座实时标记，小画布自动拉远取景，加载失败自动回退简化几何），俯视剖切隐藏床体 / 护栏 / 爬梯（显示 only）。加载 / 归一化 / 锚点管线与 `importModel(url, name, position)` 动态导入已实现（0.5.1），资产契约检查见 `scripts/check-desk-model.ts`，细节与已知差异见 [docs/desk-model.md](docs/desk-model.md)。仍待：上层四格书架与「桌面书架」支撑面 / 分区对齐（与「桌柜分离模型」一起做，抽屉推拉设计与模型契约见 [docs/drawer-interaction.md](docs/drawer-interaction.md)）；独立单品 GLB（Rodin）仍未接入。
 - 识别与 Rodin 应用服务、已安装支撑的配置确认，以及首版整理、接线、走线和指南的完整验收；整理与理线的真实服务已接入，不代表完整首版或实体设备验收完成。
 - 照片框选补标与后端裁剪、Rodin 生成任务对接。
 - 最小弯曲半径编辑控件、「任意物品表面取点」（当前以接口 / 插孔为连接单位）；墙面插座坐标进入后端载荷（转换边界见 [docs/api-integration.md](docs/api-integration.md) 第 3 节）。
@@ -105,6 +105,27 @@ frontend/src/
 浏览器在独立测试项目完成真实整理与应用，并实测确认门槛、缺少实际线长、自连接拒绝、理线失败原因、规划期间编辑后旧结果丢弃、两点直连增删节点。1440×1000 与 393×851 视口检查了场景非空、视角切换、标签、底栏及手机线缆属性抽屉开关，控制台无错误。综合演示当前接口引出受阻，未算作三线成功验收；正常路径和线长不足由独立两设备真实 HTTP 场景验证。未新增专用浏览器测试套件，也未进行实物手机、实际支撑安装或 Rodin 验收。
 
 独立算法工作台的真实样例生成、构建、桌面/模拟手机 Chromium 自动检查及数量见[算法可视化验证](../docs/algorithm_visual_testing.md#验证记录2026-10-17)。产品工作台新增的专项自动回归如下；后续各阶段记录仍为历史验证，手动交互和状态层冒烟不计为自动化验收。
+
+## 验证记录（2026-10-17，空间配置预览接入正式模型）
+
+- `npm run typecheck` / `npm run build` 通过（主包 1,597.33 kB JS + 43.15 kB CSS；含 Three.js 单块体积警告，属预期）；`npx tsx scripts/check-desk-model.ts` 通过。
+- 完整 `npm run test:e2e` 86 项中 80 通过、6 项需真实后端用例跳过（与改造前一致）。
+- 目视核对（临时 Playwright 截图，用后删除）：右侧预览透视 / 正视 / 俯视三视角均加载正式模型（整组家具完整入镜；小画布相机自动拉远并抬高注视点）；GLB 就绪时隐藏参数化床架、叠加逻辑出线孔与配置层书架搁板标记；俯视剖切隐藏床体 / 护栏 / 爬梯；工作台工具栏「显示桌体」开关不影响预览（预览恒显示家具）。
+- 实现：书架几何抽为共享组件 `DeskShelf`（ParametricDesk 与预览复用同一口径）；`DormDeskModel` 新增 `respectToolbar`；`CameraRig` 新增 `zoomOut` / `targetShiftY`（默认值下工作台取景不变）。
+
+## 验证记录（2026-10-17，桌体模型接入与抽屉设计）
+
+- 资产契约：`npx tsx scripts/check-desk-model.ts` 通过——glTF 2.0；23 个必需命名节点（含三只抽屉的盒体 / 面板 / 拉手槽 / 双滑轨与四立柱）；实测包围盒 2.0 × 2.25 × 1.21 m；锚点匹配复算（桌面锚点仅命中 `Desk_Top_Main` / `Desk_Top_L_Return`，书架刻意为空，`Cabinet_Lock_Keyhole` 不误匹配出线孔）；摆放复算（背面 z = 0、桌面 = 0.75 m、底脚下沉 ≤ 3 cm、主桌面前沿距后墙 ≈ 0.61 m）。
+- `npm run typecheck` / `npm run build` 通过（主包 1,592.91 kB JS + 43.15 kB CSS）；完整 `npm run test:e2e` 86 项中 80 通过、6 项需真实后端用例跳过（含工作台 GLB 场景在桌面与模拟手机项目下的渲染回归）。
+- 同轮其余状态 / 转换脚本通过：`check-project-persist-migrate`、`check-demo-seed`、`check-collision-volumes`、`check-organization-playback`、`check-floor-placement`。
+- 目视核对（临时 Playwright 截图，用后删除）：整组家具（L 形桌面 / 三抽屉侧柜 / 上层四格书架 / 立柱 / 衣柜 / 爬梯）摆放与墙面对齐正确；俯视剖切后桌面与地面可见；逻辑出线孔标记叠加显示。抽屉推拉为设计稿（未实现），见 [docs/drawer-interaction.md](docs/drawer-interaction.md)。
+
+## 验证记录（2026-10-17，固定空间模型与插座规则）
+
+- 合并协作方大合入（后端实现、算法实验室、UI 刷新、17 件示例场景）后：`npm run typecheck` 通过；`npm run build` 通过（主包 1,592.11 kB JS + 43.15 kB CSS，GLTFLoader 拆为 45.89 kB 按需加载块；含 Three.js 单块体积警告，属预期）；完整 `npm run test:e2e` 桌面 / 模拟手机共 86 项中 80 通过、6 项跳过（需真实后端的整理用例；真实 HTTP 路径由来源分支验证覆盖）。
+- 状态 / 转换脚本（`npx tsx` 运行）：更新后的 `check-project-persist-migrate`（v1 旧示例重种、用户项目仅插座归一、v2 分流、v3 无操作、畸形载荷安全）与 `check-demo-seed`（种子 3：1600 × 800 桌面、17 件物品、单块双插孔面板）通过；`check-collision-volumes`、`check-organization-playback`、`check-floor-placement` 同前通过。
+- Headless 冒烟（tsx 运行，14 项断言全过）：标准房间单面板（后墙居中 / 距地 0.35m / 双插孔）、表单 ↔ 房间转换（高度强制固定、旧两个插座折叠为第一个、读回一致）、校验收敛（固定模型字段异常值不拦截、插座越界拦截、书架范围校验保留）。
+- 空间配置页（本轮改动主体）尚无对应浏览器自动化用例：既有 3 个 Playwright 专项不含该页面，交互为手动验证。逐项验收结论见 [docs/demo-and-acceptance.md](docs/demo-and-acceptance.md) 第 12 节。
 
 ## 验证记录（2026-10-17，真实整理接入）
 

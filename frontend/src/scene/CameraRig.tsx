@@ -18,8 +18,21 @@ const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [numb
  * - 切换预设 / 点击「重置视角」（viewNonce 变化）时移动相机与目标点；
  * - 用户自由旋转、平移、缩放（左键空白处旋转 · 右键平移 · 滚轮缩放）；
  * - 拖拽物品期间禁用轨道控制，避免与物品拖拽冲突。
+ *
+ * 小画布（空间配置预览）可传 zoomOut / targetShiftY：正式模型整体更高更大，
+ * 默认机位按桌面区域取景，预览需要拉远并抬高注视点才能看到完整家具。
  */
-export function CameraRig({ preset }: { preset: ViewPreset }) {
+export function CameraRig({
+  preset,
+  zoomOut = 1,
+  targetShiftY = 0,
+}: {
+  preset: ViewPreset
+  /** 距离倍数（>1 拉远）；1 = 工作台默认取景 */
+  zoomOut?: number
+  /** 目标点高度微调（米） */
+  targetShiftY?: number
+}) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
@@ -28,18 +41,21 @@ export function CameraRig({ preset }: { preset: ViewPreset }) {
 
   useEffect(() => {
     const p = PRESETS[preset]
-    const distanceScale = Math.max(1, 1.1 / (size.width / Math.max(1, size.height)))
+    const distanceScale = zoomOut * Math.max(1, 1.1 / (size.width / Math.max(1, size.height)))
+    const tx = p.target[0]
+    const ty = p.target[1] + targetShiftY
+    const tz = p.target[2]
     camera.position.set(
-      p.target[0] + (p.pos[0] - p.target[0]) * distanceScale,
-      p.target[1] + (p.pos[1] - p.target[1]) * distanceScale,
-      p.target[2] + (p.pos[2] - p.target[2]) * distanceScale,
+      tx + (p.pos[0] - p.target[0]) * distanceScale,
+      ty + (p.pos[1] - p.target[1]) * distanceScale,
+      tz + (p.pos[2] - p.target[2]) * distanceScale,
     )
     const controls = controlsRef.current
     if (controls) {
-      controls.target.set(p.target[0], p.target[1], p.target[2])
+      controls.target.set(tx, ty, tz)
       controls.update()
     }
-  }, [preset, nonce, camera, size.width, size.height])
+  }, [preset, nonce, camera, size.width, size.height, zoomOut, targetShiftY])
 
   return (
     <OrbitControls

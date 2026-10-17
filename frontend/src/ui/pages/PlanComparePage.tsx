@@ -31,6 +31,7 @@ import { useProject } from '@/state/projectsStore'
 import { usePlansStore } from '@/state/plansStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
+import { useDeskModelStore } from '@/state/deskModelStore'
 import { CameraRig } from '@/scene/CameraRig'
 import { RoomShell } from '@/scene/RoomShell'
 import { DormDeskModel } from '@/scene/DormDeskModel'
@@ -275,6 +276,7 @@ export function PlanComparePage() {
   const setViewPreset = useWorkspaceStore((s) => s.setViewPreset)
   const resetView = useWorkspaceStore((s) => s.resetView)
   const applyPlanSnapshot = useWorkspaceStore((s) => s.applyPlanSnapshot)
+  const deskGlbLoaded = useDeskModelStore((s) => s.status === 'loaded')
 
   const webglOk = useMemo(detectWebGL, [])
 
@@ -655,8 +657,13 @@ export function PlanComparePage() {
                           <Suspense fallback={null}>
                             {baselineRoom ? (
                               <>
-                                <RoomShell room={baselineRoom} deskMode="none" />
-                                <DormDeskModel room={baselineRoom} />
+                                <RoomShell
+                                  room={baselineRoom}
+                                  deskMode="none"
+                                  showBed={!deskGlbLoaded}
+                                  showCableHoles={deskGlbLoaded}
+                                />
+                                <DormDeskModel room={baselineRoom} hideBedParts={viewPreset === 'top'} />
                               </>
                             ) : null}
                             {activeScene
