@@ -97,11 +97,11 @@ npm run build        # tsc --noEmit && vite build
 
 1. **服务契约**：`frontend/src/api/types.ts` 定义 `AppServices`（recognition / modelGeneration / layoutPlanning / cablePlanning / organizationPlanning）。
 2. **模式切换**：`frontend/src/api/index.ts` 按 `VITE_API_MODE=mock|real` 选择实现，兼容旧变量 `VITE_SERVICE_MODE=mock|service`；`api/http/` 已有 HTTP 与长任务轮询适配，真实后端仍待实现和联调，能力边界见第 9 节。
-3. **后端接入点**：
-   - 识别：实现 `RecognitionService.recognize`（照片以 `photoId` 引用 IndexedDB 文件，联调时改为上传）。
-   - Rodin 生成：实现 `ModelGenerationService.generateObject`（后端异步任务 + 轮询 / 回调；产物写回 `ModelRef`，实时任务转到 `未接入` 标注的缺口）。
-   - 布局 / 走线：实现 `OrganizationPlanningService` / `CablePlanningService` / `LayoutPlanningService`（算法服务返回契约字段，UI 已预留 `algorithmVerified` 等标注位）。
-4. **契约差异**：原点、演示尺寸、字段、状态语义、算法来源及新增算法字段等差异见 [../README.md](../README.md)，约定在 `api/` 层转换，不直接以内部模型充当 wire format。
+3. **已有适配与后端待办**：
+   - 识别：`RecognitionService.recognize` 的 HTTP 实现已从 IndexedDB 读取原图，以 `multipart/form-data` 发送 `project_id` 和 `photos`；后端识别端点及真实联调尚未实现。
+   - Rodin 生成：`ModelGenerationService.generateObject` 的 HTTP 提交、轮询与 `ModelRef` 结果映射已实现；后端 Rodin 代理、真实生成和单品 URL 模型渲染仍待接入。
+   - 布局 / 走线：`OrganizationPlanningService` / `CablePlanningService` / 遗留 `LayoutPlanningService` 的 HTTP 适配已实现；后端须装配领域算法，前端须补齐完整场景与结果转换。`algorithmVerified` 标注位不等于真实算法联调已完成。
+4. **契约差异**：场景原点、版本、线长及新增算法字段等差异见 [api-integration.md](api-integration.md) 第 6 节，按[权威数据契约](../../docs/data_contract.md)在应用与适配层补齐转换，不直接以内部模型充当领域输入。
 5. **凭证边界**：Rodin 等第三方密钥只在后端；前端不读取、不直连。
 
 ## 6. 工作台阶段复检（第 04 阶段：三维选择 / 拖拽 / 属性同步 / 保存）
@@ -177,8 +177,8 @@ npm run build        # tsc --noEmit && vite build
 | 取消 / 重试 / 加载状态 | 通过（接口层） | 任务面板取消（`POST /jobs/{id}/cancel`）、重查；失败任务沿用既有重试入口；后端未提供进度时只显示阶段文字 |
 | 数据真实性标注 | 通过 | 模拟 / 真实服务 / 计算值 / 未接入徽标；走线仅 `verified=true` 标注后端已验证；识别估计尺寸保持「待确认」 |
 
-**未完成（如实声明）**：后端 FastAPI 未实现 → 无真实联调与视觉验收；字段缺口（坐标原点、regions / obstacles /
-routing_graph、线径预设等）待确认；恢复查询不重放结果；后端资产 `asset_url` 未接入三维渲染（仍为占位几何）。
+**未完成（如实声明）**：后端 FastAPI 未实现 → 无真实联调与视觉验收；字段缺口（场景坐标原点、版本、regions / obstacles /
+routing_graph、用户确认线长、优先级、直插关系、支撑和候选集线槽等）须按权威契约补齐；恢复查询不重放结果；后端资产 `asset_url` 未接入三维渲染（仍为占位几何）。
 
 ## 10. 插排规格 · 插座高度 · 线材类型与线径（第 07 阶段）
 
@@ -200,7 +200,7 @@ routing_graph、线径预设等）待确认；恢复查询不重放结果；后�
 
 **Mock 冒烟摘要**：演示项目 11 件物品 / 6 条线。初始凌乱态 5 / 6 条规划成功（手机充电线因桌面物品相交基线受阻，冲突并给出原因；先「生成整理方案」即可通过）；「一键演示」整理后 5 / 6（台灯隐藏线背板下落与笔记本电脑相交）——实测把台灯改为可见线后规划成功（7 点、出线槽），可作为「失败 → 调整类型 / 重规划」的现场示例。可见线样例经穿线孔、隐藏线样例经背板后，均写入策略字段。
 
-**未完成（如实声明）**：最小弯曲半径未提供编辑控件（按线径展示参考值）；「任意物品表面取点」未实现（以接口 / 插孔为连接单位）；墙面插座坐标未进入后端载荷（wire 契约缺口见 [api-integration.md](api-integration.md) 第 6 节）；规划仍为规则式演示，未接真实走线算法。
+**未完成（如实声明）**：最小弯曲半径未提供编辑控件（按线径展示参考值）；「任意物品表面取点」未实现（以接口 / 插孔为连接单位）；墙面插座坐标未进入后端载荷，产品默认 350mm 与共享契约的底面中心默认高度 0.30m 仍需在墙面设备映射时核验并统一（字段缺口见 [api-integration.md](api-integration.md) 第 6 节）；规划仍为规则式演示，未接真实走线算法。
 
 ## 11. 候选方案管理与对比（第 08 阶段）
 
@@ -243,4 +243,4 @@ routing_graph、线径预设等）待确认；恢复查询不重放结果；后�
 - 配件几何为外观预览，不可直接打印；STL 未接入（需封闭几何 / 布尔合并能力）。
 - 手机端上传、预览与场景查看未做实测记录。
 - 演示加速与减少动态均为本机行为开关，不影响真实服务接入后的交互。
-- 第 06 阶段新增（如实声明）：real 模式未经真实后端联调（后端 FastAPI 未实现）；恢复查询不重放结果；后端资产 `asset_url` 未接入三维渲染；wire 字段缺口（坐标原点、regions / obstacles / routing_graph、线径预设等）见 [api-integration.md](api-integration.md) 第 6 节。
+- real 模式未经真实后端联调（后端 FastAPI 未实现）；恢复查询不重放结果；后端资产 `asset_url` 未接入三维渲染；产品载荷尚未覆盖优先级、直插关系、支撑与集线槽条件。线长、坐标、版本及其他字段缺口见 [api-integration.md](api-integration.md) 第 6 节；独立算法工作台的完整 JSON 解析不代表产品已接入。

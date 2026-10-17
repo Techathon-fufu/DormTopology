@@ -261,7 +261,7 @@ export interface WireCablePayload {
   mode: 'slot' | 'backboard'
   diameter_m: number
   min_bend_radius_m: number
-  /** 用户填写的实际线长；未填写为 null（契约要求后端容忍 null，见 docs/api-integration.md 字段缺口） */
+  /** 当前草稿未填实际线长时为 null；调用领域规划前须补齐并校验有限正数，见 docs/api-integration.md 字段缺口。 */
   length_m: number | null
 }
 

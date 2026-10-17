@@ -6,7 +6,9 @@
 
 团队共 4 人：A 负责前端，B 负责后端，C 独立负责物品布局算法，D 独立负责走线算法。第 4、5 节为两个独立开发任务，各自交付算法函数、结果样例和验收记录；两人先用共同场景并行开发，实际流程按已应用布局的当前版本进行走线。
 
-更新基线：2026-10-17，布局提交 `82cd762`、走线领域迁移与复核提交 `4ab769b` 已合并并推送至 `main`（`8f5e5bb`）。已通过 40 项布局、21 项走线、2 项领域隔离和 1 项兼容性测试，共 64 项；Ruff、Python 编译、四类 JSON 样例及文档检查通过。证据分别见[布局测试](../backend/tests/test_packing.py)、[走线测试](../backend/tests/test_routing.py)、[隔离测试](../backend/tests/test_domain_boundaries.py)与[兼容测试](../algorithm/cable_routing/tests/test_compatibility.py)。
+当前交付基线：2026-10-17，`algorithm/integrated-desk-scenario` 已合并并推送至 `main`（`68bee00`），包含算法验证工作台、支撑与集线槽优化、综合桌面和工作台白屏修复（`52ec94a`）。合并后构建通过，Playwright 80/80 通过，其中算法工作台 76 项、产品工作台专项 4 项，桌面与模拟手机各 40 项；范围与证据见[算法可视化验证](algorithm_visual_testing.md)及[产品验收记录](../frontend/docs/demo-and-acceptance.md)。
+
+历史基线（首次领域迁移）：布局提交 `82cd762`、走线领域迁移与复核提交 `4ab769b` 合并至 `main`（`8f5e5bb`）时，40 项布局、21 项走线、2 项领域隔离和 1 项兼容性测试通过，共 64 项；Ruff、Python 编译、四类 JSON 样例及文档检查通过。证据分别见[布局测试](../backend/tests/test_packing.py)、[走线测试](../backend/tests/test_routing.py)、[隔离测试](../backend/tests/test_domain_boundaries.py)与[兼容测试](../algorithm/cable_routing/tests/test_compatibility.py)。
 
 C、D 的核心分别位于 `backend/app/domain/packing/` 与 `routing/`，共用领域几何、类型和结构校验；旧 `algorithm/cable_routing/` 只保留兼容导出。可重现命令和边界说明见[布局算法交接](packing_algorithm.md)与[走线算法规划](routing_algorithm_plan.md)。前端本地演示、GLB 加载管线、服务适配层及候选方案对比的完成项依据 [0.4–0.8 阶段验收记录](../frontend/docs/demo-and-acceptance.md)，不计为真实算法或供应商接入；混合条目已拆分，未通过的集成、资产及终端验收继续保留待办。原布局共同样例中的三条线仍返回 `endpoint_blocked`；新增[综合桌面样例](integrated_desk_scenario.md)单独验证大设备整理、直插适配器和应用布局后的三线走线。
 

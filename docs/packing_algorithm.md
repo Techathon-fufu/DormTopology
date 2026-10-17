@@ -36,7 +36,7 @@ python3 -B -m backend.examples.packing_demo --output-dir /tmp/dormtopology-packi
 
 最后一条命令生成 `success`、`partial`、`infeasible`、`revision_2` 各自的 `*_scene.json` 和 `*_packing_result.json`，输出文件名不同但内容均直接遵循场景与整理结果契约。样例生成器在 `backend/examples/packing_demo.py`；领域算法不依赖此生成器，也不通过磁盘通信。
 
-需要三维查看时，在仓库根目录运行 `python3 -B -m backend.examples.algorithm_fixtures`，随后进入前端 `/algorithm-lab`。工作台包含上述四类布局及四类走线诊断场景，直接解析真实算法结果；生成方式、版本规则和 Playwright 检查见[算法可视化验证](algorithm_visual_testing.md)。
+需要三维查看时，在仓库根目录运行 `python3 -B -m backend.examples.algorithm_fixtures`，随后进入前端 `/algorithm-lab`。工作台直接解析真实算法结果，除上述基础布局外，还包含综合设备布局、支撑与集线槽走线诊断；完整样例清单、生成方式、版本规则和 Playwright 检查见[算法可视化验证](algorithm_visual_testing.md)。
 
 ## 摆放与复查
 
