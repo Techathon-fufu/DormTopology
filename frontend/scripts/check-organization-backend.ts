@@ -38,7 +38,7 @@ for (const item of noShelf.items.filter((entry) => entry.category === 'book' || 
   assert.deepEqual(item.preferred_region_ids, [])
 }
 for (const item of scene.items.filter((entry) => entry.category === 'monitor' || entry.category === 'printer')) {
-  assert.equal(item.placement_priority, 100)
+  assert.equal(item.placement_priority, item.category === 'monitor' ? 100 : 90)
   assert.ok(item.allowed_region_ids.length > 0)
   for (const regionId of item.allowed_region_ids) {
     const region = scene.regions.find((entry) => entry.id === regionId)!

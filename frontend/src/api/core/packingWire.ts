@@ -3,7 +3,7 @@ import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, Orga
 import { exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
 import { roomSolids } from '@/scene/roomCollision'
 import { BED_UNDERSIDE_Y, computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
-import { allowsFloorPlacement } from '@/scene/organizationPolicy'
+import { allowsFloorPlacement, monitorViewRegion, printerSideRegions, subtractRect } from '@/scene/organizationPolicy'
 import { DESK_GAP, placementIssues } from '@/scene/sceneValidation'
 import { localDirVec, resolvePortOffset } from '@/scene/ports'
 import { estimateDeskFreeArea } from '@/scene/ruleLayout'
@@ -65,16 +65,6 @@ export function fromPackingPosition(position: Vec3, room: RoomConfig): Vec3 {
   return [position[0] - room.desk.width / 2, position[1], position[2] + DESK_GAP]
 }
 
-function subtractRect(rect: ZoneRect, cut: ZoneRect): ZoneRect[] {
-  const x0 = Math.max(rect.x0, cut.x0), x1 = Math.min(rect.x1, cut.x1)
-  const z0 = Math.max(rect.z0, cut.z0), z1 = Math.min(rect.z1, cut.z1)
-  if (x0 >= x1 || z0 >= z1) return [rect]
-  return [
-    { ...rect, x1: x0 }, { ...rect, x0: x1 },
-    { x0, x1, z0: rect.z0, z1: z0 }, { x0, x1, z0: z1, z1: rect.z1 },
-  ].filter((r) => r.x1 - r.x0 > 0.001 && r.z1 - r.z0 > 0.001)
-}
-
 function category(object: SceneObject): string {
   if (object.powerStrip || object.model.shape === 'powerStrip') return 'power_strip'
   return object.model.shape ?? object.category
@@ -111,13 +101,28 @@ export function toPackingScene(input: {
   const ids = (prefix: string) => regions.filter((r) => r.id.startsWith(prefix)).map((r) => r.id)
   const shelfIds = ids('support-shelf')
   const clearIds = ids('desk-clear-')
+  printerSideRegions(zones, input.objects.filter((o) => o.model.shape === 'monitor')).forEach((side, index) => {
+    addRegion(`printer-side-${index}`, side.rect, side.y, BED_UNDERSIDE_Y - side.y)
+  })
+  const printerIds = ids('printer-side-')
+  for (const object of input.objects.filter((o) => o.model.shape === 'monitor')) {
+    const view = monitorViewRegion(object, zones)
+    if (view) addRegion(`monitor-view-${object.id}`, view.rect, view.y, BED_UNDERSIDE_Y - view.y)
+  }
   const items = input.objects.map((object): PackingItem => {
     const shape = object.model.shape
     let allowed: string[]
     let preferred: string[] = []
     if (shape === 'keyboard' || shape === 'mouse') allowed = ['typing']
     else if (shape === 'cup' || shape === 'thermos') allowed = ['cup', ...clearIds]
-    else if (shape === 'monitor' || shape === 'printer') allowed = clearIds
+    else if (shape === 'monitor') {
+      const viewId = `monitor-view-${object.id}`
+      allowed = [viewId, ...clearIds]
+      preferred = [viewId]
+    } else if (shape === 'printer') {
+      if (!printerIds.length && !object.fixed && !object.locked) throw new ApiError(`${object.name}：桌面没有可用的侧部设备区，请调整键鼠区或显示器位置`, { kind: 'input' })
+      allowed = printerIds
+    }
     else if (shape === 'laptop' || shape === 'lamp') allowed = clearIds
     else if (object.powerStrip || shape === 'powerStrip') {
       allowed = ['support-beam', ...clearIds]
@@ -154,9 +159,9 @@ export function toPackingScene(input: {
       position: toPackingPosition(object.transform.position, room), rotation_y_rad: object.transform.rotationY,
       dimensions_source: source, dimensions_confirmed: input.confirmed,
       fixed: object.fixed || object.locked, usage_frequency: object.frequent ? 'high' : 'medium',
-      placement_priority: shape === 'monitor' || shape === 'printer' ? 100 : object.frequent ? 60 : 20,
+      placement_priority: shape === 'monitor' ? 100 : shape === 'printer' ? 90 : object.frequent ? 60 : 20,
       allowed_region_ids: allowedRegions, preferred_region_ids: preferred.filter((id) => allowedRegions.includes(id)),
-      allowed_rotations_y_rad: [0, Math.PI / 2],
+      allowed_rotations_y_rad: shape === 'monitor' || shape === 'printer' ? [0] : [0, Math.PI / 2],
       collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ?? null,
       generation: { task_id: null, status: 'not_requested', source: object.model.assetUrl ? object.model.source === 'generated' ? 'live' : 'cache' : 'placeholder', error: null },
       ...(object.powerStrip ? { socket_count: object.powerStrip.socketCount } : {}),
@@ -240,6 +245,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
   const status = data.status as 'success' | 'partial' | 'infeasible'
   const pending = new Map(ctx.objects.map((o) => [o.id, o]))
   const assignments: PlanAssignment[] = [], unplaced: OrganizationPlan['unplaced'] = []
+  const placementWarnings: string[] = []
   const issues: OrganizationIssue[] = data.issues.map((rawIssue) => {
     const issue = record(rawIssue)
     if ((issue.entity_id !== null && typeof issue.entity_id !== 'string') || typeof issue.code !== 'string' || typeof issue.message !== 'string') fail('后端布局问题格式错误')
@@ -262,9 +268,26 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     if (item.target_region_id !== null && (typeof item.target_region_id !== 'string' || !ctx.scene.regions.some((r) => r.id === item.target_region_id))) fail(`${object.name}：目标支撑区域未知`)
     const original = ctx.scene.items.find((i) => i.id === object.id)!
     if (placement === 'placed' && (!original.allowed_region_ids.includes(String(item.target_region_id)) || !original.allowed_rotations_y_rad.some((r) => Math.abs(r - rotation) < 1e-7))) fail(`${object.name}：目标区域或朝向不符合输入约束`)
-    const reason = issues.filter((i) => i.entity_id === object.id).map((i) => i.message).join('；') || (typeof item.reason === 'string' ? item.reason : typeof item.reason_code === 'string' ? item.reason_code : '后端已复核的目标位置')
+    let reason = issues.filter((i) => i.entity_id === object.id).map((i) => i.message).join('；') || (typeof item.reason === 'string' ? item.reason : typeof item.reason_code === 'string' ? item.reason_code : '后端已复核的目标位置')
     const zone: ZoneKind = Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
     const target = { ...object, visible: true, transform: { position, rotationY: rotation } }
+    if (object.model.shape === 'printer' && !object.fixed && !object.locked) {
+      reason = placement === 'unplaced' ? `打印机未找到合法侧部设备位，保留原位；${reason}`
+        : status !== 'infeasible' ? `打印机：桌面侧部设备区，避开中央主视位；${reason}` : reason
+    }
+    if (object.model.shape === 'monitor' && !object.fixed && !object.locked && placement !== 'unplaced' && status !== 'infeasible') {
+      const bounds = worldCollision(target).bounds
+      const low = toPackingPosition(bounds.min, ctx.room), high = toPackingPosition(bounds.max, ctx.room)
+      const forward = Math.abs(Math.sin(rotation)) < 1e-7 && Math.cos(rotation) > 0
+      const inView = forward && ctx.scene.regions.some((region) => {
+        if (!original.preferred_region_ids.includes(region.id)) return false
+        const [x0, x1, z0, z1] = region.bounds_xz_m
+        return Math.abs(position[1] - region.surface_y_m) < 1e-7 && low[0] >= x0 - 1e-7 && high[0] <= x1 + 1e-7 && low[2] >= z0 - 1e-7 && high[2] <= z1 + 1e-7
+      })
+      reason = inView ? `显示器：中央主视位，与键鼠区对齐并面向用户；${reason}`
+        : `显示器：未采用中央主视位，${placement === 'unchanged' ? '保留原位' : '回退至其他可行桌面位置'}，请确认视线和朝向；${reason}`
+      if (!inView) placementWarnings.push(`${object.name}：${reason}`)
+    }
     targets.push(target)
     if (placement === 'placed') {
       const region = ctx.scene.regions.find((r) => r.id === item.target_region_id)!
@@ -278,11 +301,19 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
   }
   if (pending.size) fail('整理结果未覆盖所有输入物品')
   const localIssues: OrganizationIssue[] = targets.flatMap((object) => placementIssues(object, object.transform.position, targets, ctx.room).map((issue) => ({ entity_id: object.id, code: issue.type, message: issue.message })))
+  for (const printer of targets.filter((object) => object.model.shape === 'printer' && !object.fixed && !object.locked && assignments.find((a) => a.objectId === object.id)?.placementStatus !== 'unplaced')) {
+    const bounds = worldCollision(printer).bounds
+    const sharesViewColumn = targets.filter((object) => object.model.shape === 'monitor').some((monitor) => {
+      const screen = worldCollision(monitor).bounds
+      return Math.min(bounds.max[0], screen.max[0]) - Math.max(bounds.min[0], screen.min[0]) > 1e-7
+    })
+    if (sharesViewColumn) localIssues.push({ entity_id: printer.id, code: 'device_access', message: '打印机未位于最终显示器的侧部，需调整设备位置后重新整理' })
+  }
   const applicable = status !== 'infeasible' && localIssues.length === 0 && !issues.some((i) => i.code === 'target_region')
   issues.push(...localIssues)
   if (status === 'success' && unplaced.length > 0) fail('成功布局包含未放置物品')
   const poses = (objects: SceneObject[]) => objects.map((object) => ({ object, position: object.transform.position }))
-  const warnings = localIssues.map((i) => `${i.entity_id}：${i.message}`)
+  const warnings = [...placementWarnings, ...localIssues.map((i) => `${i.entity_id}：${i.message}`)]
   const metrics = data.metrics === undefined ? {} : record(data.metrics)
   const area = (key: string, fallback: number): number | null => {
     if (metrics[key] === undefined) return fallback
