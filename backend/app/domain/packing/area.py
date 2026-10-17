@@ -39,6 +39,11 @@ class DesktopGrid:
         self.right = self.left << (self.nx - 1) if self.nx else 0
         self.reserved = 0
         self._cache: dict[tuple, int] = {}
+        support = 0
+        for region in scene["regions"]:
+            if abs(region["surface_y_m"] - self.height) <= NUMERIC_EPSILON:
+                support |= self.polygon_mask(rectangle(region["bounds_xz_m"]))
+        self.all_cells &= support
         for zone in scene["reserved_zones"]:
             if zone["min"][1] <= self.height < zone["max"][1]:
                 self.reserved |= self.polygon_mask(

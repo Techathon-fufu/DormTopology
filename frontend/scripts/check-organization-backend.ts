@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
-import { createDemoProject } from '../src/data/demoProject'
+import { createLegacyDemoProject as createDemoProject } from './fixtures/legacyDemo'
 import { resolveOrganizationPreferences } from '../src/types/organization'
 import { canonicalScene, fromPackingPosition, mapPackingOrganizationResult, packingBaseline, toPackingPosition, toPackingScene } from '../src/api/core/packingWire'
 import { compileOrganizationCommands } from '../src/lib/organizationCommands'

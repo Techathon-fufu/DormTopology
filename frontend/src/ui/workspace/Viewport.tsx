@@ -210,7 +210,7 @@ export function Viewport({
             ) : null}
           </Suspense>
           <DragIndicator />
-          <CameraRig preset={viewPreset} />
+          <CameraRig preset={viewPreset} furnitureModel={project.room.furnitureModel} />
         </Canvas>
       </SceneErrorBoundary>
       {/* 桌体模型状态提示（加载中 / 失败重试 / 简化几何恢复）：不遮挡三维操作 */}

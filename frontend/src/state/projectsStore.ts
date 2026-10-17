@@ -42,7 +42,14 @@ export const useProjectsStore = create<ProjectsState>()(
         // 不存在，或仍是旧种子版本的示例场景：按最新示例数据重种。
         // 仅作用于内置示例项目，用户自建项目不受影响。
         if (!existing || isDemoProjectStale(existing)) {
-          set((s) => ({ projects: { ...s.projects, [DEMO_PROJECT_ID]: createDemoProject() } }))
+          // Preserve the previous desktop and edits when the built-in furniture changes.
+          const archiveId = existing ? `${DEMO_PROJECT_ID}-seed-${existing.demoSeedVersion ?? 0}-${Date.now()}` : null
+          const archive = existing && archiveId ? { ...existing, id: archiveId, isDemo: false,
+            name: `${existing.name}（旧家具保留）`,
+            objects: existing.objects.map((o) => ({ ...o, projectId: archiveId })),
+            cables: invalidateCableRoutes((existing.cables ?? []).map((c) => ({ ...c, projectId: archiveId }))),
+          } : null
+          set((s) => ({ projects: { ...s.projects, ...(archive && archiveId ? { [archiveId]: archive } : {}), [DEMO_PROJECT_ID]: createDemoProject() } }))
         }
       },
       resetDemo() {
@@ -96,6 +103,7 @@ export const useProjectsStore = create<ProjectsState>()(
             if (!p?.room) continue
             projects[id] = {
               ...p,
+              cables: invalidateCableRoutes(p.cables ?? []),
               room: {
                 ...p.room,
                 outlets: [mergeOutletPanel(p.room.outlets?.[0])],
@@ -104,9 +112,7 @@ export const useProjectsStore = create<ProjectsState>()(
             }
           }
         }
-        if (from < PROJECTS_PERSIST_VERSION && isDemoProjectStale(projects[DEMO_PROJECT_ID])) {
-          projects[DEMO_PROJECT_ID] = createDemoProject()
-        }
+        // ensureDemo archives the previous seed after hydration, including schema migrations.
         return { ...state, projects } as ProjectsState
       },
     },

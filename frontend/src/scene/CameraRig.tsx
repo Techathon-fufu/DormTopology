@@ -3,6 +3,7 @@ import { OrbitControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
+import type { RoomConfig } from '@/types/project'
 
 const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [number, number, number] }> = {
   persp: { pos: [1.35, 1.2, 1.9], target: [0, 0.78, 0.35] },
@@ -26,8 +27,10 @@ export function CameraRig({
   preset,
   zoomOut = 1,
   targetShiftY = 0,
+  furnitureModel,
 }: {
   preset: ViewPreset
+  furnitureModel?: RoomConfig['furnitureModel']
   /** 距离倍数（>1 拉远）；1 = 工作台默认取景 */
   zoomOut?: number
   /** 目标点高度微调（米） */
@@ -40,7 +43,9 @@ export function CameraRig({
   const dragActive = useWorkspaceStore((s) => s.drag !== null)
 
   useEffect(() => {
-    const p = PRESETS[preset]
+    // Approach the fixed L desk from the front so its ladder does not obscure the workspace.
+    const p = furnitureModel === 'dormdesk-v1' && preset === 'persp'
+      ? { pos: [.05, 1.45, 2.8], target: [.07, .96, .35] } : PRESETS[preset]
     const distanceScale = zoomOut * Math.max(1, 1.1 / (size.width / Math.max(1, size.height)))
     const tx = p.target[0]
     const ty = p.target[1] + targetShiftY
@@ -55,7 +60,7 @@ export function CameraRig({
       controls.target.set(tx, ty, tz)
       controls.update()
     }
-  }, [preset, nonce, camera, size.width, size.height, zoomOut, targetShiftY])
+  }, [preset, nonce, camera, size.width, size.height, zoomOut, targetShiftY, furnitureModel])
 
   return (
     <OrbitControls

@@ -6,9 +6,9 @@
 
 ## 当前工作区启动
 
-当前代码源为 `/Users/qdd09/Projects/DormTopology`，分支为 `fix/cable-workspace-integration`，包含未提交修改。以下命令使用当前工作区中的前后端代码，不从旧提交启动服务。Python 虚拟环境和数据库复用前次独立实例的运行目录 `/private/tmp/dorm-monitor-placement/.work/local-demo-20261017`；保留原 `organization.sqlite3`，不删库、不清除用户项目。
+当前代码源为 `/Users/qdd09/Projects/DormTopology`，分支为 `fix/cable-workspace-integration`。以下命令使用当前工作区中的前后端代码，不从旧提交启动服务。Python 虚拟环境和数据库复用前次独立实例的运行目录 `/private/tmp/dorm-monitor-placement/.work/local-demo-20261017`；保留原 `organization.sqlite3`，不删库、不清除用户项目。
 
-当前工作区已补入 `9259974` 的显示器中央主视位和打印机侧部区域约束。此分支的提交基线仍较旧，不能仅凭 `packing-1.1` 后端版本认定设备策略已接入；策略由前端场景适配提交给后端。部署前须运行下述设备专项，并在真实浏览器流程检查完整 17 件场景的显示器居中、朝向和打印机侧置。
+当前工作区已保存前序修复为 `24dc7f2`，并通过 `678f78f` 合并远端 main 的家具更新。固定示例采用拆分家具 `dormdesk-v1`，桌面包络 1.45×0.86m，实际支撑为 L 形；布局与走线适配提交真实桌板、书架、抽屉和碰撞体。设备策略由前端场景适配提交给后端，不能仅凭 `packing-1.1` 版本判定部署正确。部署前运行下述专项，并在真实浏览器检查完整 17 件场景的显示器居中、朝向和打印机侧置。
 
 ### 1. 准备与构建
 
@@ -23,7 +23,11 @@ export DORM_DEPLOY_PYTHON="$DORM_DEPLOY_DATA/venv/bin/python"
 "$DORM_DEPLOY_PYTHON" -m pip install -r backend/requirements.txt
 cd frontend
 npm ci
+./node_modules/.bin/esbuild scripts/generate-furniture-geometry.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-furniture.mjs
+node /tmp/dorm-deploy-furniture.mjs
 VITE_API_MODE=mock VITE_API_BASE_URL='' VITE_DEV_API_TARGET=http://127.0.0.1:8003 npm run build
+./node_modules/.bin/esbuild scripts/check-fixed-furniture.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-fixed.mjs '--define:import.meta.env={}'
+node /tmp/dorm-deploy-fixed.mjs
 ./node_modules/.bin/esbuild scripts/check-monitor-backend.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-monitor.mjs '--define:import.meta.env={}'
 node /tmp/dorm-deploy-monitor.mjs
 ```
@@ -55,6 +59,10 @@ Vite preview 继承 `vite.config.ts` 的代理；空 `VITE_API_BASE_URL` 使 `/a
 
 ### 4. 当前版本验证
 
+2026-10-17 合并新家具后的验证：后端 192 项、真实 17 件布局与前端结果复查、四份 GLB 的 75 个部件边界、抽屉内腔/柜壳/开孔、基础真实走线与 HTTP 通过；类型检查、生产构建和 Ruff 通过。完整桌面/模拟手机浏览器 104 项通过，初始机位避开梯子后补测工作台 8 项通过，包含部分资产失败回退、重试恢复和 L 形空区孔位拒绝。实际 Zustand v1/v2/v3 恢复覆盖旧示例归档、无旧线缆字段、自建项目几何保留与重复升级。
+
+当前 `5177` 生产预览与 `8003` 后端已刷新。桌面/模拟手机三个视角的 Canvas 像素、资源加载、脚本错误和横向溢出通过，已复核截图；用户数据库重启前后 4 份原始基线 SHA256 均为 `4c55c1cb829cf2ddc86a90a193523a2994c034358e1a702f47198a4067fee3e7`。浏览器完整回归位于 `/private/tmp/furniture-browser-final`，机位专项位于 `/private/tmp/furniture-camera-final`，生产预览证据仍在 `.work/backend-only/preview-*.png` 与 `preview-results.json`。以下同日较早记录保留为历史；没有将基础走线成功计为新家具完整双策略三线或实体安装验收。
+
 ```bash
 curl --fail --silent --show-error http://127.0.0.1:8003/api/v1/health
 curl --fail --silent --show-error http://127.0.0.1:5177/api/v1/health
@@ -63,7 +71,7 @@ curl --fail --silent --show-error --output /dev/null http://127.0.0.1:5177/proje
 
 健康检查应返回 `status: "ok"`，能力包含 `organization` 和 `cable`；缺少 `cable` 表示仍在使用旧后端。浏览器状态应标记「后端整理 / 理线」以及默认启用的「识别 / 模型模拟」，不出现规划模式切换入口。核对尺寸与原始位置后生成整理方案并接受，再确认接口后提交理线，无需输入实际线长；成功后检查所需线长包含路径与预留，未知现有线长按 `null` 保存。规划失败应显示后端原因，不能返回规则演示结果。既有示例不保证所有线缆都能成功。
 
-数据库复用不代表浏览器状态清空。`5177` 上已有项目、后端引用、照片和模型仍按原存储规则保留；干净验证使用全新浏览器上下文及独立测试项目。建立另一个完全独立实例时选择新数据目录和端口，不删除当前数据库或旧 `5174` 数据。
+数据库复用不代表浏览器状态清空。`5177` 上已有用户项目、后端引用、照片和模型仍按原存储规则保留；升级第 4 版示例时将旧示例归档为「旧家具保留」项目，旧基线与历史快照不重写。干净验证使用全新浏览器上下文及独立测试项目。建立另一个完全独立实例时选择新数据目录和端口，不删除当前数据库或旧 `5174` 数据。
 
 更新设备策略后，刷新页面并重新生成整理方案，接受后才改变物品位置；已有项目不会被自动搬动。旧规则场景携正确版本同步时保留原始基线，更新当前约束并递增版本；引用缺失且内容不同仍显示冲突及创建独立副本入口，不跳过版本检查。
 

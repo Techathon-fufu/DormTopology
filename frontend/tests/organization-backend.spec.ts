@@ -39,6 +39,9 @@ async function openConfirmedPreview(page: Page) {
     const project = structuredClone(source)
     project.id = id
     project.name = 'HTTP organization regression'
+    project.room.furnitureModel = undefined
+    project.room.desk = { width: 1.6, depth: .8, height: .75, thickness: .025 }
+    project.room.shelf = { enabled: true, levels: 1, heightAboveDesk: .38, depth: .2 }
     project.cables = []
     project.objects = [-0.2, -0.16, 0.55].map((x, index) => ({
       ...structuredClone(source.objects[0]),
@@ -215,9 +218,9 @@ test('centres the monitor, places the printer beside it and keeps ordinary objec
     expect(object.transform.position).toEqual(assignment.position)
     expect(object.transform.rotationY).toBe(assignment.rotationY)
     const stored = scene.items.find((item: { id: string }) => item.id === object.id)
-    expect(stored.position[0]).toBeCloseTo(object.transform.position[0] + applied.room.desk.width / 2)
+    expect(stored.position[0]).toBeCloseTo(object.transform.position[0] + (applied.room.furnitureModel ? .45 : applied.room.desk.width / 2))
     expect(stored.position[1]).toBeCloseTo(object.transform.position[1])
-    expect(stored.position[2]).toBeCloseTo(object.transform.position[2] - 0.05)
+    expect(stored.position[2]).toBeCloseTo(object.transform.position[2] - (applied.room.furnitureModel ? .042 : .05))
     expect(stored.rotation_y_rad).toBeCloseTo(object.transform.rotationY)
     if (!object.fixed && !object.locked && object.transform.position[1] === 0) expect(object.model.shape).toBe('computerTower')
   }

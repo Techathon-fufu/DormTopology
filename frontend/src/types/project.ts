@@ -65,6 +65,8 @@ export interface PowerOutlet {
 
 export interface RoomConfig {
   template: 'loft-standard' | 'custom'
+  /** Versioned fixed furniture; absent means the historical parametric room. */
+  furnitureModel?: 'dormdesk-v1'
   /** 房间长度（x 向，米） */
   length: number
   /** 房间进深（z 向，米） */

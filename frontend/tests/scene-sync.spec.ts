@@ -49,6 +49,9 @@ async function createIsolatedProject(page: Page) {
     const project = structuredClone(source)
     project.id = id
     project.name = 'Scene sync regression'
+    project.room.furnitureModel = undefined
+    project.room.desk = { width: 1.6, depth: .8, height: .75, thickness: .025 }
+    project.room.shelf = { enabled: true, levels: 1, heightAboveDesk: .38, depth: .2 }
     project.isDemo = false
     project.source = 'user'
     project.createdAt = Date.now()

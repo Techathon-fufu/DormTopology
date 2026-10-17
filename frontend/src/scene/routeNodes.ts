@@ -3,6 +3,7 @@ import { DESK_GAP } from '@/scene/sceneValidation'
 import { computeOrganizationZones } from '@/scene/organizationZones'
 import type { OrganizationPreferences } from '@/types/organization'
 import type { CableAvoidZone, RouteNode } from '@/types/cable'
+import { furnitureBoxes, furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
 
 /**
  * 场景路由节点与走线避让区（演示用「规则式」参考）。
@@ -17,6 +18,7 @@ export function deskUnderY(room: RoomConfig): number {
 }
 
 export function computeRouteNodes(room: RoomConfig): RouteNode[] {
+  if (hasFixedFurniture(room)) return fixedRouteNodes(room)
   const nodes: RouteNode[] = []
   const d = room.desk
   const y = d.height
@@ -111,6 +113,41 @@ export function computeRouteNodes(room: RoomConfig): RouteNode[] {
   return nodes
 }
 
+/** Reference overlay follows the same physical surfaces as the backend channels. */
+function fixedRouteNodes(room: RoomConfig): RouteNode[] {
+  const nodes: RouteNode[] = []
+  const boxes = furnitureBoxes(room)
+  const push = (id: string, kind: RouteNode['kind'], label: string, position: Vec3) => {
+    if (!boxes.some((b) => position.every((v, i) => v > b.min[i] && v < b.max[i]))) nodes.push({ id, kind, label, position })
+  }
+  const desks = furnitureSurfaces(room, false).filter((s) => s.kind === 'desk')
+  for (const s of desks) {
+    const r = s.rect
+    for (const [i, x] of [r.x0 + .07, (r.x0 + r.x1) / 2, r.x1 - .07].entries()) {
+      for (const [j, z] of [r.z0 + .035, r.z1 - .07].entries()) {
+        push(`${s.id}-${i}-${j}-top`, 'deskEdge', `${s.label}·桌沿`, [x, s.y + .012, z])
+        push(`${s.id}-${i}-${j}-under`, 'deskUnder', `${s.label}·桌下`, [x, s.y - room.desk.thickness - .025, z])
+      }
+    }
+  }
+  const main = desks.find((s) => s.id.includes('Main'))!
+  for (const x of [main.rect.x0 + .07, main.rect.x1 - .07]) {
+    push(`back-${x}`, 'backboard', '背板·后侧', [x, .762, DESK_GAP / 2])
+    push(`over-${x}`, 'backboard', '背板·上沿', [x, .932, .09])
+  }
+  for (const hole of room.cableHoles) {
+    push(`hole-${hole.id}-top`, 'hole', '出线孔·入口', [hole.position[0], .762, hole.position[2]])
+    push(`hole-${hole.id}-under`, 'hole', '出线孔·出口', [hole.position[0], .7, hole.position[2]])
+  }
+  for (const outlet of room.outlets) push(`outlet-${outlet.id}`, 'outlet', outlet.label, [...outlet.position])
+  for (const post of room.posts) {
+    const [x, , z] = post.position
+    push(`post-${post.id}-low`, 'post', '立柱·下部', [x + Math.sign(x || 1) * (post.section / 2 + .02), .05, z])
+  }
+  push('floor-mid', 'floor', '地面·桌下', [(main.rect.x0 + main.rect.x1) / 2, .02, (main.rect.z0 + main.rect.z1) / 2])
+  return nodes
+}
+
 /**
  * 走线避让区：打字活动区 / 水杯活动区（与空间整理共用同一几何），
  * 以及桌下腿部活动区（桌下前部中段，线缆应贴后 / 贴腿走）。
@@ -124,6 +161,7 @@ export function computeCableAvoidZones(
   const d = room.desk
   const g = DESK_GAP
   const legRoomX = Math.max(0.2, d.width / 2 - 0.18)
+  const main = hasFixedFurniture(room) ? furnitureSurfaces(room, false).find((s) => s.id.includes('Main'))?.rect : null
 
   return [
     {
@@ -146,7 +184,7 @@ export function computeCableAvoidZones(
       id: 'zone-legroom',
       kind: 'legroom',
       label: '桌下腿部活动区（避让）',
-      rect: {
+      rect: main ? { x0: main.x0 + .18, x1: main.x1 - .18, z0: main.z0 + (main.z1 - main.z0) * .55, z1: main.z1 + .02 } : {
         x0: -legRoomX,
         x1: legRoomX,
         z0: g + d.depth * 0.55,

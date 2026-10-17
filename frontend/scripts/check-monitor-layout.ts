@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createDemoProject } from '../src/data/demoProject'
+import { createLegacyDemoProject as createDemoProject } from './fixtures/legacyDemo'
 import { localCollision, objectFootprint } from '../src/scene/collisionGeometry'
 import { monitorViewRegion } from '../src/scene/organizationPolicy'
 import { computeOrganizationZones } from '../src/scene/organizationZones'

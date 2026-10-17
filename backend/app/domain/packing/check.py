@@ -4,6 +4,8 @@ from itertools import combinations
 
 from ..geometry import (
     EPSILON,
+    NUMERIC_EPSILON,
+    aabb_from_item,
     aabb_from_zone,
     fits_region,
     item_intersects_box,
@@ -57,9 +59,17 @@ def item_geometry_issues(scene: Scene, item: dict) -> list[Issue]:
                 "No full support region satisfies bounds and clearance height",
             )
         )
+    bounds = aabb_from_item(item)
     for key in ("obstacles", "reserved_zones"):
         for zone in scene[key]:
-            if item_intersects_box(item, aabb_from_zone(zone)):
+            box = aabb_from_zone(zone)
+            if any(
+                min(bounds.maximum[i], box.maximum[i])
+                - max(bounds.minimum[i], box.minimum[i]) <= NUMERIC_EPSILON
+                for i in range(3)
+            ):
+                continue
+            if item_intersects_box(item, box):
                 problems.append(
                     issue(item["id"], "collision", f"Intersects {key} {zone['id']}")
                 )

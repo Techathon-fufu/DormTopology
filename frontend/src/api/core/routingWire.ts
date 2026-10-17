@@ -6,6 +6,7 @@ import { isPowerSourcePort, resolveCableThickness, resolveCableVisibility } from
 import { localDirVec, resolvePortOffset } from '@/scene/ports'
 import { computeCableAvoidZones } from '@/scene/routeNodes'
 import { DESK_GAP } from '@/scene/sceneValidation'
+import { furnitureSurfaces, hasFixedFurniture, validFurnitureHole } from '@/scene/fixedFurniture'
 import { ApiError } from './errors'
 import { fromPackingPosition, packingBaseline, toPackingPosition, toPackingScene, type PackingScene, type RoutingCable, type RoutingGraph, type SceneBox } from './packingWire'
 
@@ -25,6 +26,10 @@ export function cablePlanningInputSignature(project: Project): string {
 
 /** Inscribed square openings conservatively preserve the material around a circular hole. */
 function openDeskTop(scene: PackingScene, project: Project): void {
+  if (hasFixedFurniture(project.room)) {
+    if (project.room.cableHoles.some((h) => !validFurnitureHole(project.room, h.position, h.diameter))) throw new ApiError('出线孔必须完整位于真实 L 形桌面内', { kind: 'input' })
+    return
+  }
   const slab = scene.obstacles.find((o) => o.id === 'furniture:desk-top')
   if (!slab) return
   let parts: SceneBox[] = [slab]
@@ -63,8 +68,10 @@ function routingGraph(project: Project): RoutingGraph {
     graph.edges.push({ id: `routing:edge:${graph.edges.length}`, from_node_id: a, to_node_id: b, modes, clearance_radius_m: clearance, exposed })
   }
   const topY = d.height + 0.012, underY = d.height - d.thickness - 0.025
-  for (const x of [-d.width / 2 + 0.07, 0, d.width / 2 - 0.07]) {
-    for (const z of [DESK_GAP + 0.035, DESK_GAP + d.depth - 0.07]) {
+  const surfaces = hasFixedFurniture(room) ? furnitureSurfaces(room, false).filter((s) => s.kind === 'desk').map((s) => s.rect)
+    : [{ x0: -d.width / 2, x1: d.width / 2, z0: DESK_GAP, z1: DESK_GAP + d.depth }]
+  for (const rect of surfaces) for (const x of [rect.x0 + .07, (rect.x0 + rect.x1) / 2, rect.x1 - .07]) {
+    for (const z of [rect.z0 + .035, rect.z1 - .07]) {
       const key = `${x}:${z}`
       top.push(add(`top:${key}`, [x, topY, z], 'corner'))
       under.push(add(`under:${key}`, [x, underY, z], 'corner'))
@@ -76,10 +83,17 @@ function routingGraph(project: Project): RoutingGraph {
     edge(a, b, ['slot'], Math.min(0.015, hole.diameter / (2 * Math.sqrt(2)) - 0.002))
     top.push(a); under.push(b)
   }
-  for (const x of [-d.width / 2 + 0.07, 0, d.width / 2 - 0.07]) {
+  for (const x of surfaces.flatMap((r) => [r.x0 + .07, (r.x0 + r.x1) / 2, r.x1 - .07])) {
     const a = add(`rear:${x}:top`, [x, topY, DESK_GAP / 2], 'fixing_point')
     const b = add(`rear:${x}:under`, [x, underY, DESK_GAP / 2], 'fixing_point')
     edge(a, b, ['backboard'])
+    if (hasFixedFurniture(room)) {
+      const front = add(`rear:${x}:over-front`, [x, .932, .09], 'fixing_point')
+      const back = add(`rear:${x}:over-back`, [x, .932, DESK_GAP / 2], 'fixing_point')
+      edge(front, back, ['backboard'])
+      edge(back, a, ['backboard'])
+      top.push(front)
+    }
     // These are allowed rear channel positions, not a claim that a clip is installed.
     top.push(a); under.push(b)
   }
@@ -87,6 +101,15 @@ function routingGraph(project: Project): RoutingGraph {
     for (let a = 0; a < group.length; a++) for (let b = a + 1; b < group.length; b++) {
       const modes: Array<'slot' | 'backboard'> = group[a].includes(':hole:') || group[b].includes(':hole:') ? ['slot']
         : group[a].includes(':rear:') || group[b].includes(':rear:') ? ['backboard'] : ['slot', 'backboard']
+      if (hasFixedFurniture(room) && !group[a].includes(':rear:') && !group[b].includes(':rear:')) {
+        const start = fromPackingPosition(graph.nodes.find((n) => n.id === group[a])!.position, room)
+        const end = fromPackingPosition(graph.nodes.find((n) => n.id === group[b])!.position, room)
+        const steps = Math.max(1, Math.ceil(Math.hypot(start[0] - end[0], start[2] - end[2]) / .01))
+        if (Array.from({ length: steps + 1 }, (_, i) => i / steps).some((t) => {
+          const x = start[0] + (end[0] - start[0]) * t, z = start[2] + (end[2] - start[2]) * t
+          return !surfaces.some((r) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1)
+        })) continue
+      }
       edge(group[a], group[b], modes, 0.015, group === top)
     }
   }
@@ -141,7 +164,8 @@ export function toRoutingScene(input: { project: Project; confirmed: boolean; re
   scene.reserved_zones = computeCableAvoidZones(project.room, resolveOrganizationPreferences(project)).map((zone) => ({
     id: `routing:${zone.id}`, min: toPackingPosition([zone.rect.x0, zone.y0, zone.rect.z0], project.room), max: toPackingPosition([zone.rect.x1, zone.y1, zone.rect.z1], project.room),
   }))
-  scene.exposure_zones = [{ id: 'routing:exposure-desktop', min: [0, project.room.desk.height, 0], max: [project.room.desk.width, project.room.height, project.room.desk.depth] }]
+  scene.exposure_zones = hasFixedFurniture(project.room) ? furnitureSurfaces(project.room, false).filter((s) => s.kind === 'desk').map((s) => ({ id: `routing:exposure-${s.id}`, min: toPackingPosition([s.rect.x0, s.y, s.rect.z0], project.room), max: toPackingPosition([s.rect.x1, project.room.height, s.rect.z1], project.room) }))
+    : [{ id: 'routing:exposure-desktop', min: [0, project.room.desk.height, 0], max: [project.room.desk.width, project.room.height, project.room.desk.depth] }]
   return scene
 }
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
-import { createDemoProject } from '../src/data/demoProject'
+import { createLegacyDemoProject as createDemoProject } from './fixtures/legacyDemo'
 import { planFromProject } from '../src/lib/plans'
 import { endpointOf } from '../src/scene/cables'
 import { canonicalScene, toPackingPosition } from '../src/api/core/packingWire'

@@ -685,7 +685,7 @@ export function PlanComparePage() {
                               />
                             ) : null}
                           </Suspense>
-                          <CameraRig preset={viewPreset} />
+                          <CameraRig preset={viewPreset} furnitureModel={activeScene?.room.furnitureModel} />
                         </Canvas>
                       ) : (
                         <div className="flex h-full flex-col items-center justify-center gap-3 bg-muted/40 p-6 text-center">

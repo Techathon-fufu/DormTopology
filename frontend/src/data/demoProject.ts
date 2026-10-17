@@ -8,7 +8,6 @@ import {
   type Vec3,
 } from '@/types/project'
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
-import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
 
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
@@ -20,28 +19,30 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
  * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
  * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
  * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
+ * v4：拆分家具、真实 L 形桌面、书架及抽屉支撑；升级前归档旧示例。
  */
-export const DEMO_SEED_VERSION = 3
+export const DEMO_SEED_VERSION = 4
 
 export const DEMO_ROOM_NOTE =
-  '固定标准空间：床桌 / 房间 / 立柱为预设固定模型（不可编辑）；书架 / 出线孔 / 插座可在「空间配置」中调整'
+  '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
 
 /** 默认空间：上床下桌标准款（单位：米） */
 export function createStandardRoom(): RoomConfig {
   return {
     template: 'loft-standard',
+    furnitureModel: 'dormdesk-v1',
     length: 2.6,
     width: 2.0,
     height: 2.7,
-    desk: { width: 1.6, depth: 0.8, thickness: 0.025, height: 0.75 },
-    shelf: { enabled: true, levels: 1, heightAboveDesk: 0.38, depth: 0.2 },
+    desk: { width: 1.45, depth: 0.86, thickness: 0.025, height: 0.75 },
+    shelf: { enabled: true, levels: 2, heightAboveDesk: 0.701, depth: 0.25 },
     posts: [
-      { id: 'post-fl', position: [-0.93, 0, 0.07], section: 0.04 },
-      { id: 'post-fr', position: [0.93, 0, 0.07], section: 0.04 },
-      { id: 'post-bl', position: [-0.93, 0, 0.83], section: 0.04 },
-      { id: 'post-br', position: [0.93, 0, 0.83], section: 0.04 },
+      { id: 'post-fl', position: [-0.97, 0, 0.03], section: 0.06 },
+      { id: 'post-fr', position: [0.97, 0, 0.03], section: 0.06 },
+      { id: 'post-bl', position: [-0.97, 0, 0.87], section: 0.06 },
+      { id: 'post-br', position: [0.97, 0, 0.87], section: 0.06 },
     ],
-    cableHoles: [{ id: 'hole-1', position: [0.65, 0.75, 0.12], diameter: 0.05 }],
+    cableHoles: [{ id: 'hole-1', position: [0.5, 0.75, 0.28], diameter: 0.05 }],
     outlets: [
       { id: 'outlet-1', position: [0, OUTLET_FIXED_Y_M, 0.01], label: '后墙插座（双插孔 ×2）', slots: 2 },
     ],
@@ -52,7 +53,6 @@ export function createStandardRoom(): RoomConfig {
 /** 扩展演示物品库：独立书本与桌面设备，尺寸为示例值（单位：米）。 */
 export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject[] {
   const deskY = 0.75
-  const beamY = deskBeamTopY(createStandardRoom())
   const base = {
     projectId,
     visible: true,
@@ -109,7 +109,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       name: '显示器',
       category: 'electrical',
       dimensions: { width: 0.54, height: 0.46, depth: 0.18 },
-      // 避开书架搁板 z 范围 [0.05, 0.25]：显示器高 0.46 > 搁板下净空 0.371，必须放在搁板投影之外
+      // 初始位置是待整理状态；规划使用真实碰撞体与中央主视位。
       transform: { position: [0.1, deskY, 0.4], rotationY: 0.1 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'monitor' },
       ports: [
@@ -346,7 +346,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       category: 'electrical',
       dimensions: { width: 0.21, height: 0.03, depth: 0.05 },
       // 优先放在桌面下方横梁（走线 / 插拔方便）；可在属性面板中切换 4 / 6 / 8 位并移动位置
-      transform: { position: [-0.35, beamY, DESK_BEAM_Z], rotationY: 0 },
+      transform: { position: [0.4, deskY, 0.13], rotationY: 0 },
       powerStrip: { socketCount: 4, socketSpacing: 0.05, maxLoadW: 2500 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'powerStrip' },
       ports: [1, 2, 3, 4].map((n) => ({
@@ -363,9 +363,21 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       needsPower: true,
       fixed: true,
       source: 'demo',
-      note: '演示物品：4 位排插（放在桌面下方横梁上；规格 4/6/8 位可切换，位置可移动）',
+      note: '演示物品：4 位排插，放在真实桌面上；规格 4/6/8 位可切换',
     },
-  ]
+  ].map((object) => {
+    const positions: Record<string, Vec3> = {
+      'demo-laptop': [-.26, deskY, .23], 'demo-monitor': [.1, deskY, .3],
+      'demo-keyboard': [-.15, deskY, .5], 'demo-mouse': [.16, deskY, .5],
+      'demo-lamp': [.48, deskY, .47], 'demo-printer': [.795, deskY, .55],
+      'demo-computer-tower': [.4, 0, .34], 'demo-thermos': [.8, deskY, .29],
+      'demo-cup': [.8, deskY, .4], 'demo-storage-box': [.41, 1.46, .17],
+      'demo-book-math': [-.25, deskY, .35], 'demo-book-english': [.16, deskY, .45],
+      'demo-book-programming': [.1, deskY, .4],
+      'demo-book-notebook': [.12, deskY, .5],
+    }
+    return { ...object, transform: { position: positions[object.id] ?? object.transform.position, rotationY: 0 } } as SceneObject
+  })
 }
 
 function endpoint(objectId: string, portId: string | undefined, position: Vec3): CableEndpoint {
@@ -546,7 +558,7 @@ export function createDemoProject(): Project {
     room: createStandardRoom(),
     objects,
     cables: createDemoCables(objects),
-    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backLeft' },
+    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backRight' },
     demoSeedVersion: DEMO_SEED_VERSION,
     stage: 'organize',
   }

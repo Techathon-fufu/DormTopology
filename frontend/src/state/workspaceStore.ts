@@ -30,7 +30,7 @@ export interface DragState {
   /** 已吸附的预览位置（米） */
   position: Vec3
   /** 吸附到的支撑面 */
-  support: 'desk' | 'shelf' | 'beam' | 'floor' | 'none'
+  support: 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'none'
   /** 预览位置是否通过越界 / 相交校验 */
   valid: boolean
   /** 上一次有效预览位置（指针未命中支撑面时回退用） */
