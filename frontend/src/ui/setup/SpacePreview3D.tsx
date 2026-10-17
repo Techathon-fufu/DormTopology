@@ -12,7 +12,8 @@ import type { ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
 
 /**
- * 空间配置三维预览（正式模型）：家具加载与三维工作台同源的 dorm_desk_assembled.glb，
+ * 空间配置三维预览（正式模型）：家具加载与三维工作台同源的桌体分离件
+ * （无抽屉桌体 + 三只抽屉，支持单击开 / 关与拖拽推拉），
  * 书架搁板 / 出线孔 / 插座等可编辑项以叠加标记随表单实时更新；
  * 模型加载失败时 DormDeskModel 自动回退参数化几何（提示见工作台）。
  */

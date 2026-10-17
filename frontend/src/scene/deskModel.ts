@@ -3,8 +3,8 @@ import type { RoomConfig, Vec3 } from '@/types/project'
 import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
 
 /**
- * 桌体 GLB 模型（frontend/public/models/dorm_desk_assembled.glb，源资产 Prefabmodel/dormdesk.glb）接入：
- * 配置、归一化与实测锚点。
+ * 桌体 GLB 模型（frontend/public/models/dorm_desk_body.glb + 三只抽屉分离件，源资产
+ * Prefabmodel/dormdesk_parts/）接入：配置、归一化与实测锚点。
  *
  * 口径说明（与 sceneValidation / deskModelStore 的分工）：
  * - 逻辑坐标（吸附面 / 碰撞边界 / 校验）仍以 RoomConfig 为单一事实来源；
@@ -47,8 +47,10 @@ export interface DeskModelConfig {
 }
 
 /**
- * 默认配置：仓库内置的整组「上床下桌」固定家具（Blender 源 dormdesk.blend 导出；
- * 运行时副本 frontend/public/models/dorm_desk_assembled.glb）。
+ * 默认配置：仓库内置的整组「上床下桌」固定家具（无抽屉桌体；抽屉为独立分离件，
+ * 清单与运动学见 scene/dormDeskDrawers.ts）。运行时副本
+ * frontend/public/models/dorm_desk_body.glb（由 scripts/sync-desk-parts.ts 从
+ * Prefabmodel/dormdesk_parts/dormdesk_body.glb 同步）。
  *
  * 摆放口径（固定模型，实测见 frontend/docs/desk-model.md）：
  * - 单位已是米、Y-up、正面朝 +z，无需单位换算或轴校正；
@@ -58,7 +60,7 @@ export interface DeskModelConfig {
  *   使物品摆放面与模型桌面一致（模型标称 770mm → 对齐后整体下沉约 20mm，底脚藏于地面内）。
  */
 export const DORM_DESK_MODEL_CONFIG: DeskModelConfig = {
-  url: 'models/dorm_desk_assembled.glb',
+  url: 'models/dorm_desk_body.glb',
   unitScale: 1,
   axisRotationY: 0,
   fitWidthM: null,

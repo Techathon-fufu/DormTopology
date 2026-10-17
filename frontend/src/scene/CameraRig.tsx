@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { OrbitControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { useDrawerStore } from '@/state/drawerStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 
 const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [number, number, number] }> = {
@@ -17,7 +18,7 @@ const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [numb
  * 视角预设 + 轨道控制：
  * - 切换预设 / 点击「重置视角」（viewNonce 变化）时移动相机与目标点；
  * - 用户自由旋转、平移、缩放（左键空白处旋转 · 右键平移 · 滚轮缩放）；
- * - 拖拽物品期间禁用轨道控制，避免与物品拖拽冲突。
+ * - 拖拽物品 / 抽屉推拉期间禁用轨道控制，避免与拖拽冲突。
  *
  * 小画布（空间配置预览）可传 zoomOut / targetShiftY：正式模型整体更高更大，
  * 默认机位按桌面区域取景，预览需要拉远并抬高注视点才能看到完整家具。
@@ -36,7 +37,8 @@ export function CameraRig({
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const camera = useThree((s) => s.camera)
   const nonce = useWorkspaceStore((s) => s.viewNonce)
-  const dragActive = useWorkspaceStore((s) => s.drag !== null)
+  const objectDragActive = useWorkspaceStore((s) => s.drag !== null)
+  const drawerDragActive = useDrawerStore((s) => s.draggingId !== null)
 
   useEffect(() => {
     const p = PRESETS[preset]
@@ -59,7 +61,7 @@ export function CameraRig({
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enabled={!dragActive}
+      enabled={!objectDragActive && !drawerDragActive}
       enableDamping
       dampingFactor={0.08}
       enablePan

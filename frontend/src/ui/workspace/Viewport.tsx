@@ -179,8 +179,8 @@ export function Viewport({
             shadow-camera-far={14}
           />
           <Suspense fallback={null}>
-            {/* 房间外壳与桌体分离：桌体优先加载 dorm_desk_assembled.glb，失败 / 未就绪回退参数化几何；
-                GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}
+            {/* 房间外壳与桌体分离：桌体加载正式模型（无抽屉桌体 + 三只抽屉分离件，抽屉可推拉），
+                失败 / 未就绪回退参数化几何；GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}
             <RoomShell
               room={project.room}
               deskMode="none"
