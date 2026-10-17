@@ -1,4 +1,5 @@
-import { sleep, uid } from '@/lib/utils'
+import { uid } from '@/lib/utils'
+import { mockSleep } from '@/lib/mockPacing'
 import type { RecognizedItem, RecognitionService } from '../types'
 
 const STEPS: Array<[number, string]> = [
@@ -23,14 +24,14 @@ export const mockRecognitionService: RecognitionService = {
   async recognize({ onProgress, simulateFailure }) {
     for (const [index, [p, label]] of STEPS.entries()) {
       onProgress?.(p, label)
-      await sleep(420)
+      await mockSleep(420)
       if (simulateFailure && index === 1) {
         // 演示异常流程：分析中途失败，可重试（重试时不勾选强制失败即恢复成功）
-        await sleep(300)
+        await mockSleep(300)
         throw new Error('模拟失败：照片光线不足或拍摄角度偏差较大，未能识别出物品。请重试或更换照片。（演示异常流程）')
       }
     }
-    await sleep(200)
+    await mockSleep(200)
     onProgress?.(1, '完成')
 
     const raw: RawItem[] = [

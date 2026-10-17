@@ -9,6 +9,7 @@ import {
   Redo2,
   RotateCcw,
   Save,
+  Sparkles,
   Undo2,
   Wand2,
 } from 'lucide-react'
@@ -20,6 +21,7 @@ import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
 import { Segmented } from '@/ui/kit/segmented'
 import { useOrganizeStore } from '@/state/organizeStore'
+import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 
 /** 保存状态：所有改动自动写入本地存储（zustand persist）；拖拽过程中提示调整中 */
@@ -197,6 +199,20 @@ export function Toolbar({
             <Save className="h-3.5 w-3.5" />
             保存方案
           </Button>
+          {project.isDemo ? (
+            <Button
+              variant="outline"
+              size="sm"
+              title="打开 6 步演示导览（可重置并重播）"
+              onClick={() => {
+                const tour = useTourStore.getState()
+                if (!tour.active) tour.start(project.id)
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              演示导览
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="sm"

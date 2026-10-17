@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Vec3 } from '@/types/project'
+import { prefersReducedMotion } from '@/lib/motion'
 
 /**
  * 走线模式会话状态（不持久化）：
@@ -64,6 +65,8 @@ interface CableState {
   resumeAnim: () => void
   skipAnim: () => void
   resetAnim: () => void
+  /** 清空整个走线会话（演示重置 / 离开项目时使用） */
+  resetSession: () => void
   tick: (dtMs: number) => void
 }
 
@@ -100,6 +103,11 @@ export const useCableStore = create<CableState>()((set, get) => ({
   },
 
   startAnim(from) {
+    // 尊重系统「减少动态效果」偏好：直接显示收拢后的走线
+    if (prefersReducedMotion()) {
+      set({ animStatus: 'finished', animT: 1, animFrom: from })
+      return
+    }
     set({ animStatus: 'playing', animT: 0, animFrom: from })
   },
   pauseAnim() {
@@ -114,6 +122,22 @@ export const useCableStore = create<CableState>()((set, get) => ({
   },
   resetAnim() {
     set({ animStatus: 'idle', animT: 0, animFrom: {} })
+  },
+
+  /** 清空整个走线会话（演示重置 / 离开项目时使用） */
+  resetSession() {
+    set({
+      selectedCableId: null,
+      selectedNodeIndex: null,
+      hoveredCableId: null,
+      linkFrom: null,
+      routeView: 'suggested',
+      nodeDrag: null,
+      animStatus: 'idle',
+      animT: 0,
+      animFrom: {},
+      notice: null,
+    })
   },
 
   tick(dtMs) {

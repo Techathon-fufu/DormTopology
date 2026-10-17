@@ -21,6 +21,7 @@ import { OrganizePanel } from '@/ui/workspace/OrganizePanel'
 import { RightPanel } from '@/ui/workspace/RightPanel'
 import { StatusBar } from '@/ui/workspace/StatusBar'
 import { Viewport } from '@/ui/workspace/Viewport'
+import { DemoTour } from '@/ui/tour/DemoTour'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
 import { Drawer } from '@/ui/kit/drawer'
@@ -501,6 +502,9 @@ export function WorkspacePage() {
           />
         )}
       </Drawer>
+
+      {/* 演示导览卡片（仅激活时渲染；bottom-14 避开底部状态栏） */}
+      <DemoTour className="bottom-14" />
     </div>
   )
 }

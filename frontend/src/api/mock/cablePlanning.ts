@@ -1,4 +1,4 @@
-import { sleep } from '@/lib/utils'
+import { mockSleep } from '@/lib/mockPacing'
 import { planCableRoute } from '@/scene/cableRoute'
 import { computeCableAvoidZones } from '@/scene/routeNodes'
 import type { CableConnection } from '@/types/project'
@@ -19,7 +19,7 @@ import type { CablePlanningService, CablePlanningResult } from '../types'
 export const mockCablePlanningService: CablePlanningService = {
   async planCables({ objects, room, cables, targetIds, preferences, onProgress }) {
     onProgress?.(0.08, '收集避让区与路径节点')
-    await sleep(320)
+    await mockSleep(320)
 
     const avoidZones = computeCableAvoidZones(room, preferences)
     const targets = targetIds && targetIds.length > 0
@@ -37,7 +37,7 @@ export const mockCablePlanningService: CablePlanningService = {
     for (let i = 0; i < targets.length; i += 1) {
       const cable = targets[i]
       onProgress?.(0.15 + 0.7 * (i / targets.length), `规划走线 ${i + 1}/${targets.length}`)
-      await sleep(220)
+      await mockSleep(220)
 
       const fromObject = objects.find((o) => o.id === cable.from.objectId)
       const toObject = objects.find((o) => o.id === cable.to.objectId)
@@ -101,7 +101,7 @@ export const mockCablePlanningService: CablePlanningService = {
     }
 
     onProgress?.(0.92, '汇总路径检查结果')
-    await sleep(260)
+    await mockSleep(260)
     onProgress?.(1, '完成')
 
     const result: CablePlanningResult = {

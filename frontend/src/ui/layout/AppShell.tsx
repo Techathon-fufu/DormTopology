@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { LogoMark } from '@/ui/brand/LogoMark'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
+import { DemoTour } from '@/ui/tour/DemoTour'
 import { cn } from '@/lib/utils'
 import { DEMO_PROJECT_ID } from '@/data/demoProject'
 
@@ -62,6 +63,7 @@ export function AppShell() {
           演示模式：识别 / 模型生成 / 规划结果均为本地模拟数据；真实能力将通过应用后端接入
         </p>
       </footer>
+      <DemoTour />
     </div>
   )
 }

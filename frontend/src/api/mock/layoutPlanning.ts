@@ -1,4 +1,5 @@
-import { sleep, uid } from '@/lib/utils'
+import { uid } from '@/lib/utils'
+import { mockSleep } from '@/lib/mockPacing'
 import type { LayoutAssignment, ObjectCategory, SceneObject, Vec3 } from '@/types/project'
 import type { LayoutPlanningService } from '../types'
 
@@ -28,9 +29,9 @@ function overlapsXZ(a: SceneObject, pa: Vec3, b: SceneObject, pb: Vec3): boolean
 export const mockLayoutPlanningService: LayoutPlanningService = {
   async planLayout({ projectId, objects, room, onProgress }) {
     onProgress?.(0.15, '分析物品占用')
-    await sleep(400)
+    await mockSleep(400)
     onProgress?.(0.5, '按类别分带摆放')
-    await sleep(500)
+    await mockSleep(500)
 
     const desk = room.desk
     const deskCenterZ = desk.depth / 2 + 0.05
@@ -103,7 +104,7 @@ export const mockLayoutPlanningService: LayoutPlanningService = {
     score = Math.max(0, Math.min(100, score))
 
     onProgress?.(0.9, '评估整理度')
-    await sleep(300)
+    await mockSleep(300)
     onProgress?.(1, '完成')
 
     const summary = `模拟自动整理：${deskObjects.length} 件物品按类别分带摆放、旋转归零；${floorObjects.length} 件地面物品与 ${fixedObjects.length} 件固定/锁定物品保持原位`

@@ -34,6 +34,8 @@ interface DeliverState {
     defaults: AccessoryParams,
     patch: Partial<AccessoryParams>,
   ) => void
+  /** 删除项目的交付记录（演示重置时使用：指南按新方案重新生成） */
+  remove: (projectId: string) => void
 }
 
 export const useDeliverStore = create<DeliverState>()(
@@ -102,6 +104,14 @@ export const useDeliverStore = create<DeliverState>()(
               [projectId]: { ...entry, accessory: { ...entry.accessory, ...patch } },
             },
           }
+        })
+      },
+
+      remove(projectId) {
+        set((s) => {
+          const byProject = { ...s.byProject }
+          delete byProject[projectId]
+          return { byProject }
         })
       },
     }),

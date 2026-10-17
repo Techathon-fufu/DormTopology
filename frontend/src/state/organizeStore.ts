@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationPlan } from '@/types/organization'
+import { prefersReducedMotion } from '@/lib/motion'
 
 /**
  * 空间整理模式会话状态（不持久化）：
@@ -137,6 +138,11 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
   startPlayback() {
     const { plan } = get()
     if (!plan) return
+    // 尊重系统「减少动态效果」偏好：不播放分批动画，直接显示目标布局
+    if (prefersReducedMotion()) {
+      get().skipToEnd()
+      return
+    }
     set({
       status: plan.batches.length > 0 ? 'playing' : 'finished',
       overrides: {},

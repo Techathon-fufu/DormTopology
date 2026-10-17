@@ -8,6 +8,7 @@ import { isMockMode } from '@/api'
 import { useProjectJobs } from '@/state/jobsStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
+import { FastForwardToggle } from '@/ui/kit/fast-forward'
 
 /**
  * 底部任务状态区：模式提示 / 任务阶段 / 失败重试 / 模型状态汇总 / 位置校验警示 / 物品与线缆计数。
@@ -81,6 +82,7 @@ export function StatusBar({
               {awaitingCount > 0 ? ` · ${awaitingCount} 待确认` : ''}
               {active.length > 1 ? ` +${active.length - 1}` : ''}
             </span>
+            {mock ? <FastForwardToggle compact /> : null}
           </span>
         ) : null}
         {failed.length > 0 ? (

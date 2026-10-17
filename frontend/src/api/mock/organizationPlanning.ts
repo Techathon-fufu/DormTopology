@@ -1,4 +1,4 @@
-import { sleep } from '@/lib/utils'
+import { mockSleep } from '@/lib/mockPacing'
 import { computeRuleBasedPlan } from '@/scene/ruleLayout'
 import type { OrganizationPlanningService } from '../types'
 
@@ -13,14 +13,14 @@ import type { OrganizationPlanningService } from '../types'
 export const mockOrganizationPlanningService: OrganizationPlanningService = {
   async planOrganization({ projectId, objects, room, preferences, onProgress }) {
     onProgress?.(0.12, '读取物品包围盒')
-    await sleep(360)
+    await mockSleep(360)
     onProgress?.(0.32, '划分三区可用容量')
-    await sleep(400)
+    await mockSleep(400)
     const plan = computeRuleBasedPlan({ projectId, objects, room, preferences })
     onProgress?.(0.68, '按规则排序落位')
-    await sleep(420)
+    await mockSleep(420)
     onProgress?.(0.88, '校验分界、边界与相交')
-    await sleep(320)
+    await mockSleep(320)
     onProgress?.(1, '完成')
     return plan
   },

@@ -21,6 +21,8 @@ npm run build      # tsc --noEmit && vite build
 
 项目列表（含内置示例项目）→ 创建项目 → 空间配置 → 照片导入与物品确认 → 三维工作台 → 方案交付（执行指南）。
 
+- **一键演示导览**（首页「一键演示」）：6 步固定顺序（查看凌乱桌面 → 确认识别物品 → 自动整理 → 规划走线 → 对比前后 → 查看执行指南），步骤切换自动导航、完成自动打勾、可点步骤条跳转；「重置并重播」重新种入示例项目并清理交付勾选 / 候选方案 / 任务记录 / 撤销历史；导览进度本地持久化。演示辅助：「跳过模拟等待」（全局演示加速，仅 mock 生效）与系统「减少动态效果」偏好（整理 / 收拢动画直接显示末态）。演示脚本与验收明细见 [docs/demo-and-acceptance.md](docs/demo-and-acceptance.md)。
+
 - **空间配置**（`/projects/:id/setup`）：桌体、房间、立柱、穿线孔、墙面接口的表单配置，表单为毫米制（与三维内部米制通过 `@/lib/units` 换算），配置冲突有就地校验。
 - **照片导入**（`/projects/:id/import`）：示例照片与上传（IndexedDB 保存）、识别 Mock 输出候选清单、物品增删改与尺寸确认、模型生成任务 Mock（等待/失败/重试/部分成功）、物品落位到桌面。
 - **三维工作台**（`/projects/:id/workspace`）：
@@ -42,10 +44,10 @@ npm run build      # tsc --noEmit && vite build
 ```text
 frontend/src/
   api/      HTTP 客户端与 Mock 适配器（服务契约、模式切换与数据来源）
-  state/    Zustand 状态（项目、工作台、线缆、整理、任务）与 IndexedDB 存取
+  state/    Zustand 状态（项目、工作台、线缆、整理、任务、交付、导览、演示加速）与 IndexedDB 存取
   scene/    Three.js/R3F 场景与本地几何规则（场景校验、走线规划、路径节点、模型资源）
-  ui/       页面与组件（pages / workspace / setup / deliver / kit / layout / brand / jobs）
-  lib/      通用纯函数（单位换算、工具、指南生成、布局方案辅助、WebGL 检测）
+  ui/       页面与组件（pages / workspace / setup / deliver / tour / kit / layout / brand / jobs）
+  lib/      通用纯函数（单位换算、工具、指南生成、布局方案辅助、WebGL 检测、模拟等待节奏、减少动态偏好）
   types/    领域类型（与数据契约的对应关系见下）
   data/     演示项目与示例照片
 ```
@@ -68,7 +70,15 @@ frontend/src/
 - 照片框选补标与后端裁剪、Rodin 生成任务对接。
 - 4/6/8 位插排选择、墙面接口沿 Y 轴调整、穿线孔/背板后双策略切换、粗/细线预设与按线径渲染。
 - STL 导出与打印级配件几何：需要封闭（水密）几何生成能力（布尔合并），当前配件预览仅为外观预览。
+- 候选方案对比 UI：「保存方案」的候选方案已持久化保留，对比界面未实现（工作台按钮暂禁用并标注「后续阶段」）。
 - 手机端上传、预览与场景查看的实测记录。
+
+## 验证记录（2026-10-17，演示与验收收尾）
+
+- `npm run typecheck` 通过；`npm run build` 通过（产物约 1.37 MB JS + 25.7 KB CSS，含 Three.js 单块体积警告，属预期）。
+- Headless 冒烟（esbuild 打包 + Node 运行，26 项断言全过）：演示加速（立即完成 / 正常计时 / 唤醒进行中的等待）、模拟服务失败与重试（台灯首次失败、重试成功）、一键演示重置（示例项目回凌乱初始、整理前快照重采、交付 / 候选方案 / 任务记录 / 撤销历史清理）、导览信号与步骤推进、接受整理方案 → 恢复整理前状态（与快照一致）、prefers-reduced-motion 下整理与收拢动画直落末态。
+- Vite 开发服务器（临时端口 :5199）入口与新增模块（tourStore / mockPacing / motion / DemoTour / FastForwardToggle 等）均返回 200。
+- 运行时为浏览器手动验证；本仓库环境无自动化浏览器测试。10 条验收流程结论与演示脚本见 [docs/demo-and-acceptance.md](docs/demo-and-acceptance.md)。
 
 ## 验证记录（2026-10-17，方案交付页）
 
