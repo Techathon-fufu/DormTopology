@@ -172,7 +172,7 @@ export function OrganizePanel({
       })
       setPlan(result, p.objects)
       updateJob(job.id, { status: 'success', progress: 1, resultNote: result.summary })
-      onFlash('整理方案已生成（规则式演示），请查看目标布局预览')
+      onFlash('整理方案已生成（规则式演示）：可播放整理动画、对比前后，再「接受方案」')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)

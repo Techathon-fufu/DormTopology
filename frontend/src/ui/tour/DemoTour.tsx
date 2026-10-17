@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, ChevronLeft, ChevronRight, RotateCcw, Sparkles, X } from 'lucide-react'
 import { useProject } from '@/state/projectsStore'
 import { DEMO_TOUR_STEPS, useTourStore } from '@/state/tourStore'
+import { useWorkspaceStore } from '@/state/workspaceStore'
 import { cn } from '@/lib/utils'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
@@ -45,11 +46,16 @@ export function DemoTour({ className }: { className?: string }) {
   const allDone = doneCount === DEMO_TOUR_STEPS.length
   const lastStep = stepIndex === DEMO_TOUR_STEPS.length - 1
 
-  // 跟随步骤自动导航（只在步骤 / 激活状态变化时触发，不干扰用户主动跳去其它页面）
+  // 跟随步骤自动导航（只在步骤 / 激活状态变化时触发，不干扰用户主动跳去其它页面）；
+  // 工作台步骤同时应用导览预设视角（路演三幕：杂乱还原 / 归位动画 / 收拢对比）。
   useEffect(() => {
     if (!active || !tourProjectId) return
-    const target = `/projects/${tourProjectId}/${DEMO_TOUR_STEPS[stepIndex]?.path ?? 'workspace'}`
+    const stepDef = DEMO_TOUR_STEPS[stepIndex]
+    const target = `/projects/${tourProjectId}/${stepDef?.path ?? 'workspace'}`
     if (location.pathname !== target) navigate(target)
+    if (stepDef?.view && stepDef.path === 'workspace') {
+      useWorkspaceStore.getState().applyViewPreset(stepDef.view)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, tourProjectId, stepIndex, navigate])
 

@@ -52,7 +52,7 @@ function DragHintChip() {
     >
       {drag.valid
         ? `吸附支撑面：${label} · 松开后保存（可撤销）`
-        : '当前位置越界或与其它物品相交：仍可放置，将标记警示'}
+        : '当前位置越界或与其它物品相交：松开后将恢复到上一次有效位置'}
     </div>
   )
 }
@@ -254,7 +254,7 @@ export function WorkspacePage() {
         progress: 1,
         resultNote: `${summary} · 规则式演示，未经真实算法验证`,
       })
-      showFlash(`${summary}：路径为规则式演示（未经真实算法验证，可撤销）`)
+      showFlash(`${summary}：路径为规则式演示（未经真实算法验证，可撤销）${result.plannedCount > 0 ? '。可在左侧播放「收拢动画」查看原始 → 建议对比' : ''}`)
     } catch (err) {
       updateJob(job.id, {
         status: 'failed',

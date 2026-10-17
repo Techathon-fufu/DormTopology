@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
 import type { Project, SceneObject, Vec3 } from '@/types/project'
+import { resolveDropCommit } from '@/scene/dragCommit'
 import { placementIssues, raycastSupports } from '@/scene/sceneValidation'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useProjectsStore } from '@/state/projectsStore'
@@ -19,7 +20,8 @@ export interface ObjectDragHandlers {
 /**
  * 物品拖拽：pointerdown 开始，指针射线投射到支撑面（桌面 / 书架搁板 / 地面）上取最近命中，
  * 位置吸附到 10mm 网格；拖动过程中仅写入会话级 drag 状态（不写项目库、不记录历史），
- * 松手时提交一次可撤销的移动。拖拽期间 CameraRig 的轨道控制会被禁用，避免操作冲突。
+ * 松手时提交一次可撤销的移动（无效落点回退到上一次有效位置，不写无效数据）。
+ * 拖拽期间 CameraRig 的轨道控制会被禁用，避免操作冲突。
  */
 export function useObjectDrag(project: Project, object: SceneObject): ObjectDragHandlers {
   const { camera, gl } = useThree()
@@ -52,6 +54,10 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
     let rafId = 0
     let pending: PointerEvent | null = null
     let lastPos: Vec3 = startPos
+    /** 本次拖拽中最后一次「有效预览位置」（越界 / 相交的预览不更新它） */
+    let lastValidPos: Vec3 = startPos
+    /** 当前预览位置是否通过越界 / 相交校验（松手提交的判据） */
+    let lastPreviewValid = true
 
     const cancelRaf = () => {
       if (rafId) {
@@ -83,12 +89,14 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       const valid = !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap')
       moved = true
       lastPos = position
+      lastPreviewValid = valid
+      if (valid) lastValidPos = position
       useWorkspaceStore.getState().setDrag({
         objectId: object.id,
         position,
         support: hit.kind,
         valid,
-        lastValid: position,
+        lastValid: lastValidPos,
       })
     }
 
@@ -105,12 +113,16 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       cleanup()
       document.body.style.cursor = 'auto'
       useWorkspaceStore.getState().setDrag(null)
-      if (moved) {
-        // 松手时一次性提交（一次可撤销的移动记录）
+      if (!moved) return
+      // 松手时一次性提交（一次可撤销的移动记录）：
+      // 无效落点（越界 / 相交）恢复到本次拖拽中最后一次有效预览位置；
+      // 与起点一致时不提交，避免产生无变化的空历史记录。
+      const commitPosition = resolveDropCommit(startPos, lastValidPos, lastPos, lastPreviewValid)
+      if (commitPosition) {
         useWorkspaceStore.getState().updateObject(
           project.id,
           object.id,
-          { transform: { position: lastPos } },
+          { transform: { position: commitPosition } },
           true,
         )
       }

@@ -5,8 +5,11 @@ import {
   ChevronRight,
   Link2,
   Loader2,
+  Pause,
+  Play,
   PlugZap,
   RefreshCw,
+  SkipForward,
   Wand2,
   X,
 } from 'lucide-react'
@@ -17,6 +20,7 @@ import { estimateCableLength } from '@/scene/cableRoute'
 import { PORT_TYPE_COLORS } from '@/scene/ports'
 import { useCableLink } from '@/lib/useCableLink'
 import { formatMm } from '@/lib/units'
+import { startCollectAnim } from '@/lib/collectAnim'
 import { useCableStore } from '@/state/cableStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
@@ -59,6 +63,7 @@ export function CableListPanel({
   const setShowRouteNodes = useCableStore((s) => s.setShowRouteNodes)
   const showAvoidZones = useCableStore((s) => s.showAvoidZones)
   const setShowAvoidZones = useCableStore((s) => s.setShowAvoidZones)
+  const animStatus = useCableStore((s) => s.animStatus)
   const workspaceSelect = useWorkspaceStore((s) => s.select)
   const onPortClick = useCableLink()
   const [devicesOpen, setDevicesOpen] = useState(true)
@@ -208,6 +213,53 @@ export function CableListPanel({
             <Toggle checked={showPorts} onChange={setShowPorts} label="显示接口" />
             <Toggle checked={showRouteNodes} onChange={setShowRouteNodes} label="路径节点" />
             <Toggle checked={showAvoidZones} onChange={setShowAvoidZones} label="避让区" />
+          </div>
+          {/* 收拢动画（全部线缆）：路演三幕「原始 → 建议」对比入口，无需先选中某条线缆 */}
+          <div className="flex items-center gap-1.5">
+            {animStatus === 'playing' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => useCableStore.getState().pauseAnim()}
+              >
+                <Pause className="h-3.5 w-3.5" />
+                暂停收拢动画
+              </Button>
+            ) : animStatus === 'paused' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => useCableStore.getState().resumeAnim()}
+              >
+                <Play className="h-3.5 w-3.5" />
+                继续
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                disabled={busy}
+                title="全部线缆从「原始走线」过渡到「建议走线」（展示用，可跳过）"
+                onClick={() => startCollectAnim(project, onFlash)}
+              >
+                <Play className="h-3.5 w-3.5" />
+                {animStatus === 'finished' ? '重播收拢动画（全部）' : '收拢动画（全部线缆）'}
+              </Button>
+            )}
+            {animStatus !== 'idle' ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0"
+                title="跳到结束"
+                onClick={() => useCableStore.getState().skipAnim()}
+              >
+                <SkipForward className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
           </div>
         </div>
 
