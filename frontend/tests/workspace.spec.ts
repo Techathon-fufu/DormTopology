@@ -1,0 +1,119 @@
+import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import type { GenerationJob } from '../src/types/project'
+
+const demoProjectId = 'demo-dorm-101'
+
+function collectRuntimeFailures(page: Page) {
+  const failures: string[] = []
+  page.on('pageerror', error => failures.push(error.message))
+  page.on('console', message => {
+    if (/Maximum update depth exceeded|The result of getSnapshot should be cached/i.test(message.text())) {
+      failures.push(message.text())
+    }
+  })
+  return failures
+}
+
+async function openWorkspace(page: Page) {
+  await page.goto(`/projects/${demoProjectId}/workspace`)
+  await expect(page.getByTitle('示例：上床下桌·四人间')).toBeVisible()
+  await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
+  await expect(page.locator('canvas')).toBeVisible()
+}
+
+async function expectNonblankCanvas(page: Page) {
+  await expect.poll(async () => {
+    // The production WebGL buffer is discarded after presentation, so inspect the displayed image.
+    const screenshot = await page.locator('canvas').screenshot({ scale: 'css', animations: 'disabled' })
+    return page.evaluate(async (base64) => {
+      const image = new Image()
+      image.src = `data:image/png;base64,${base64}`
+      await image.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = image.width
+      canvas.height = image.height
+      const context = canvas.getContext('2d')!
+      context.drawImage(image, 0, 0)
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+      const colors = new Set<number>()
+      const stride = Math.max(1, Math.floor((canvas.width * canvas.height) / 10_000))
+      for (let index = 0; index < pixels.length; index += stride * 4) {
+        if (pixels[index + 3]) colors.add((pixels[index] << 16) + (pixels[index + 1] << 8) + pixels[index + 2])
+      }
+      return colors.size
+    }, screenshot.toString('base64'))
+  }, { message: 'The workspace should render varied, nontransparent 3D geometry.' }).toBeGreaterThan(32)
+}
+
+async function attachViewport(page: Page, testInfo: TestInfo, name: string) {
+  const path = testInfo.outputPath(`${name}.png`)
+  await page.screenshot({ path, fullPage: false, scale: 'css', animations: 'disabled' })
+  await testInfo.attach(name, { path, contentType: 'image/png' })
+}
+
+type JobMutation =
+  | { action: 'create'; projectId: string; title: string }
+  | { action: 'update'; id: string; patch: Partial<GenerationJob> }
+  | { action: 'remove'; id: string }
+
+async function mutateJob(page: Page, mutation: JobMutation): Promise<string | null> {
+  return page.evaluate(async (input) => {
+    // Import the exact Vite module already used by the page, including its HMR version.
+    const moduleUrl = performance.getEntriesByType('resource')
+      .map(entry => entry.name)
+      .filter(name => new URL(name).pathname === '/src/state/jobsStore.ts')
+      .at(-1)
+    if (!moduleUrl) throw new Error('The workspace did not load jobsStore.ts')
+    const { useJobsStore } = await import(moduleUrl)
+    const store = useJobsStore.getState()
+    if (input.action === 'create') {
+      return store.create({ projectId: input.projectId, type: 'model', title: input.title }).id
+    }
+    if (input.action === 'update') store.update(input.id, input.patch)
+    else store.remove(input.id)
+    return null
+  }, mutation)
+}
+
+test('opens the example workspace without a render loop and keeps its scene visible', async ({ page }, testInfo) => {
+  const failures = collectRuntimeFailures(page)
+  await openWorkspace(page)
+  await expectNonblankCanvas(page)
+  await page.getByRole('button', { name: '俯视', exact: true }).click()
+  await expectNonblankCanvas(page)
+  await page.getByRole('button', { name: '正视', exact: true }).click()
+  await expectNonblankCanvas(page)
+  await attachViewport(page, testInfo, 'workspace-rendered')
+  await page.reload()
+  await expect(page.getByRole('contentinfo')).toContainText(/物品 \d+/)
+  await expectNonblankCanvas(page)
+  expect(failures).toEqual([])
+})
+
+test('updates the status bar when project jobs change and excludes other projects', async ({ page }, testInfo) => {
+  const failures = collectRuntimeFailures(page)
+  await openWorkspace(page)
+  const statusBar = page.getByRole('contentinfo')
+  const otherId = await mutateJob(page, { action: 'create', projectId: 'unrelated-project', title: '其他项目模型任务' })
+  expect(otherId).toBeTruthy()
+  await expect(statusBar).not.toContainText('其他项目模型任务')
+
+  const jobId = await mutateJob(page, { action: 'create', projectId: demoProjectId, title: '工作台模型任务' })
+  expect(jobId).toBeTruthy()
+  await expect(statusBar).toContainText('工作台模型任务')
+  await mutateJob(page, { action: 'update', id: jobId!, patch: { status: 'awaiting', stageLabel: '等待尺寸确认' } })
+  await expect(statusBar).toContainText('工作台模型任务 · 等待尺寸确认 · 1 待确认')
+  await mutateJob(page, { action: 'update', id: jobId!, patch: { status: 'failed', error: '测试失败状态' } })
+  await expect(statusBar).toContainText('1 个任务未完成')
+  await expect(statusBar.getByRole('button', { name: '重试', exact: true })).toBeVisible()
+  await expect(statusBar).not.toContainText('工作台模型任务')
+
+  await mutateJob(page, { action: 'remove', id: jobId! })
+  await expect(statusBar).not.toContainText('个任务未完成')
+  await expect(statusBar.getByRole('button', { name: '重试', exact: true })).toHaveCount(0)
+  await expect(statusBar).not.toContainText('其他项目模型任务')
+  await mutateJob(page, { action: 'remove', id: otherId! })
+  await expectNonblankCanvas(page)
+  await attachViewport(page, testInfo, 'workspace-jobs-updated')
+  expect(failures).toEqual([])
+})
