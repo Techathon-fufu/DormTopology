@@ -35,6 +35,18 @@ export function clampNumber(v: number, min: number, max: number): number {
 }
 
 export interface OrganizationZones {
+  /** Fixed furniture ergonomics, measured from the runtime desk GLB. */
+  workstation?: {
+    slotCenterX: number
+    monitor: RectOnPlane
+    laptop: RectOnPlane & { rotationY: number }
+    keyboard: RectOnPlane
+    mouse: RectOnPlane
+    miscellaneous: RectOnPlane
+    operation: RectOnPlane
+    seated: RectOnPlane
+    study: FurnitureSurface
+  }
   deskSurfaces?: RectOnPlane[]
   storageSurfaces?: FurnitureSurface[]
   /** 桌面整体可用面（含打字 / 水杯活动区投影，用于放置面定位） */
@@ -126,6 +138,20 @@ export function computeOrganizationZones(
   }
 
   const deskSurface: RectOnPlane = { rect: { x0, x1, z0, z1 }, y: deskY }
+  // GLB Desk_Top_Main notch: x=[-.13,.42], z=[.06,.085].
+  // The return begins at x=.59; only its part beyond the main front edge is for daily items.
+  const plane = (x0: number, x1: number, z0: number, z1: number): RectOnPlane => ({ rect: { x0, x1, z0, z1 }, y: deskY })
+  const workstation: OrganizationZones['workstation'] = fixed ? {
+    slotCenterX: .145,
+    monitor: plane(-.155, .445, .085, .285),
+    laptop: { ...plane(.47, .98, .10, .59), rotationY: -Math.PI / 9 },
+    keyboard: plane(-.025, .315, .335, .49),
+    mouse: plane(.335, .585, .39, .59),
+    miscellaneous: plane(.61, .98, .63, .88),
+    operation: plane(-.025, .315, .51, .59),
+    seated: { ...plane(-.155, .445, .61, 1.11), y: 0 },
+    study: surfaces.find((s) => s.id === 'support-shelf-2')!,
+  } : undefined
 
   // 书架收纳区：搁板上表面
   let shelf: OrganizationZones['shelf'] = null
@@ -158,7 +184,7 @@ export function computeOrganizationZones(
     clearance: Math.max(0, desk.height - desk.thickness - 0.02),
   }
 
-  return { deskSurface, deskBackBand, deskLeftBand, deskRightBand, typing, cup, shelf, underDesk,
+  return { workstation, deskSurface, deskBackBand, deskLeftBand, deskRightBand, typing, cup, shelf, underDesk,
     ...(fixed ? { deskSurfaces: surfaces.filter((s) => s.kind === 'desk').map((s) => ({ ...s, rect: { x0: s.rect.x0 + .01, x1: s.rect.x1 - .01, z0: s.rect.z0 + .01, z1: s.rect.z1 - .01 } })), storageSurfaces: surfaces.filter((s) => s.kind !== 'desk') } : {}),
   }
 }

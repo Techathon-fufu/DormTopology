@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import { recordStorage } from './recordStorage'
 import { OUTLET_FIXED_Y_M, type Project } from '@/types/project'
 import { createDemoCables, createDemoProject, createDemoSceneObjects, DEMO_PROJECT_ID, DEMO_ROOM_NOTE, DEMO_SEED_VERSION } from '@/data/demoProject'
 import { cableRoutingObjectsSignature, endpointOf, invalidateCableRoutes } from '@/scene/cables'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { useCableStore } from './cableStore'
+import { usePlansStore } from './plansStore'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -127,6 +129,7 @@ export const useProjectsStore = create<ProjectsState>()(
             objects: existing.objects.map((o) => ({ ...o, projectId: archiveId })),
             cables: invalidateCableRoutes((existing.cables ?? []).map((c) => ({ ...c, projectId: archiveId }))),
           } : null
+          if (archiveId) usePlansStore.getState().archiveProjectRecords(DEMO_PROJECT_ID, archiveId)
           set((s) => ({ projects: { ...s.projects, ...(archive && archiveId ? { [archiveId]: archive } : {}), [DEMO_PROJECT_ID]: createDemoProject() } }))
         } else {
           const migrated = migrateDefaultDemoWiring(migrateDefaultDemoPorts(existing))
@@ -171,6 +174,7 @@ export const useProjectsStore = create<ProjectsState>()(
     }),
     {
       name: 'dormtopology.projects',
+      storage: createJSONStorage(() => recordStorage(['projects'])),
       version: PROJECTS_PERSIST_VERSION,
       /**
        * 迁移历史（两轮改动合并后的口径）：

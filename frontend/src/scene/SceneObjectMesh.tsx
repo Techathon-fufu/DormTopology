@@ -86,7 +86,7 @@ export function SceneObjectMesh({
           // Ctrl 角点缩放：不进入普通平移；缩放预览期间同样不响应拖动
           if (e.ctrlKey || useObjectResizeStore.getState().preview) return
           const marking = useConnectionsStore.getState()
-          if (marking.projectId === project.id && marking.pickingObjectId) {
+          if (marking.projectId === project.id) {
             if (pick.active) pick.onPointerDown(e)
             return
           }

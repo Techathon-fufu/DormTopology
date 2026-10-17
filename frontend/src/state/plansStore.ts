@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import { recordStorage } from './recordStorage'
 import type { LayoutPlan, Project } from '@/types/project'
 import { duplicatePlan, planFromProject } from '@/lib/plans'
 import { invalidateCableRoutes } from '@/scene/cables'
@@ -29,6 +30,7 @@ interface PlansState {
   removeCandidate: (projectId: string, planId: string) => void
   /** 清空项目的整理前快照与候选方案（演示重置 / 删除项目时使用） */
   clearProject: (projectId: string) => void
+  archiveProjectRecords: (projectId: string, archiveId: string) => void
 }
 
 /** v1 → v2：为缺少 updatedAt 的方案补默认值（保持其余字段不动） */
@@ -41,6 +43,22 @@ export const usePlansStore = create<PlansState>()(
     (set, get) => ({
       baselines: {},
       candidates: {},
+      archiveProjectRecords(projectId, archiveId) {
+        const remap = (plan: LayoutPlan): LayoutPlan => ({ ...structuredClone(plan), projectId: archiveId,
+          ...(plan.scene ? { scene: { ...structuredClone(plan.scene),
+            objects: plan.scene.objects.map((o) => ({ ...structuredClone(o), projectId: archiveId })),
+            cables: plan.scene.cables.map((c) => ({ ...structuredClone(c), projectId: archiveId })),
+          } } : {}),
+        })
+        set((s) => {
+          const baselines = { ...s.baselines }, candidates = { ...s.candidates }
+          if (baselines[projectId]) baselines[archiveId] = remap(baselines[projectId])
+          if (candidates[projectId]) candidates[archiveId] = candidates[projectId].map(remap)
+          delete baselines[projectId]
+          delete candidates[projectId]
+          return { baselines, candidates }
+        })
+      },
       captureBaseline(project) {
         if (get().baselines[project.id]) return
         set((s) => ({
@@ -126,6 +144,7 @@ export const usePlansStore = create<PlansState>()(
     }),
     {
       name: 'dormtopology.plans',
+      storage: createJSONStorage(() => recordStorage(['baselines', 'candidates'])),
       version: 2,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PlansState>

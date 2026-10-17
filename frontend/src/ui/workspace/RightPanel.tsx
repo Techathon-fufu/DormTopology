@@ -1,3 +1,5 @@
+import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
+import { useCabinetStore } from '@/state/cabinetStore'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -359,15 +361,15 @@ function ObjectInspector({
         <Label>尺寸（毫米）</Label>
         <div className="grid grid-cols-3 gap-1.5">
           <div className="space-y-0.5">
-            <MmInput value={dims.width} min={10} onChange={(v) => patch({ dimensions: { width: v } })} />
+            <MmInput label="物品宽度" value={dims.width} min={10} onChange={(v) => patch({ dimensions: { width: v } })} />
             <p className="text-center text-[11px] text-faint">宽</p>
           </div>
           <div className="space-y-0.5">
-            <MmInput value={dims.height} min={5} onChange={(v) => patch({ dimensions: { height: v } })} />
+            <MmInput label="物品高度" value={dims.height} min={5} onChange={(v) => patch({ dimensions: { height: v } })} />
             <p className="text-center text-[11px] text-faint">高</p>
           </div>
           <div className="space-y-0.5">
-            <MmInput value={dims.depth} min={10} onChange={(v) => patch({ dimensions: { depth: v } })} />
+            <MmInput label="物品深度" value={dims.depth} min={10} onChange={(v) => patch({ dimensions: { depth: v } })} />
             <p className="text-center text-[11px] text-faint">深</p>
           </div>
         </div>
@@ -421,6 +423,13 @@ function ObjectInspector({
           {support ? `吸附到${support.label}` : '无可吸附的支撑面'}
           {support && supportDeltaMm !== 0 ? `（${supportDeltaMm! > 0 ? '+' : ''}${supportDeltaMm} mm）` : ''}
         </Button>
+        {hasFixedFurniture(project.room) && <div className="flex gap-2">
+          {furnitureSurfaces(project.room).filter((s) => s.id.startsWith('support-cabinet')).map((s) => <Button key={s.id} size="sm" variant="outline" className="flex-1" disabled={locked} onClick={() => {
+            patch({ transform: { position: [(s.rect.x0 + s.rect.x1) / 2, s.y, (s.rect.z0 + s.rect.z1) / 2] } })
+            if (!useCabinetStore.getState().open) useCabinetStore.getState().toggle()
+            useWorkspaceStore.getState().setViewPreset('left')
+          }}>{s.label}</Button>)}
+        </div>}
       </section>
 
       <section className="space-y-1.5">
@@ -463,7 +472,7 @@ function ObjectInspector({
           </ul>
         )}
         <p className="text-[11px] leading-relaxed text-faint">
-          校验为本地实时计算：红色线框与左侧 ⚠ 标记表示该物品越界或与其它物品相交。拖拽释放时若落点无效，将恢复到本次拖拽中最后一次有效位置；直接在坐标输入框中填写数值可保留越界 / 相交位置（仅提示）。
+          校验为本地实时计算：红色线框与左侧 ⚠ 标记表示该物品越界或与其它物品相交。拖动和位置编辑允许干涉，仅作提醒；尺寸修改会检查碰撞和边界，冲突时保留原尺寸。
         </p>
       </section>
 

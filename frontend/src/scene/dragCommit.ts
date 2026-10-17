@@ -9,20 +9,17 @@ function samePosition(a: Vec3, b: Vec3): boolean {
   )
 }
 
-/**
- * 拖拽释放的落点决策（纯函数，便于冒烟测试）：
- * - 落点有效 → 提交落点；
- * - 落点无效（越界 / 相交）→ 恢复到本次拖拽中最后一次有效预览位置；
- * - 与起点一致（含本次拖拽从未产生过有效移动）→ 返回 null：不提交、不产生历史记录。
- *
- * 对应验收口径「无效拖动恢复到上一次有效状态」（见 docs/project_tasks.md）。
- */
+/** 手动落点始终保留，干涉只提醒；未移动时不生成历史。 */
 export function resolveDropCommit(
   start: Vec3,
   lastValid: Vec3,
   finalPos: Vec3,
   finalValid: boolean,
 ): Vec3 | null {
-  const target = finalValid ? finalPos : lastValid
+  // Manual placement is permissive; geometry remains visible as a warning.
+  // Keep the legacy arguments for callers, but never roll back an overlapping drop.
+  void lastValid
+  void finalValid
+  const target = finalPos
   return samePosition(target, start) ? null : target
 }

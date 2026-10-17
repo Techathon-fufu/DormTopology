@@ -42,7 +42,7 @@ if (process.argv.includes('--ports-only')) {
 const preferences = resolveOrganizationPreferences(demo)
 const input = { projectId: demo.id, objects: demo.objects, room: demo.room, preferences, confirmed: true }
 const packingScene = { ...toPackingScene(input), baseline_id: 'demo-routing-regression' }
-assert.equal(packingScene.reserved_zones.length, demo.room.cableHoles.length, 'packing preserves a clearance above every configured cable hole')
+assert.equal(packingScene.reserved_zones.length, demo.room.cableHoles.length + 2, 'packing protects hole, hands and seated operation zones')
 const packing = domain('from backend.app.domain.packing import plan_packing,validate_layout; from backend.examples.packing_demo import preview_scene; s=json.load(sys.stdin); r=plan_packing(s); print(json.dumps({"result":r,"before":validate_layout(s),"after":validate_layout(preview_scene(s,r))}))', packingScene)
 assert.equal(packing.result.status, 'success', JSON.stringify(packing.result.issues))
 assert.equal(packing.after.geometry_valid, true, JSON.stringify(packing.after))
@@ -56,10 +56,10 @@ const organized: Project = { ...demo, objects: demo.objects.map((object) => {
 const zones = computeOrganizationZones(organized.room, preferences)
 const monitor = organized.objects.find((o) => o.id === 'demo-monitor')!
 const printer = organized.objects.find((o) => o.id === 'demo-printer')!
-assert.ok(Math.abs(monitor.transform.position[0] - (zones.typing.rect.x0 + zones.typing.rect.x1) / 2) < .002)
+assert.ok(Math.abs(monitor.transform.position[0] - zones.workstation!.slotCenterX) < .002)
 assert.equal(monitor.transform.rotationY, 0)
 assert.equal(printer.transform.rotationY, 0)
-assert.ok(printer.transform.position[0] > .59, 'printer stays on the side return, outside the central monitor view')
+assert.ok(printer.transform.position[0] < -.04, 'printer stays on the left, leaving the return for daily items')
 assert.equal(organized.objects.find((o) => o.id === 'demo-power-adapter')!.transform.position[1], organized.room.desk.height,
   'the active power adapter stays accessible on the desk rather than in a closed drawer')
 assert.ok(organized.objects.filter((o) => o.transform.position[1] === 0).every((o) => o.id === 'demo-computer-tower'))

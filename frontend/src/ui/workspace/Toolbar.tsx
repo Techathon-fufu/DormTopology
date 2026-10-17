@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  GitCompareArrows,
   MoreHorizontal,
   ChevronDown,
   Loader2,
@@ -24,7 +23,9 @@ import { DataBadge } from '@/ui/kit/data-badge'
 import { Select } from '@/ui/kit/primitives'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
-import { usePlansStore } from '@/state/plansStore'
+import { HoldCompareButton } from './HoldCompareButton'
+import { useCabinetStore } from '@/state/cabinetStore'
+import { hasFixedFurniture } from '@/scene/fixedFurniture'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 
@@ -56,6 +57,8 @@ function SaveStatus({ updatedAt }: { updatedAt: number }) {
 
 interface ToolbarProps {
   project: Project
+  onCompare: (held: boolean) => void
+  canCompare: boolean
   onOpenOrganize: () => void
   onPlanCables: () => void
   onSavePlan: () => void
@@ -68,14 +71,14 @@ interface ToolbarProps {
 
 export function Toolbar({
   project,
+  onCompare,
+  canCompare,
   onOpenOrganize,
   onSavePlan,
   onOpenPlans,
-  plansOpen,
   onToggleLeftPanel,
   onToggleRightPanel,
 }: ToolbarProps) {
-  const mode = useWorkspaceStore((s) => s.mode)
   const viewPreset = useWorkspaceStore((s) => s.viewPreset)
   const setViewPreset = useWorkspaceStore((s) => s.setViewPreset)
   const resetView = useWorkspaceStore((s) => s.resetView)
@@ -88,7 +91,7 @@ export function Toolbar({
   const applying = useOrganizeStore((s) => s.applying)
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
-  const candidateCount = usePlansStore((s) => (s.candidates[project.id] ?? []).length)
+  const cabinetOpen = useCabinetStore((s) => s.open)
 
   return (
     <header className="relative z-30 shrink-0 border-b border-border bg-surface">
@@ -115,38 +118,25 @@ export function Toolbar({
           <Button variant="ghost" size="icon" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled={!canRedo || previewBlocking} onClick={() => redo(project.id)}><Redo2 className="h-4 w-4" /></Button>
         </div>
         <Select aria-label="场景视角" value={viewPreset} onChange={(e) => setViewPreset(e.target.value as ViewPreset)} className="hidden h-9 w-28 bg-background/60 sm:block">
-          <option value="persp">透视视角</option><option value="top">俯视视角</option><option value="front">正面视角</option><option value="desk">桌面视角</option>
+          <option value="persp">透视视角</option><option value="top">俯视视角</option><option value="front">正面视角</option><option value="desk">桌面视角</option><option value="left">柜体视角</option>
         </Select>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={mode === 'organize' ? onOpenOrganize : onToggleRightPanel}
-            title={mode === 'organize' ? '打开空间整理面板：分区归位与整理方案' : '打开理线引导与方案'}>
-            <PanelRight className="h-4 w-4" />任务与方案
-          </Button>
-          <Button
-            variant={plansOpen ? 'primary' : 'outline'}
-            size="sm"
-            disabled={applying}
-            title={
-              candidateCount > 0
-                ? `候选方案：查看列表与指标，最多选 3 个并排对比（已保存 ${candidateCount} 个）`
-                : '候选方案：先点「保存方案」保存当前布局，再进入对比'
-            }
-            onClick={onOpenPlans}
-          >
-            <GitCompareArrows className="h-4 w-4" />
-            方案对比{candidateCount > 0 ? `（${candidateCount}）` : ''}
-          </Button>
+          <Button size="sm" onClick={onOpenOrganize}><Sparkles className="h-4 w-4" />整理桌面</Button>
+          <HoldCompareButton onChange={onCompare} disabled={!canCompare || applying} />
           <Dropdown className="group relative">
             <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden" aria-label="更多操作" title="更多操作"><MoreHorizontal className="h-5 w-5" /></summary>
             <div className="absolute right-0 top-11 z-50 flex w-60 flex-col gap-1 rounded-xl border border-border bg-surface p-2 shadow-overlay">
               <p className="px-2 py-1 text-xs text-muted-foreground">项目与视图</p>
+              <Link to={`/projects/${project.id}/result`} className="rounded-lg px-3 py-2 text-sm hover:bg-muted">查看整理动画</Link>
+              <Button variant="ghost" className="justify-start" size="sm" onClick={onOpenPlans} disabled={applying}>历史方案</Button>
+              {hasFixedFurniture(project.room) ? <Button variant="ghost" className="justify-start" size="sm" onClick={() => { useCabinetStore.getState().toggle(); setViewPreset('left') }}>{cabinetOpen ? '关闭柜门' : '打开柜门'}</Button> : null}
               <Button variant="ghost" className="justify-start" size="sm" disabled={previewBlocking} onClick={onSavePlan}><Save className="h-4 w-4" />保存当前方案</Button>
               {project.isDemo ? <Button variant="ghost" className="justify-start" size="sm" onClick={() => { const tour = useTourStore.getState(); if (!tour.active) tour.start(project.id) }}><Sparkles className="h-4 w-4" />演示导览</Button> : null}
               <Button variant="ghost" className="justify-start" size="sm" onClick={resetView}><RotateCcw className="h-4 w-4" />重置视角 · F</Button>
               <Button variant="ghost" className="justify-start" size="sm" onClick={() => setShowDesk(!showDesk)}>{showDesk ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}{showDesk ? '隐藏桌体' : '显示桌体'}</Button>
               <div className="my-1 h-px bg-border" />
               <label className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><ChevronDown className="h-3 w-3" />场景视角</label>
-              <Select aria-label="更多操作中的场景视角" value={viewPreset} onChange={(e) => setViewPreset(e.target.value as ViewPreset)}><option value="persp">透视</option><option value="top">俯视</option><option value="front">正面</option><option value="desk">桌面</option></Select>
+              <Select aria-label="更多操作中的场景视角" value={viewPreset} onChange={(e) => setViewPreset(e.target.value as ViewPreset)}><option value="persp">透视</option><option value="top">俯视</option><option value="front">正面</option><option value="desk">桌面</option><option value="left">柜体</option></Select>
               <div className="flex gap-1 md:hidden"><Button size="sm" variant="ghost" disabled={!canUndo || previewBlocking} onClick={() => undo(project.id)}><Undo2 className="h-4 w-4" />撤销</Button><Button size="sm" variant="ghost" disabled={!canRedo || previewBlocking} onClick={() => redo(project.id)}><Redo2 className="h-4 w-4" />重做</Button></div>
               <div className="mt-1 border-t border-border pt-2 xl:hidden"><ProjectSteps projectId={project.id} current="workspace" className="flex-wrap" /></div>
             </div>

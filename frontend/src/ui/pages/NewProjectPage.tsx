@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Info, Sparkles } from 'lucide-react'
+import { ArrowRight, Sparkles } from 'lucide-react'
 import type { Project } from '@/types/project'
 import { createDemoCables, createDemoSceneObjects, createStandardRoom } from '@/data/demoProject'
 import { uid } from '@/lib/utils'
@@ -42,7 +42,7 @@ export function NewProjectPage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-5">
-      <PageIntro step="新的开始" title="给你的空间起个名字" description="先创建项目，再确认空间配置（床桌与房间为固定模型）。照片、物品和整理方案会保存在当前浏览器。" />
+      <PageIntro step="创建项目" title="给你的项目起个名字" description="确认空间、添加物品后，自动进入工作台。项目保存在当前浏览器。" />
       <div className="mx-auto max-w-xs rounded-xl bg-[#EEF2EB] px-6"><DeskIllustration /></div>
 
       <section className="space-y-5 rounded-xl border border-border bg-surface p-6 shadow-xs">
@@ -59,22 +59,11 @@ export function NewProjectPage() {
           />
         </div>
 
-        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] leading-relaxed text-warning">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            将先填充固定标准空间（上床下桌标准款），可在下一步「空间配置」中调整书架、出线孔与插座位置并实时预览。
-          </p>
-        </div>
-
-        <ol className="list-decimal space-y-1 pl-5 text-[13px] text-muted-foreground">
-          <li>空间配置：书架 / 出线孔 / 插座（床桌、房间与立柱为固定模型），实时三维预览与冲突校验</li>
-          <li>照片与物品：上传或使用示例照片，确认识别物品（可编辑、可补充、可删除误识别）</li>
-          <li>三维工作台：空间整理（分区归位）、规划走线、输出执行指南</li>
-        </ol>
+        <p className="text-sm leading-6 text-muted-foreground">使用标准宿舍桌体，确认尺寸后添加照片或物品。</p>
 
         <div className="flex flex-wrap items-center gap-3">
           <Button size="lg" onClick={() => create(false)}>
-            创建并配置空间
+            下一步：确认空间
             <ArrowRight className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="lg" onClick={() => create(true)}>

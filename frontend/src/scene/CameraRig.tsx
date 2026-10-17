@@ -16,6 +16,8 @@ const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [numb
   right: { pos: [2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
   desk: { pos: [0.75, 1.9, 2.0], target: [0, 0.85, 0.45] },
 }
+const FIXED_TOP = { pos: [.25, 3.2, .46], target: [.25, .75, .46] } as const
+const FIXED_DESK = { pos: [1, 2.1, 2.4], target: [.25, .85, .45] } as const
 const FIXED_PERSPECTIVE = { pos: [.05, 1.45, 2.8], target: [.07, .96, .35] } as const
 
 /**
@@ -32,6 +34,7 @@ export function CameraRig({
   zoomOut = 1,
   targetShiftY = 0,
   furnitureModel,
+  frontOnly = false,
 }: {
   preset: ViewPreset
   furnitureModel?: RoomConfig['furnitureModel']
@@ -39,6 +42,7 @@ export function CameraRig({
   zoomOut?: number
   /** 目标点高度微调（米） */
   targetShiftY?: number
+  frontOnly?: boolean
 }) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const camera = useThree((s) => s.camera)
@@ -47,8 +51,9 @@ export function CameraRig({
   const objectDragActive = useWorkspaceStore((s) => s.drag !== null)
   const drawerDragActive = useDrawerStore((s) => s.draggingId !== null)
   const resizeActive = useObjectResizeStore((s) => s.preview !== null)
-  const currentPreset = furnitureModel === 'dormdesk-v1' && preset === 'persp'
-    ? FIXED_PERSPECTIVE : PRESETS[preset]
+  const currentPreset = furnitureModel === 'dormdesk-v1'
+    ? preset === 'persp' ? FIXED_PERSPECTIVE : preset === 'top' ? FIXED_TOP : preset === 'desk' ? FIXED_DESK : PRESETS[preset]
+    : PRESETS[preset]
 
   useEffect(() => {
     // Approach the fixed L desk from the front so its ladder does not obscure the workspace.
@@ -76,7 +81,9 @@ export function CameraRig({
       enabled={!objectDragActive && !drawerDragActive && !resizeActive}
       enableDamping
       dampingFactor={0.08}
-      enablePan
+      enablePan={!frontOnly}
+      minAzimuthAngle={frontOnly ? 0 : -Infinity}
+      maxAzimuthAngle={frontOnly ? Math.PI / 2 - .08 : Infinity}
       panSpeed={0.9}
       zoomSpeed={0.9}
       minDistance={0.5}

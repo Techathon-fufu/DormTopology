@@ -9,6 +9,7 @@ export interface ResizePreview {
   projectId: string
   objectId: string
   dimensions: ObjectDimensions
+  issue?: string | null
 }
 
 interface ObjectResizeState {

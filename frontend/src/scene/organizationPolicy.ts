@@ -17,15 +17,16 @@ export function subtractRect(rect: ZoneRect, cut: ZoneRect, spanning = false): Z
 /** A forward-facing screen aligned with the typing area's centre, behind the keys. */
 export function monitorViewRegion(object: SceneObject, zones: OrganizationZones): RectOnPlane | null {
   const { min, max } = localCollision(object).bounds
-  const back = zones.deskBackBand.rect
-  const centre = (zones.typing.rect.x0 + zones.typing.rect.x1) / 2
+  const back = zones.workstation?.monitor.rect ?? zones.deskBackBand.rect
+  const centre = zones.workstation?.slotCenterX ?? (zones.typing.rect.x0 + zones.typing.rect.x1) / 2
   const tolerance = 0.0001
   const z = back.z1 - max[2] - tolerance
   const rect = {
     x0: centre + min[0] - tolerance, x1: centre + max[0] + tolerance,
     z0: z + min[2] - tolerance, z1: back.z1,
   }
-  if (rect.x0 < back.x0 || rect.x1 > back.x1 || rect.z0 < back.z0) return null
+  if (rect.x0 < back.x0 - .001 || rect.x1 > back.x1 + .001 || rect.z0 < back.z0) return null
+  if (zones.workstation) return { rect, y: zones.deskBackBand.y }
   const cup = zones.cup.rect
   if (rect.x0 < cup.x1 && rect.x1 > cup.x0 && rect.z0 < cup.z1 && rect.z1 > cup.z0) return null
   return { rect, y: zones.deskBackBand.y }
@@ -33,6 +34,7 @@ export function monitorViewRegion(object: SceneObject, zones: OrganizationZones)
 
 /** Keep the paper-access position beside both the working lane and screen columns. */
 export function printerSideRegions(zones: OrganizationZones, monitors: SceneObject[], useCurrentPoses = false): RectOnPlane[] {
+  if (zones.workstation) return [{ rect: { x0: -.43, x1: -.045, z0: .305, z1: .61 }, y: zones.deskSurface.y }]
   const columns = monitors.flatMap((monitor) => {
     const view = monitorViewRegion(monitor, zones)
     const columns: Array<{ x0: number; x1: number }> = view ? [view.rect] : []
@@ -51,6 +53,16 @@ export function printerSideRegions(zones: OrganizationZones, monitors: SceneObje
   ]).filter((r) => r.x1 - r.x0 > 0.001)
     .flatMap((r) => subtractRect(r, zones.cup.rect, !!zones.deskSurfaces))
     .map((rect) => ({ rect, y: zones.deskSurface.y }))
+}
+
+/** Only explicitly registered daily-item prefabs enter the return zone. */
+export function isDailyMiscellaneous(object: SceneObject): boolean {
+  return ['cup', 'stainless_bottle', 'tissue_box'].includes(object.model.prefabId ?? '')
+}
+
+export function isStudyItem(object: SceneObject): boolean {
+  return ['books_stack', 'bookpile', 'pencil_case'].includes(object.model.prefabId ?? '')
+    || object.model.shape === 'book' || object.model.shape === 'books'
 }
 
 /** Physical floor support does not make the floor a suitable organization target. */

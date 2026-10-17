@@ -4,7 +4,7 @@ import { LogoMark } from '@/ui/brand/LogoMark'
 import { Dropdown } from '@/ui/kit/dropdown'
 import { useHomeTheme } from '@/ui/home/useHomeTheme'
 
-/** 首页顶部栏：品牌、我的空间、帮助、日夜外观。所有颜色来自 .home-shell 的作用域令牌。 */
+/** 首页顶部栏：品牌、我的项目、帮助、日夜外观。所有颜色来自 .home-shell 的作用域令牌。 */
 export function HomeHeader() {
   const { theme, setTheme } = useHomeTheme()
 
@@ -20,7 +20,7 @@ export function HomeHeader() {
 
         <nav className="home-nav" aria-label="主导航">
           <Link to="/?spaces=all#all-spaces" className="home-nav-link">
-            我的空间
+            我的项目
           </Link>
         </nav>
 
@@ -31,18 +31,15 @@ export function HomeHeader() {
               <HelpCircle className="h-[18px] w-[18px]" aria-hidden="true" />
             </summary>
             <div className="home-help-panel">
-              <h2 className="home-help-title">从照片到整理指南</h2>
+              <h2 className="home-help-title">从照片到整洁桌面</h2>
               <ol className="home-help-steps">
                 <li>1. 确认桌面尺寸与收纳区域。</li>
                 <li>2. 上传照片，检查物品清单。</li>
                 <li>3. 在工作台预览整理与走线。</li>
-                <li>4. 接受方案，查看与导出指南。</li>
+                <li>4. 接受方案，跟着动画整理。</li>
               </ol>
               <p className="home-help-note">尺寸需要实际测量。简化模型与演示结果会单独标注。</p>
-              <div className="home-help-links">
-                <Link to="/algorithm-lab">算法实验</Link>
-                <Link to="/workflow">整理工作台</Link>
-              </div>
+
             </div>
           </Dropdown>
 

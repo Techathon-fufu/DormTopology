@@ -54,7 +54,7 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
         />
         <DormDeskModel room={room} hideBedParts={view === 'top'} respectToolbar={false} />
         {/* 小画布取景：拉远 + 抬高注视点，容纳整组家具（默认机位按桌面区域取景会裁掉床） */}
-        <CameraRig preset={view} furnitureModel={room.furnitureModel} zoomOut={1.75} targetShiftY={0.3} />
+        <CameraRig preset={view} furnitureModel={room.furnitureModel} zoomOut={1.75} targetShiftY={0.3} frontOnly />
       </Canvas>
       <div className="absolute right-2 top-2">
         <Segmented

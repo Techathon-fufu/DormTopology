@@ -3,12 +3,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
   ChevronRight,
-  FlaskConical,
   FolderOpen,
   MoreHorizontal,
   Plus,
   Trash2,
-  Workflow,
 } from 'lucide-react'
 import type { Project } from '@/types/project'
 import { Dropdown } from '@/ui/kit/dropdown'
@@ -20,7 +18,7 @@ import { formatMm } from '@/lib/units'
 import { useHomeTheme } from '@/ui/home/useHomeTheme'
 
 /**
- * 首页：首屏 + 底部“最近”单行条 + 可展开的全部空间。
+ * 首页：首屏 + 底部“最近”单行条 + 可展开的全部项目。
  * “是否展开”只以 URL 的 spaces=all 为唯一来源，浏览器前进/后退、直达链接与头部入口保持一致。
  */
 export function ProjectsPage() {
@@ -55,7 +53,7 @@ export function ProjectsPage() {
   }
 
   const startDemoTour = () => {
-    useTourStore.getState().reset()
+    useTourStore.getState().exit()
     navigate(`/projects/${DEMO_PROJECT_ID}/workspace`)
   }
 
@@ -70,7 +68,6 @@ export function ProjectsPage() {
             src="/images/home/desk-day.webp"
             alt=""
             decoding="async"
-            fetchPriority="high"
           />
           <img
             className="home-hero-img"
@@ -88,14 +85,8 @@ export function ProjectsPage() {
           </h1>
           <p className="home-subtitle">整理与理线，一目了然。</p>
           <div className="home-hero-actions">
-            <button type="button" className="home-cta" onClick={startDemoTour}>
-              体验示例
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <Link to="/projects/new" className="home-cta-secondary">
-              新建空间
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
+            <Link to="/projects/new" className="home-cta">创建项目<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+            <button type="button" className="home-cta-secondary" onClick={startDemoTour}>体验示例<ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
           </div>
         </div>
         <span className="home-scene-label">场景示意 · 非项目截图</span>
@@ -106,12 +97,12 @@ export function ProjectsPage() {
           <span className="home-recent-label">最近</span>
           <span className="home-recent-sep" aria-hidden="true" />
           {recent.length === 0 ? (
-            <span className="home-recent-empty">还没有空间</span>
+            <span className="home-recent-empty">还没有项目</span>
           ) : (
             recent.map((project) => (
               <Link
                 key={project.id}
-                to={`/projects/${project.id}/workspace`}
+                to={projectEntry(project)}
                 className="home-recent-item"
               >
                 <span className="home-recent-thumb" aria-hidden="true">
@@ -130,21 +121,21 @@ export function ProjectsPage() {
             aria-controls="all-spaces"
             onClick={toggleSpaces}
           >
-            全部空间
+            全部项目
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </section>
 
       {expanded ? (
-        <section id="all-spaces" className="home-spaces" aria-label="全部空间" ref={spacesRef}>
+        <section id="all-spaces" className="home-spaces" aria-label="全部项目" ref={spacesRef}>
           <div className="home-spaces-head">
             <h2 className="home-spaces-title">
-              我的空间
+              我的项目
               <span className="home-spaces-count">{list.length} 个</span>
             </h2>
             <Link to="/projects/new" className="home-spaces-new">
-              新建空间
+              创建项目
               <Plus className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
@@ -156,7 +147,7 @@ export function ProjectsPage() {
               <p>创建一个项目，或先体验示例中的完整整理过程。</p>
               <Link to="/projects/new" className="home-empty-action">
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                新建空间
+                创建项目
               </Link>
             </div>
           ) : (
@@ -167,16 +158,7 @@ export function ProjectsPage() {
             </ul>
           )}
 
-          <div className="home-spaces-footer">
-            <Link to="/algorithm-lab" className="home-footer-link">
-              <FlaskConical className="h-4 w-4" aria-hidden="true" />
-              算法验证
-            </Link>
-            <Link to="/workflow" className="home-footer-link">
-              <Workflow className="h-4 w-4" aria-hidden="true" />
-              整理工作台
-            </Link>
-          </div>
+
         </section>
       ) : null}
     </div>
@@ -189,7 +171,7 @@ function SpaceRow({ project }: { project: Project }) {
 
   return (
     <li className="home-space-row">
-      <Link to={`/projects/${project.id}/workspace`} className="home-space-main">
+      <Link to={projectEntry(project)} className="home-space-main">
         <span className="home-space-name">
           <span className="home-space-title" title={project.name}>{project.name}</span>
           {project.isDemo ? (
@@ -224,9 +206,9 @@ function SpaceRow({ project }: { project: Project }) {
           <button
             type="button"
             className="home-menu-item"
-            onClick={() => navigate(`/projects/${project.id}/guide`)}
+            onClick={() => navigate(`/projects/${project.id}/result`)}
           >
-            查看执行指南
+            查看整理动画
           </button>
           {!project.isDemo ? (
             <button
@@ -244,4 +226,9 @@ function SpaceRow({ project }: { project: Project }) {
       </Dropdown>
     </li>
   )
+}
+
+function projectEntry(project: Project): string {
+  const page = project.stage === 'space' ? 'setup' : ['photos', 'assets'].includes(project.stage) ? 'import' : 'workspace'
+  return `/projects/${project.id}/${page}`
 }
