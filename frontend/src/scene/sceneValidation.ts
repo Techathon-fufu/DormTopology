@@ -272,6 +272,27 @@ export function placementIssues(
   return issues
 }
 
+/**
+ * 尺寸变化（整体缩放）的碰撞体积检查：只报告「因新尺寸新增」的问题。
+ * 场景中已存在的问题（例如示例按旧支撑口径摆放、与真机几何重叠）不阻止缩放；
+ * 缩放后新撞上其它物品、场地实体或新越界 / 失支撑才会拦下。
+ * position 为物品底面中心点（米），与 placementIssues 同口径。
+ */
+export function resizeBlockers(
+  object: SceneObject,
+  dimensions: SceneObject['dimensions'],
+  others: SceneObject[],
+  room: RoomConfig,
+  metrics?: DeskSurfaceMetrics | null,
+): SceneIssue[] {
+  const at = object.transform.position
+  const issueKey = (issue: SceneIssue) => `${issue.type}|${issue.relatedId ?? ''}|${issue.message}`
+  const existing = new Set(placementIssues(object, at, others, room, metrics).map(issueKey))
+  return placementIssues({ ...object, dimensions }, at, others, room, metrics).filter(
+    (issue) => !existing.has(issueKey(issue)),
+  )
+}
+
 /** 校验整个场景，返回 物品 id → 问题列表 */
 export function validateScene(
   objects: SceneObject[],

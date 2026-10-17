@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import type { GenerationJob, SceneObject } from '@/types/project'
@@ -86,6 +86,10 @@ export function WorkspacePage() {
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
   const [plansOpen, setPlansOpen] = useState(false)
+  // 摆放前后对比：按住按钮期间按整理前快照渲染物品摆放（会话态，不写项目数据；松开即恢复）
+  const [compareBefore, setCompareBefore] = useState(false)
+  const startCompareBefore = useCallback(() => setCompareBefore(true), [])
+  const endCompareBefore = useCallback(() => setCompareBefore(false), [])
   const flashTimer = useRef<number | null>(null)
 
   const projectId = project?.id
@@ -411,7 +415,9 @@ export function WorkspacePage() {
         onPlanCables={() => void runPlanCables()}
         onSavePlan={handleSavePlan}
         onOpenPlans={handleOpenPlans}
-        plansOpen={plansOpen}
+        compareActive={compareBefore}
+        onCompareStart={startCompareBefore}
+        onCompareEnd={endCompareBefore}
         busy={busy}
         onToggleLeftPanel={() => setLeftOpen((v) => !v)}
         onToggleRightPanel={() => setRightOpen((v) => !v)}
@@ -435,7 +441,7 @@ export function WorkspacePage() {
         )}
 
         <div className="relative min-w-0 flex-1">
-          <Viewport project={project} issuesById={issuesById} />
+          <Viewport project={project} issuesById={issuesById} compareBaseline={compareBefore} />
 
           <div className="pointer-events-none absolute left-4 top-3 flex items-center gap-2">
             {project.isDemo ? <DataBadge kind="demo" label="示例项目" /> : null}

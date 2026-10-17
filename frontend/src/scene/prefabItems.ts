@@ -7,8 +7,8 @@ import { PREFAB_ITEM_COLLISIONS } from './prefabItemCollisions.generated'
  * 经 scripts/sync-prefab-items.ts 同步）。
  *
  * - 渲染：SceneObjectMesh / 对比页 / 交付页按 model.prefabId 加载 items/<id>.glb，
- *   锚点统一归一化到底面中心（源文件有的底心、有的几何居中，见 ObjectModel.tsx）；
- * - 碰撞：collisionGeometry.localCollision 直接采用随包碰撞数据（与模型同源、同底心约定），
+ *   锚点统一归一化到包围盒中心、并按声明尺寸各轴等比缩放（源文件有的底心、有的几何居中，见 ObjectModel.tsx）；
+ * - 碰撞：collisionGeometry.localCollision 采用随包碰撞数据按声明尺寸缩放（与模型同源、同底心约定），
  *   不再用尺寸参数化的占位几何近似；
  * - model.shape 仍是语义键（整理规则 / 后端打包 / 图标按语义形状分发），不随模型接入变化。
  */

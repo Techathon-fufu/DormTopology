@@ -12,7 +12,7 @@ import { createDemoProject, DEMO_PROJECT_ID, DEMO_ROOM_NOTE, DEMO_SEED_VERSION }
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
-const PROJECTS_PERSIST_VERSION = 3
+const PROJECTS_PERSIST_VERSION = 4
 
 /** 内置示例项目是否需要按最新示例数据重种 */
 export function isDemoProjectStale(project: Project | undefined): boolean {
@@ -76,6 +76,8 @@ export const useProjectsStore = create<ProjectsState>()(
        * v1 → v2：早期版本把旧示例场景写进了本地存储，示例数据更新后不生效；迁移时按种子版本重种内置示例项目。
        * v2 → v3（0.9.0）：墙面插座收敛为一块「双插孔 ×2」面板（合并历史左右两个独立插座）；
        *   示例项目同时按最新示例数据重种，用户自建项目仅归一插座，其余字段原样保留。
+       * v3 → v4（物品缩放）：为所有物品补 baseDimensions（缩放基准 = 迁移时的当前尺寸），
+       *   之后「整体缩放」以 60%–150% 为界；不改变任何现有尺寸与位姿。
        */
       migrate: (persisted, from) => {
         const state = persisted as Partial<ProjectsState> | undefined
@@ -91,6 +93,17 @@ export const useProjectsStore = create<ProjectsState>()(
                 outlets: [mergeOutletPanel(p.room.outlets?.[0])],
                 note: id === DEMO_PROJECT_ID ? DEMO_ROOM_NOTE : p.room.note,
               },
+            }
+          }
+        }
+        if (from < 4) {
+          for (const [id, p] of Object.entries(projects)) {
+            if (!p?.objects) continue
+            projects[id] = {
+              ...p,
+              objects: p.objects.map((o) =>
+                o.baseDimensions ? o : { ...o, baseDimensions: { ...o.dimensions } },
+              ),
             }
           }
         }

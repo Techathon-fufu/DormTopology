@@ -1,6 +1,6 @@
 import { Euler, Matrix4, Vector3 } from 'three'
 import { ConvexHull } from 'three/examples/jsm/math/ConvexHull.js'
-import type { SceneObject, Vec3 } from '@/types/project'
+import type { ObjectDimensions, SceneObject, Vec3 } from '@/types/project'
 import { describePrimitive, primitivePartGeometry } from './primitiveGeometry'
 import { PREFAB_ITEM_COLLISIONS } from './prefabItemCollisions.generated'
 
@@ -11,7 +11,7 @@ export interface Bounds { min:Vec3; max:Vec3 }
 interface Solid extends ConvexPart { normals:Vec3[]; edges:Vec3[]; bounds:Bounds }
 export interface ObjectCollision { parts:Solid[]; bounds:Bounds }
 const localCache=new Map<string,ObjectCollision>()
-/** 预制物品（随包碰撞数据）构建结果缓存：条目固定（≤ 模型库规模），不做淘汰 */
+/** 预制物品（随包碰撞数据按声明尺寸缩放后）构建结果缓存：键含尺寸，超限淘汰最早条目 */
 const prefabLocalCache=new Map<string,ObjectCollision>()
 const worldCache=new WeakMap<SceneObject,{key:string; value:ObjectCollision}>()
 const vec=(p:Vec3)=>new Vector3(...p)
@@ -47,17 +47,37 @@ export function collisionFromCompound(compound:CompoundCollision):ObjectCollisio
   const parts=compound.parts.map(solid)
   return {parts,bounds:boundsOf(parts.flatMap(p=>p.vertices_m))}
 }
+/**
+ * 随包碰撞数据 → 按声明尺寸各轴等比缩放（围绕底心锚点）的碰撞体。
+ * 随包数据是模型实测外包（底心锚定），缩放不改变锚点与部件相对位置，
+ * 保证「编辑尺寸 / 整体缩放同步更新碰撞体」（数据契约：不能只缩放外观而保留不匹配的碰撞体）。
+ */
+function scaledCompoundCollision(compound:CompoundCollision,dims:ObjectDimensions):ObjectCollision {
+  const native=boundsOf(compound.parts.flatMap(p=>p.vertices_m))
+  const target=[dims.width,dims.height,dims.depth]
+  const factor=[0,1,2].map(i=>{
+    const extent=native.max[i]-native.min[i]
+    return extent>1e-9?target[i]/extent:1
+  })
+  return collisionFromCompound({type:'compound',parts:compound.parts.map(part=>({
+    vertices_m:part.vertices_m.map(v=>[v[0]*factor[0],v[1]*factor[1],v[2]*factor[2]] as Vec3),
+    faces:part.faces.map(f=>[...f] as [number,number,number]),
+  }))})
+}
 export function localCollision(object:SceneObject):ObjectCollision {
   // 预制物品：碰撞体来自随包碰撞数据（Prefabmodel/collisionsize，底心锚定、与模型同源），
-  // 不再用尺寸参数化的占位几何近似；数据条目固定，缓存不做淘汰。
+  // 按声明尺寸各轴等比缩放，不再用尺寸参数化的占位几何近似；缓存键含尺寸，缩放后重建。
   const prefabId=object.model.prefabId
   if(prefabId) {
     const compound=PREFAB_ITEM_COLLISIONS[prefabId]
     if(compound) {
-      const cachedPrefab=prefabLocalCache.get(prefabId)
+      const dims=object.dimensions
+      const key=`${prefabId}|${dims.width}|${dims.height}|${dims.depth}`
+      const cachedPrefab=prefabLocalCache.get(key)
       if(cachedPrefab) return cachedPrefab
-      const result=collisionFromCompound(compound)
-      prefabLocalCache.set(prefabId,result)
+      const result=scaledCompoundCollision(compound,dims)
+      if(prefabLocalCache.size>=256) prefabLocalCache.delete(prefabLocalCache.keys().next().value!)
+      prefabLocalCache.set(key,result)
       return result
     }
   }

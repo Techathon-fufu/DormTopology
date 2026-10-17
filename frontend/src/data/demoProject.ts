@@ -64,7 +64,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
     frequent: false,
   }
 
-  return [
+  const items: SceneObject[] = [
     {
       id: 'demo-laptop',
       ...base,
@@ -370,6 +370,8 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       note: '演示物品：4 位排插（放在桌面下方横梁上；规格 4/6/8 位可切换，位置可移动）',
     },
   ]
+  // 缩放基准 = 种子原始尺寸（属性面板「整体缩放」的 100% 口径）
+  return items.map((item) => ({ ...item, baseDimensions: { ...item.dimensions } }))
 }
 
 function endpoint(objectId: string, portId: string | undefined, position: Vec3): CableEndpoint {

@@ -6,7 +6,8 @@ import { resolveOrganizationPreferences } from '@/types/organization'
 import { validateScene, type SceneIssue } from '@/scene/sceneValidation'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useCableStore } from '@/state/cableStore'
-import { useOrganizeStore } from '@/state/organizeStore'
+import { useOrganizeStore, type PoseOverride } from '@/state/organizeStore'
+import { usePlansStore } from '@/state/plansStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
 import { CameraRig } from '@/scene/CameraRig'
@@ -108,9 +109,12 @@ function OperationPlayback() {
 export function Viewport({
   project,
   issuesById,
+  compareBaseline,
 }: {
   project: Project
   issuesById: Map<string, SceneIssue[]>
+  /** 按住「摆放前后对比」：物品按整理前快照位姿渲染（会话态，不写项目数据） */
+  compareBaseline: boolean
 }) {
   const mode = useWorkspaceStore((s) => s.mode)
   const viewPreset = useWorkspaceStore((s) => s.viewPreset)
@@ -133,6 +137,18 @@ export function Viewport({
     }), project.room, deskMetrics)
   }, [plan, compare, playbackStatus, project, issuesById, deskMetrics])
   const organizeZonesVisible = useOrganizeStore((s) => s.open && s.showZones)
+  const baseline = usePlansStore((s) => s.baselines[project.id])
+  /** 整理前快照位姿（取 assignments，兼容早期仅含指派的快照）：按住对比时按此渲染 */
+  const comparePoses = useMemo(() => {
+    const poses = new Map<string, PoseOverride>()
+    for (const a of baseline?.assignments ?? []) {
+      poses.set(a.objectId, {
+        position: [a.position[0], a.position[1], a.position[2]],
+        rotationY: a.rotationY,
+      })
+    }
+    return poses
+  }, [baseline])
 
   const webglOk = useMemo(detectWebGL, [])
 
@@ -198,6 +214,7 @@ export function Viewport({
                 object={object}
                 selected={object.id === selectedId}
                 issues={object.id === selectedId ? previewIssues.get(object.id) : undefined}
+                comparePose={compareBaseline ? comparePoses.get(object.id) : undefined}
                 onSelect={select}
               />
             ))}
@@ -215,6 +232,11 @@ export function Viewport({
       </SceneErrorBoundary>
       {/* 桌体模型状态提示（加载中 / 失败重试 / 简化几何恢复）：不遮挡三维操作 */}
       <DeskModelNotice />
+      {compareBaseline ? (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-border bg-surface/90 px-3 py-1.5 text-xs shadow-sm">
+          正在查看「摆放前」· 松开恢复当前摆放
+        </div>
+      ) : null}
       <OperationPlayback />
     </div>
   )

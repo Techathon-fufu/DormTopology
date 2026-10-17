@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Loader2,
   Magnet,
+  Minus,
   Plus,
   RefreshCw,
   Sparkles,
@@ -30,7 +31,7 @@ import {
   PORT_TYPE_LABELS,
 } from '@/types/project'
 import { isMockMode } from '@/api'
-import { nearestSupport, type SceneIssue } from '@/scene/sceneValidation'
+import { nearestSupport, resizeBlockers, type SceneIssue } from '@/scene/sceneValidation'
 import { cableDisplayPoints } from '@/scene/cables'
 import { estimateCableLength } from '@/scene/cableRoute'
 import { isPowerStripObject } from '@/scene/powerStrip'
@@ -305,6 +306,37 @@ function ObjectInspector({
   const support = nearestSupport(project.room, pos[0], pos[2], pos[1], deskMetrics)
   const supportDeltaMm = support ? Math.round((pos[1] - support.y) * 1000) : null
 
+  // ── 整体缩放：基准 = baseDimensions（60%–150%），应用前做碰撞体积检查 ──
+  const scaleBase = object.baseDimensions ?? dims
+  const scalePct = Math.round(
+    ((dims.width / scaleBase.width + dims.height / scaleBase.height + dims.depth / scaleBase.depth) / 3) * 100,
+  )
+  const [scaleBlocked, setScaleBlocked] = useState<string | null>(null)
+  const scaleTimer = useRef<number | null>(null)
+  // 切换选中对象时清掉上一件的拦截提示，避免误导
+  useEffect(() => setScaleBlocked(null), [object.id])
+  const noteScaleBlocked = (message: string) => {
+    setScaleBlocked(message)
+    if (scaleTimer.current) window.clearTimeout(scaleTimer.current)
+    scaleTimer.current = window.setTimeout(() => setScaleBlocked(null), 4000)
+  }
+  const applyScalePct = (percent: number) => {
+    const p = Math.min(150, Math.max(60, percent)) / 100
+    const target = {
+      width: Math.round(scaleBase.width * p * 1000) / 1000,
+      height: Math.round(scaleBase.height * p * 1000) / 1000,
+      depth: Math.round(scaleBase.depth * p * 1000) / 1000,
+    }
+    const blockers = resizeBlockers(object, target, project.objects, project.room, deskMetrics)
+    if (blockers.length > 0) {
+      noteScaleBlocked(`缩放被拦下（需通过碰撞体积检查）：${blockers[0].message}`)
+      return
+    }
+    setScaleBlocked(null)
+    patch({ dimensions: target })
+  }
+  const stepScale = (dir: 1 | -1) => applyScalePct(Math.round(scalePct / 5) * 5 + dir * 5)
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -372,6 +404,51 @@ function ObjectInspector({
             <p className="text-center text-[11px] text-faint">深</p>
           </div>
         </div>
+        {isPowerStripObject(object) ? null : (
+          <div className="space-y-1 pt-0.5">
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 w-8 shrink-0 px-0"
+                title="整体缩小一档（5%，最小 60%）"
+                disabled={scalePct <= 60}
+                onClick={() => stepScale(-1)}
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </Button>
+              <div className="flex-1 text-center leading-tight">
+                <p className="text-[12px] font-medium tabular-nums">整体缩放 {scalePct}%</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 w-8 shrink-0 px-0"
+                title="整体放大一档（5%，最大 150%）"
+                disabled={scalePct >= 150}
+                onClick={() => stepScale(1)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <p className="text-center text-[11px] text-faint">范围 60%–150%，缩放需通过碰撞体积检查</p>
+            {scalePct !== 100 ? (
+              <button
+                type="button"
+                className="text-[11px] text-primary hover:underline"
+                onClick={() => applyScalePct(100)}
+              >
+                还原到基准尺寸（100%）
+              </button>
+            ) : null}
+            {scaleBlocked ? (
+              <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-warning">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                {scaleBlocked}
+              </p>
+            ) : null}
+          </div>
+        )}
       </section>
 
       {isPowerStripObject(object) ? <PowerStripSection project={project} object={object} /> : null}

@@ -215,6 +215,7 @@ export function LeftPanel({
       name: `自定义物品 ${n}`,
       category: 'nonElectrical',
       dimensions: { width: 0.15, height: 0.1, depth: 0.1 },
+      baseDimensions: { width: 0.15, height: 0.1, depth: 0.1 },
       transform: {
         position: initialDeskPlacement(project.objects.length, project.room),
         rotationY: 0,

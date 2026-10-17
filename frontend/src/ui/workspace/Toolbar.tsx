@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Dropdown } from '@/ui/kit/dropdown'
 import {
   Cable,
@@ -64,7 +65,10 @@ interface ToolbarProps {
   onPlanCables: () => void
   onSavePlan: () => void
   onOpenPlans: () => void
-  plansOpen: boolean
+  /** 摆放前后对比：按住查看整理前摆放，松开恢复当前摆放（会话态，不写项目） */
+  compareActive: boolean
+  onCompareStart: () => void
+  onCompareEnd: () => void
   busy: 'cable' | null
   onToggleLeftPanel: () => void
   onToggleRightPanel: () => void
@@ -76,7 +80,9 @@ export function Toolbar({
   onPlanCables,
   onSavePlan,
   onOpenPlans,
-  plansOpen,
+  compareActive,
+  onCompareStart,
+  onCompareEnd,
   busy,
   onToggleLeftPanel,
   onToggleRightPanel,
@@ -97,6 +103,22 @@ export function Toolbar({
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
   const candidateCount = usePlansStore((s) => (s.candidates[project.id] ?? []).length)
+  /** 整理前快照就绪才允许按住对比（早期快照仅含物品指派，同样可用） */
+  const baselineReady = usePlansStore((s) => (s.baselines[project.id]?.assignments.length ?? 0) > 0)
+
+  // 按住对比：鼠标 / 触摸松开、指针取消或窗口失焦都恢复当前摆放
+  useEffect(() => {
+    if (!compareActive) return
+    const end = () => onCompareEnd()
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    window.addEventListener('blur', end)
+    return () => {
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      window.removeEventListener('blur', end)
+    }
+  }, [compareActive, onCompareEnd])
 
   return (
     <header className="relative z-30 shrink-0 border-b border-border bg-surface">
@@ -141,24 +163,39 @@ export function Toolbar({
             </Button>
           )}
           <Button
-            variant={plansOpen ? 'primary' : 'outline'}
+            variant={compareActive ? 'primary' : 'outline'}
             size="sm"
-            disabled={applying}
+            disabled={!baselineReady || previewBlocking}
+            className="touch-none select-none"
             title={
-              candidateCount > 0
-                ? `候选方案：查看列表与指标，最多选 3 个并排对比（已保存 ${candidateCount} 个）`
-                : '候选方案：先点「保存方案」保存当前布局，再进入对比'
+              baselineReady
+                ? '按住查看整理前的物品摆放，松开恢复当前摆放（摆放前后对比）'
+                : '暂无整理前快照，无法对比摆放前后'
             }
-            onClick={onOpenPlans}
+            onPointerDown={(e) => {
+              e.preventDefault()
+              onCompareStart()
+            }}
+            onKeyDown={(e) => {
+              if (e.repeat || (e.key !== ' ' && e.key !== 'Enter')) return
+              e.preventDefault()
+              onCompareStart()
+            }}
+            onKeyUp={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') onCompareEnd()
+            }}
+            onBlur={onCompareEnd}
+            onContextMenu={(e) => e.preventDefault()}
           >
             <GitCompareArrows className="h-4 w-4" />
-            方案对比{candidateCount > 0 ? `（${candidateCount}）` : ''}
+            按住对比摆放前
           </Button>
           <Dropdown className="group relative">
             <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden" aria-label="更多操作" title="更多操作"><MoreHorizontal className="h-5 w-5" /></summary>
             <div className="absolute right-0 top-11 z-50 flex w-60 flex-col gap-1 rounded-xl border border-border bg-surface p-2 shadow-overlay">
               <p className="px-2 py-1 text-xs text-muted-foreground">项目与视图</p>
               <Button variant="ghost" className="justify-start" size="sm" disabled={previewBlocking} onClick={onSavePlan}><Save className="h-4 w-4" />保存当前方案</Button>
+              <Button variant="ghost" className="justify-start" size="sm" disabled={applying} onClick={onOpenPlans} title="打开候选方案面板：保存 / 应用 / 进入对比页"><GitCompareArrows className="h-4 w-4" />候选方案对比{candidateCount > 0 ? `（${candidateCount}）` : ''}</Button>
               {project.isDemo ? <Button variant="ghost" className="justify-start" size="sm" onClick={() => { const tour = useTourStore.getState(); if (!tour.active) tour.start(project.id) }}><Sparkles className="h-4 w-4" />演示导览</Button> : null}
               <Button variant="ghost" className="justify-start" size="sm" onClick={resetView}><RotateCcw className="h-4 w-4" />重置视角 · F</Button>
               <Button variant="ghost" className="justify-start" size="sm" onClick={() => setShowDesk(!showDesk)}>{showDesk ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}{showDesk ? '隐藏桌体' : '显示桌体'}</Button>

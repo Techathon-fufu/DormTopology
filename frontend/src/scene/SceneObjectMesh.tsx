@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Project, SceneObject } from '@/types/project'
 import type { SceneIssue } from '@/scene/sceneValidation'
-import { useOrganizeStore } from '@/state/organizeStore'
+import { useOrganizeStore, type PoseOverride } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { CATEGORY_COLORS } from './models'
 import { ObjectModel } from './ObjectModel'
@@ -13,18 +13,22 @@ import { useObjectDrag } from './useObjectDrag'
  * 场景对象网格：点击 / 拖拽选中与移动、悬停高亮、选中青绿外框、校验问题红框。
  * 拖拽预览只订阅「本物品」的 drag 状态：拖动 A 物品不会触发其它物品网格重渲染。
  * 空间整理预览（compare = after）时按方案 / 动画位姿显示，同样只订阅本物品的覆盖位姿。
+ * 按住「摆放前后对比」时按整理前快照位姿（comparePose，由视口按物品传入）覆盖显示。
  */
 export function SceneObjectMesh({
   project,
   object,
   selected,
   issues,
+  comparePose,
   onSelect,
 }: {
   project: Project
   object: SceneObject
   selected: boolean
   issues?: SceneIssue[]
+  /** 摆放前后对比：整理前快照位姿（按住期间覆盖显示，不写项目数据） */
+  comparePose?: PoseOverride | null
   onSelect: (id: string) => void
 }) {
   const [hovered, setHovered] = useState(false)
@@ -57,8 +61,10 @@ export function SceneObjectMesh({
 
   if (!object.visible) return null
 
-  const pos = dragPreview?.position ?? organizePose?.position ?? t.position
-  const rotationY = dragPreview ? t.rotationY : (organizePose?.rotationY ?? t.rotationY)
+  const pos = dragPreview?.position ?? comparePose?.position ?? organizePose?.position ?? t.position
+  const rotationY = dragPreview
+    ? t.rotationY
+    : (comparePose?.rotationY ?? organizePose?.rotationY ?? t.rotationY)
 
   return (
     <group position={[pos[0], pos[1] + dims.height / 2, pos[2]]} rotation={[0, rotationY, 0]}>

@@ -345,6 +345,7 @@ export function ImportPage() {
       name: item.name,
       category: item.category,
       dimensions: { ...item.dimensions },
+      baseDimensions: { ...item.dimensions },
       transform: { position: initialDeskPlacement(index, project.room), rotationY: 0 },
       model: {
         status: 'none',

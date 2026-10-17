@@ -259,6 +259,11 @@ export interface SceneObject {
   name: string
   category: ObjectCategory
   dimensions: ObjectDimensions
+  /**
+   * 缩放基准尺寸（创建 / 确认时的原始尺寸）：整体缩放 60%–150% 以它为 100%。
+   * mm 尺寸编辑与插排规格重算只改 dimensions，不改动基准。
+   */
+  baseDimensions?: ObjectDimensions
   transform: ObjectTransform
   model: ModelRef
   ports: Port[]
