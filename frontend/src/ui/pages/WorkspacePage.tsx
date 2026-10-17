@@ -140,7 +140,7 @@ export function WorkspacePage() {
     return () => useOrganizeStore.getState().closePanel()
   }, [projectId, resetHistory, captureBaseline])
 
-  // 快捷键：Ctrl+Z 撤销 / Ctrl+Shift+Z 重做 / F 重置视角 / Q·E 旋转 / 方向键微调 / Delete 删除 / Esc 取消选中
+  // 快捷键：Ctrl+Z 撤销 / Ctrl+Shift+Z 重做 / F 重置视角 / Q·E 旋转（10°/次） / 方向键微调 / Delete 删除 / Esc 取消选中
   useEffect(() => {
     if (!projectId) return
     const onKey = (e: KeyboardEvent) => {
@@ -172,14 +172,14 @@ export function WorkspacePage() {
         // 整理预览 / 动画期间不响应移动类快捷键（先接受方案或恢复原布局）
         return
       } else if ((e.key === 'q' || e.key === 'e') && selected && !selected.locked) {
-        const delta = e.key === 'e' ? Math.PI / 2 : -Math.PI / 2
+        const delta = e.key === 'e' ? Math.PI / 18 : -Math.PI / 18 // 10°
         store.updateObject(
           projectId,
           selected.id,
           { transform: { rotationY: selected.transform.rotationY + delta } },
           true,
         )
-        showFlash(`已旋转「${selected.name}」90°（可撤销）`)
+        showFlash(`已旋转「${selected.name}」10°（可撤销）`)
       } else if (
         ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) &&
         selected &&
