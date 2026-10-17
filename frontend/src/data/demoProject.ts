@@ -1,10 +1,11 @@
-import type {
-  CableConnection,
-  CableEndpoint,
-  Project,
-  RoomConfig,
-  SceneObject,
-  Vec3,
+import {
+  OUTLET_FIXED_Y_M,
+  type CableConnection,
+  type CableEndpoint,
+  type Project,
+  type RoomConfig,
+  type SceneObject,
+  type Vec3,
 } from '@/types/project'
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
 import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
@@ -13,7 +14,7 @@ import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
 
 export const DEMO_ROOM_NOTE =
-  '示例尺寸（可修改）：桌面 1200 × 600 × 750 mm，仅为演示默认值，请以实际测量为准'
+  '固定标准空间：床桌 / 房间 / 立柱为预设固定模型（不可编辑）；书架 / 出线孔 / 插座可在「空间配置」中调整'
 
 /** 默认空间：上床下桌标准款（单位：米） */
 export function createStandardRoom(): RoomConfig {
@@ -32,8 +33,7 @@ export function createStandardRoom(): RoomConfig {
     ],
     cableHoles: [{ id: 'hole-1', position: [0.45, 0.75, 0.12], diameter: 0.05 }],
     outlets: [
-      { id: 'outlet-l', position: [-0.6, 0.35, 0.01], label: '后墙插座·左', slots: 2 },
-      { id: 'outlet-r', position: [0.6, 0.35, 0.01], label: '后墙插座·右', slots: 2 },
+      { id: 'outlet-1', position: [0, OUTLET_FIXED_Y_M, 0.01], label: '后墙插座（双插孔 ×2）', slots: 2 },
     ],
     note: DEMO_ROOM_NOTE,
   }

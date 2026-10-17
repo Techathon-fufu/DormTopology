@@ -5,10 +5,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Info,
-  Plus,
   RotateCcw,
   Sparkles,
-  Trash2,
   XCircle,
 } from 'lucide-react'
 import { ProjectSteps } from '@/ui/layout/ProjectSteps'
@@ -18,17 +16,13 @@ import { EmptyState } from '@/ui/kit/empty-state'
 import { Label, Select } from '@/ui/kit/primitives'
 import { MmInput } from '@/ui/kit/mm-input'
 import {
+  defaultOutletForm,
   demoSpaceForm,
   formToRoom,
-  newOutletForm,
-  newPostForm,
-  presetPosts,
   roomToForm,
   validateSpace,
-  OUTLET_ADVICE_Y_MM,
-  OUTLET_DEFAULT_Y_MM,
-  OUTLET_WALL_MARGIN_MM,
-  clampOutletY,
+  OUTLET_EDGE_MARGIN_MM,
+  OUTLET_FIXED_Y_MM,
   type SpaceForm,
 } from '@/ui/setup/spaceForm'
 import {
@@ -38,9 +32,6 @@ import {
 import { mmToM, mToMm } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
-
-const MAX_POSTS = 6
-const MAX_OUTLETS = 4
 
 /** 毫米输入字段：统一 mm 后缀与提交换算（换算见 @/lib/units） */
 function MmField({
@@ -94,7 +85,7 @@ function SectionCard({
   )
 }
 
-/** 空间配置页：编辑桌面 / 房间 / 书架 / 立柱 / 出线孔 / 电源，实时同步简化三维预览 */
+/** 空间配置页：床桌 / 房间 / 立柱为固定模型；编辑书架 / 出线孔 / 插座（仅左右），实时同步简化三维预览 */
 export function SpaceSetupPage() {
   const { id } = useParams<{ id: string }>()
   const project = useProject(id)
@@ -129,7 +120,7 @@ export function SpaceSetupPage() {
     [project],
   )
 
-  /** 插座位置（X / 高度）调整的影响：保存后这些线缆会标记「需要重新规划」（不删除路径） */
+  /** 插座左右位置调整的影响：保存后这些线缆会标记「需要重新规划」（不删除路径） */
   const outletImpact = useMemo(() => {
     if (!project) return { movedCount: 0, cableIds: [] as string[] }
     const saved = new Map(savedOutlets.map((o) => [o.id, o]))
@@ -163,23 +154,9 @@ export function SpaceSetupPage() {
 
   const patch = (p: Partial<SpaceForm>) => setForm((f) => ({ ...f, ...p }))
 
-  const updatePost = (pid: string, p: Partial<SpaceForm['posts'][number]>) =>
-    setForm((f) => ({ ...f, posts: f.posts.map((x) => (x.id === pid ? { ...x, ...p } : x)) }))
-  const removePost = (pid: string) =>
-    setForm((f) => ({ ...f, posts: f.posts.filter((x) => x.id !== pid) }))
-  const addPost = () =>
-    setForm((f) =>
-      f.posts.length >= MAX_POSTS
-        ? f
-        : { ...f, posts: [...f.posts, newPostForm(f.deskW / 2 + 120, 70, f.posts[0]?.section ?? 40)] },
-    )
-
-  const updateOutlet = (oid: string, p: Partial<SpaceForm['outlets'][number]>) =>
-    setForm((f) => ({ ...f, outlets: f.outlets.map((x) => (x.id === oid ? { ...x, ...p } : x)) }))
-  const removeOutlet = (oid: string) =>
-    setForm((f) => ({ ...f, outlets: f.outlets.filter((x) => x.id !== oid) }))
-  const addOutlet = () =>
-    setForm((f) => (f.outlets.length >= MAX_OUTLETS ? f : { ...f, outlets: [...f.outlets, newOutletForm()] }))
+  /** 固定模型：墙面仅一块「双插孔 ×2」面板，仅左右位置（X）可调 */
+  const updateOutletX = (x: number) =>
+    setForm((f) => ({ ...f, outlets: [{ ...(f.outlets[0] ?? defaultOutletForm()), x }] }))
 
   const useDemoSpace = () => setForm(demoSpaceForm())
   const revert = () => setForm(roomToForm(project.room))
@@ -207,7 +184,7 @@ export function SpaceSetupPage() {
         <div>
           <h1 className="text-xl font-semibold">空间配置</h1>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            填写宿舍与书桌尺寸，实时预览 → 保存后进入照片导入。表单单位：毫米（mm）；三维场景内部使用米。
+            床桌 / 房间 / 立柱为预设固定模型（尺寸不可编辑）；这里只调整书架、出线孔与插座的左右位置。保存后进入照片导入（表单单位：毫米）。
           </p>
         </div>
         <ProjectSteps projectId={project.id} current="setup" className="hidden md:flex" />
@@ -217,8 +194,7 @@ export function SpaceSetupPage() {
         <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary-soft/60 px-3 py-2 text-[13px] leading-relaxed">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
-            当前是示例项目：保存会覆盖其空间配置，可随时点击「使用示例空间」恢复默认示例（桌面 1200 × 600 ×
-            750 mm 等，均为可修改的示例值）。
+            当前是示例项目：保存会覆盖其空间配置，可随时点击「恢复标准空间」把书架 / 出线孔 / 插座恢复为默认值。
           </p>
         </div>
       ) : null}
@@ -226,28 +202,15 @@ export function SpaceSetupPage() {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ── 表单 ─────────────────────────────────────────────── */}
         <div className="space-y-4">
-          <SectionCard
-            title="① 桌面尺寸"
-            extra={<span className="text-xs text-faint">单位 mm · 范围为常见尺寸，超出将被拦截</span>}
-          >
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MmField label="桌面长度" minMm={0} valueMm={form.deskW} onChangeMm={(v) => patch({ deskW: v })} />
-              <MmField label="桌面进深" minMm={0} valueMm={form.deskD} onChangeMm={(v) => patch({ deskD: v })} />
-              <MmField label="桌面高度" minMm={0} valueMm={form.deskH} onChangeMm={(v) => patch({ deskH: v })} />
-              <MmField label="桌板厚度" minMm={0} valueMm={form.deskT} onChangeMm={(v) => patch({ deskT: v })} />
-            </div>
-          </SectionCard>
-
-          <SectionCard title="② 房间尺寸">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <MmField label="房间长度（x 向）" minMm={0} valueMm={form.roomL} onChangeMm={(v) => patch({ roomL: v })} />
-              <MmField label="房间进深（z 向）" minMm={0} valueMm={form.roomW} onChangeMm={(v) => patch({ roomW: v })} />
-              <MmField label="层高" minMm={0} valueMm={form.roomH} onChangeMm={(v) => patch({ roomH: v })} />
-            </div>
-          </SectionCard>
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
+            <p>
+              床桌 / 房间 / 立柱采用预设固定模型（尺寸不可编辑；后续将接入正式模型资产），页面无需再填写这些尺寸。
+            </p>
+          </div>
 
           <SectionCard
-            title="③ 书架分层"
+            title="① 书架分层"
             extra={
               <label className="flex items-center gap-2 text-[13px]">
                 <input
@@ -293,48 +256,7 @@ export function SpaceSetupPage() {
             </p>
           </SectionCard>
 
-          <SectionCard
-            title="④ 立柱位置"
-            extra={
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => patch({ posts: presetPosts('corners', form) })}>
-                  四角布置（4 根）
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => patch({ posts: presetPosts('wall', form) })}>
-                  靠墙两根
-                </Button>
-              </div>
-            }
-          >
-            <p className="text-[13px] text-muted-foreground">
-              立柱中心坐标：x 以房间中心为 0（左负右正），z 为距后墙距离。立柱即床架支点，床架跨度会随之下开。
-            </p>
-            <div className="space-y-2">
-              {form.posts.map((p, i) => (
-                <div key={p.id} className="flex flex-wrap items-end gap-2 rounded-md border border-border/70 bg-muted/30 px-2 py-2">
-                  <span className="w-14 shrink-0 pb-2 text-[13px] text-muted-foreground">立柱 {i + 1}</span>
-                  <MmField className="w-28" label="X（左右）" valueMm={p.x} onChangeMm={(v) => updatePost(p.id, { x: v })} />
-                  <MmField className="w-28" label="Z（距后墙）" minMm={0} valueMm={p.z} onChangeMm={(v) => updatePost(p.id, { z: v })} />
-                  <MmField className="w-24" label="截面" minMm={0} valueMm={p.section} onChangeMm={(v) => updatePost(p.id, { section: v })} />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="删除该立柱"
-                    disabled={form.posts.length <= 1}
-                    onClick={() => removePost(p.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-danger" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <Button variant="outline" size="sm" onClick={addPost} disabled={form.posts.length >= MAX_POSTS}>
-              <Plus className="h-3.5 w-3.5" />
-              添加立柱（{form.posts.length}/{MAX_POSTS}）
-            </Button>
-          </SectionCard>
-
-          <SectionCard title="⑤ 出线孔与电源">
+          <SectionCard title="② 出线孔与电源">
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
                 出线孔位于桌面（x 以桌面中心为 0，z 为距后墙距离，孔需距桌边 ≥ 40 mm）。
@@ -347,72 +269,41 @@ export function SpaceSetupPage() {
             </div>
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
-                后墙插座（x 以房间中心为 0，高度为距地高度）：可直接拖滑块调整高度，调整后保存会提示受影响的走线。
+                后墙插座为固定模型：一块面板 · 两个双插孔插座，仅可左右移动（x 以房间中心为 0），高度固定不可调；调整后保存会提示受影响的走线。
               </p>
-              {form.outlets.map((o, i) => {
-                const yMin = OUTLET_WALL_MARGIN_MM
-                const yMax = Math.max(yMin, form.roomH - OUTLET_WALL_MARGIN_MM)
-                const sliderY = Math.min(Math.max(o.y, yMin), yMax)
+              {form.outlets.slice(0, 1).map((o) => {
+                const xMax = Math.max(0, Math.round(form.roomL / 2 - OUTLET_EDGE_MARGIN_MM))
+                const sliderX = Math.min(Math.max(o.x, -xMax), xMax)
                 return (
                   <div key={o.id} className="space-y-2 rounded-md border border-border/70 bg-muted/30 px-2 py-2">
                     <div className="flex flex-wrap items-end gap-2">
-                      <span className="w-14 shrink-0 pb-2 text-[13px] text-muted-foreground">插座 {i + 1}</span>
-                      <MmField className="w-28" label="X（左右）" valueMm={o.x} onChangeMm={(v) => updateOutlet(o.id, { x: v })} />
-                      <MmField
-                        className="w-28"
-                        label="距地高度"
-                        minMm={yMin}
-                        valueMm={o.y}
-                        onChangeMm={(v) => updateOutlet(o.id, { y: clampOutletY(v, form.roomH) })}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="删除该插座"
-                        disabled={form.outlets.length <= 1}
-                        onClick={() => removeOutlet(o.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-danger" />
-                      </Button>
+                      <span className="w-14 shrink-0 pb-2 text-[13px] text-muted-foreground">插座</span>
+                      <MmField className="w-28" label="X（左右）" valueMm={o.x} onChangeMm={(v) => updateOutletX(v)} />
+                      <span className="pb-2 text-[11px] text-faint">高度固定 {OUTLET_FIXED_Y_MM} mm（不可竖直移动）</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="shrink-0 text-[11px] text-faint">高度滑块</span>
+                      <span className="shrink-0 text-[11px] text-faint">左右滑块</span>
                       <input
                         type="range"
-                        min={yMin}
-                        max={yMax}
+                        min={-xMax}
+                        max={xMax}
                         step={10}
-                        value={sliderY}
-                        aria-label={`插座 ${i + 1} 距地高度（${yMin}–${yMax} mm）`}
+                        value={sliderX}
+                        aria-label={`插座左右位置（${-xMax}–${xMax} mm）`}
                         className="h-1.5 min-w-36 flex-1 cursor-pointer accent-[#0F9D8A]"
-                        onChange={(e) => updateOutlet(o.id, { y: clampOutletY(Number(e.target.value), form.roomH) })}
+                        onChange={(e) => updateOutletX(Number(e.target.value))}
                       />
-                      <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
-                        当前位置：{o.y} mm
+                      <span className="w-40 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                        当前位置：{o.x} mm（{o.x === 0 ? '居中' : o.x > 0 ? '中心右侧' : '中心左侧'}）
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-[11px]"
-                        disabled={o.y === OUTLET_DEFAULT_Y_MM}
-                        title={`恢复默认高度 ${OUTLET_DEFAULT_Y_MM} mm`}
-                        onClick={() => updateOutlet(o.id, { y: OUTLET_DEFAULT_Y_MM })}
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                        恢复默认
-                      </Button>
                     </div>
                     <p className="text-[11px] leading-relaxed text-faint">
-                      可调范围 {yMin}–{yMax} mm（距地 / 距顶至少 {OUTLET_WALL_MARGIN_MM} mm，不会移出墙体）；
-                      建议 {OUTLET_ADVICE_Y_MM.min}–{OUTLET_ADVICE_Y_MM.max} mm（常见床头 / 桌面附近插座高度）。
+                      仅可沿后墙左右移动（距墙面左右边缘 ≥ {OUTLET_EDGE_MARGIN_MM} mm）；高度固定 {OUTLET_FIXED_Y_MM} mm
+                      （插座为一块「两个双插孔」面板）。
                     </p>
                   </div>
                 )
               })}
-              <Button variant="outline" size="sm" onClick={addOutlet} disabled={form.outlets.length >= MAX_OUTLETS}>
-                <Plus className="h-3.5 w-3.5" />
-                添加插座（{form.outlets.length}/{MAX_OUTLETS}）
-              </Button>
               {outletImpact.movedCount > 0 ? (
                 <p className="flex items-start gap-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[12px] leading-relaxed text-warning">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -434,7 +325,7 @@ export function SpaceSetupPage() {
             <h2 className="mb-2 text-sm font-semibold">简化三维预览</h2>
             <SpacePreview3D room={previewRoom} />
             <p className="mt-2 text-[11px] leading-relaxed text-faint">
-              预览为简化示意：房间 / 桌面 / 书架 / 立柱 / 出线孔 / 插座均由当前表单实时生成；床架为示例规格，随立柱自动展开。
+              预览为简化示意：床桌 / 房间 / 立柱按固定标准款生成；书架 / 出线孔 / 插座随当前表单实时更新。
             </p>
           </div>
 
@@ -442,16 +333,8 @@ export function SpaceSetupPage() {
             <h2 className="mb-2 text-sm font-semibold">当前空间摘要</h2>
             <dl className="space-y-1 text-[13px] text-muted-foreground">
               <div className="flex justify-between gap-3">
-                <dt>桌面（长 × 深 × 高）</dt>
-                <dd className="tabular-nums">
-                  {form.deskW} × {form.deskD} × {form.deskH} mm
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>房间（长 × 深 × 高）</dt>
-                <dd className="tabular-nums">
-                  {form.roomL} × {form.roomW} × {form.roomH} mm
-                </dd>
+                <dt>床桌 / 房间 / 立柱</dt>
+                <dd className="tabular-nums">固定标准款</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt>书架</dt>
@@ -460,16 +343,12 @@ export function SpaceSetupPage() {
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt>立柱</dt>
-                <dd className="tabular-nums">{form.posts.length} 根</dd>
-              </div>
-              <div className="flex justify-between gap-3">
                 <dt>出线孔</dt>
                 <dd className="tabular-nums">Ø {form.hole.diameter} mm</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt>插座</dt>
-                <dd className="tabular-nums">{form.outlets.length} 个</dd>
+                <dd className="tabular-nums">1 块 · 双插孔 ×2 · 距地 {OUTLET_FIXED_Y_MM} mm</dd>
               </div>
             </dl>
           </div>
@@ -528,7 +407,7 @@ export function SpaceSetupPage() {
             </Button>
             <Button variant="outline" onClick={useDemoSpace}>
               <Sparkles className="h-4 w-4" />
-              使用示例空间（1200 × 600 × 750 mm）
+              恢复标准空间（书架 / 出线孔 / 插座默认值）
             </Button>
             <Button variant="ghost" onClick={revert} disabled={!dirty}>
               <RotateCcw className="h-4 w-4" />

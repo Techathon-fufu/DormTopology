@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Project } from '@/types/project'
-import { createDemoProject, DEMO_PROJECT_ID } from '@/data/demoProject'
+import { OUTLET_FIXED_Y_M, type Project } from '@/types/project'
+import { createDemoProject, DEMO_PROJECT_ID, DEMO_ROOM_NOTE } from '@/data/demoProject'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -53,9 +53,45 @@ export const useProjectsStore = create<ProjectsState>()(
         })
       },
     }),
-    { name: 'dormtopology.projects', version: 1 },
+    {
+      name: 'dormtopology.projects',
+      version: 2,
+      /**
+       * 0.9.0 迁移：墙面插座收敛为一块「双插孔 ×2」面板
+       * （旧数据为左右两个独立插座，保留第一个插座的位置与 id）。
+       */
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<ProjectsState>
+        if (version < 2 && state.projects) {
+          const projects: Record<string, Project> = {}
+          for (const [id, p] of Object.entries(state.projects)) {
+            if (!p?.room) continue
+            projects[id] = {
+              ...p,
+              room: {
+                ...p.room,
+                outlets: [mergeOutletPanel(p.room.outlets?.[0])],
+                note: id === DEMO_PROJECT_ID ? DEMO_ROOM_NOTE : p.room.note,
+              },
+            }
+          }
+          return { ...state, projects } as ProjectsState
+        }
+        return state as ProjectsState
+      },
+    },
   ),
 )
+
+/** 把旧的「左 / 右两个独立插座」合并为一块面板（保留第一个插座的 id 与左右位置） */
+function mergeOutletPanel(first: Project['room']['outlets'][number] | undefined): Project['room']['outlets'][number] {
+  return {
+    id: first?.id ?? 'outlet-1',
+    position: [first?.position?.[0] ?? 0, OUTLET_FIXED_Y_M, first?.position?.[2] ?? 0.01],
+    label: '后墙插座（双插孔 ×2）',
+    slots: 2,
+  }
+}
 
 /** 页面级读取项目；确保内置示例项目存在（任意深链都能进入同一示例项目） */
 export function useProject(id: string | undefined): Project | undefined {
