@@ -32,8 +32,7 @@ import {
 } from '@/types/project'
 import { isMockMode } from '@/api'
 import { nearestSupport, resizeBlockers, type SceneIssue } from '@/scene/sceneValidation'
-import { cableDisplayPoints } from '@/scene/cables'
-import { estimateCableLength } from '@/scene/cableRoute'
+import { totalCablePathLength } from '@/scene/cableGeometry'
 import { isPowerStripObject } from '@/scene/powerStrip'
 import { PORT_TYPE_COLORS, portWorldPosition, resolvePortOffset } from '@/scene/ports'
 import { useCableLink } from '@/lib/useCableLink'
@@ -541,7 +540,7 @@ function ObjectInspector({
           </ul>
         )}
         <p className="text-[11px] leading-relaxed text-faint">
-          校验为本地实时计算：红色线框与左侧 ⚠ 标记表示该物品越界或与其它物品相交。拖拽释放时若落点无效，将恢复到本次拖拽中最后一次有效位置；直接在坐标输入框中填写数值可保留越界 / 相交位置（仅提示）。
+          校验为本地实时计算：红色线框与左侧 ⚠ 标记表示该物品存在干涉（越界、相交或穿模）。拖拽摆放已取消碰撞阻挡，不会强行弹回，已保留落点并提示干涉；可通过拖拽或调整坐标输入进行微调。
         </p>
       </section>
 
@@ -672,11 +671,8 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 
 function ProjectSummary({ project }: { project: Project }) {
   const navigate = useNavigate()
-  // 线缆总长：按「端点到接口贴合后的平滑路径」实时估算（计算值）
-  const totalCableLength = project.cables.reduce(
-    (sum, c) => sum + estimateCableLength(cableDisplayPoints(c, project.objects, 'suggested')),
-    0,
-  )
+  const totalCableLength = totalCablePathLength(project.cables, project.objects)
+  const estimated = project.cables.some((c) => c.route.pathLengthM === undefined)
   const electrical = project.objects.filter((o) => o.category === 'electrical').length
   const mm3 = (v: number[]) => `${v.map((x) => Math.round(mToMm(x))).join(' × ')} mm`
 
@@ -710,10 +706,10 @@ function ProjectSummary({ project }: { project: Project }) {
             value={
               <span
                 className="inline-flex items-center gap-1.5"
-                title="按端点到接口贴合后的平滑路径实时估算（本地计算值）"
+                title={totalCableLength === null ? '部分线缆尚无有效路径，无法计算完整总长度' : estimated ? '按当前展示路径估算' : '采用后端已验证曲线长度'}
               >
-                {project.cables.length} 条 · 约 {formatMeters(totalCableLength)}
-                <DataBadge kind="computed" />
+                {project.cables.length} 条 · {totalCableLength === null ? '总长未知' : `${estimated ? '约 ' : ''}${formatMeters(totalCableLength)}`}
+                {totalCableLength !== null ? <DataBadge kind={estimated ? 'computed' : 'real'} /> : null}
               </span>
             }
           />

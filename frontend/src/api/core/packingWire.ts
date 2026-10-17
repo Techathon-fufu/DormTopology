@@ -1,14 +1,18 @@
+import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 import type { LayoutPlan, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, OrganizationSceneRef, PlanAssignment, ZoneKind } from '@/types/organization'
-import { exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
+import { collisionsOverlap, exportCollision, worldCollision, type CompoundCollision } from '@/scene/collisionGeometry'
+import { DEFAULT_MIN_ITEM_GAP_M, organizationClearanceIssues, organizationReservedZones } from '@/scene/organizationClearance'
 import { roomSolids } from '@/scene/roomCollision'
+import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { BED_UNDERSIDE_Y, computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
 import { allowsFloorPlacement, monitorViewRegion, printerSideRegions, subtractRect } from '@/scene/organizationPolicy'
 import { DESK_GAP, placementIssues } from '@/scene/sceneValidation'
-import { localDirVec, resolvePortOffset } from '@/scene/ports'
+import { resolvePortOffset } from '@/scene/ports'
 import { estimateDeskFreeArea } from '@/scene/ruleLayout'
 import { uid } from '@/lib/utils'
 import { ApiError } from './errors'
+import type { RoutingSupport, TrayCandidate } from '@/algorithm-lab/contract'
 
 interface PackingRegion {
   id: string
@@ -17,7 +21,7 @@ interface PackingRegion {
   clearance_height_m: number
 }
 
-interface PackingItem {
+export interface PackingItem {
   id: string
   name: string
   category: string
@@ -40,6 +44,34 @@ interface PackingItem {
   socket_count?: number
 }
 
+export interface SceneBox {
+  id: string
+  min: Vec3
+  max: Vec3
+}
+
+export interface RoutingGraph {
+  nodes: Array<{ id: string; position: Vec3; kind: 'corner' | 'slot' | 'fixing_point' | 'endpoint' }>
+  edges: Array<{ id: string; from_node_id: string; to_node_id: string; modes: Array<'slot' | 'backboard'>; clearance_radius_m: number; exposed: boolean }>
+  support_policy?: { max_unsupported_span_m: number }
+  supports?: RoutingSupport[]
+  tray_candidates?: TrayCandidate[]
+}
+
+export interface RoutingCable {
+  id: string
+  start_port_id: string
+  end_port_id: string
+  cable_type: 'power' | 'usb' | 'network' | 'hdmi'
+  thickness: 'thick' | 'thin'
+  length_m: number | null
+  diameter_m: number
+  min_bend_radius_m: number
+  slack_m: number
+  mode: 'slot' | 'backboard'
+  baseline_path_points?: Vec3[]
+}
+
 export interface PackingScene {
   schema_version: '1.0'
   scene_id: string
@@ -50,24 +82,31 @@ export interface PackingScene {
   wall: { z_m: number; bounds_xy_m: [number, number, number, number] }
   items: PackingItem[]
   regions: PackingRegion[]
-  obstacles: Array<{ id: string; min: Vec3; max: Vec3 }>
-  reserved_zones: []
-  exposure_zones: []
-  routing_graph: { nodes: []; edges: [] }
-  cables: []
+  obstacles: SceneBox[]
+  reserved_zones: SceneBox[]
+  exposure_zones: SceneBox[]
+  routing_graph: RoutingGraph
+  cables: RoutingCable[]
+  constraints?: { min_item_gap_m: number }
 }
 
 export function toPackingPosition(position: Vec3, room: RoomConfig): Vec3 {
-  return [position[0] + room.desk.width / 2, position[1], position[2] - DESK_GAP]
+  return [position[0] + (hasFixedFurniture(room) ? .45 : room.desk.width / 2), position[1], position[2] - (hasFixedFurniture(room) ? .042 : DESK_GAP)]
 }
 
 export function fromPackingPosition(position: Vec3, room: RoomConfig): Vec3 {
-  return [position[0] - room.desk.width / 2, position[1], position[2] + DESK_GAP]
+  return [position[0] - (hasFixedFurniture(room) ? .45 : room.desk.width / 2), position[1], position[2] + (hasFixedFurniture(room) ? .042 : DESK_GAP)]
 }
 
 function category(object: SceneObject): string {
   if (object.powerStrip || object.model.shape === 'powerStrip') return 'power_strip'
   return object.model.shape ?? object.category
+}
+
+function packingHoleZones(room: RoomConfig): SceneBox[] {
+  try {
+    return organizationReservedZones(room).map((zone) => ({ id: zone.id, min: toPackingPosition(zone.min, room), max: toPackingPosition(zone.max, room) }))
+  } catch (error) { throw new ApiError(error instanceof Error ? error.message : '出线孔配置无效', { kind: 'input' }) }
 }
 
 /** Product coordinates and local collision/port geometry share one translation. */
@@ -76,6 +115,7 @@ export function toPackingScene(input: {
   confirmed: boolean; ref?: OrganizationSceneRef | null
 }): PackingScene {
   const { room, preferences } = input
+  const reservedZones = packingHoleZones(room)
   const zones = computeOrganizationZones(room, preferences)
   const solids = roomSolids(room)
   const regions: PackingRegion[] = []
@@ -86,28 +126,31 @@ export function toPackingScene(input: {
     regions.push({ id, surface_y_m: y, bounds_xz_m: [a[0], b[0], a[2], b[2]], clearance_height_m: clearance })
   }
   // Support regions describe existing planes, even when a storage goal excludes them.
-  addRegion('support-desk', { x0: -room.desk.width / 2, x1: room.desk.width / 2, z0: DESK_GAP, z1: DESK_GAP + room.desk.depth }, room.desk.height, BED_UNDERSIDE_Y - room.desk.height)
+  const ceiling = hasFixedFurniture(room) ? 1.88 : BED_UNDERSIDE_Y
+  if (hasFixedFurniture(room)) furnitureSurfaces(room).forEach((s) => addRegion(s.id, s.rect, s.y, s.clearance))
+  else addRegion('support-desk', { x0: -room.desk.width / 2, x1: room.desk.width / 2, z0: DESK_GAP, z1: DESK_GAP + room.desk.depth }, room.desk.height, ceiling - room.desk.height)
   addRegion('support-floor', { x0: -room.length / 2, x1: room.length / 2, z0: 0, z1: room.width }, 0, room.height)
   for (const solid of solids.filter((s) => s.kind === 'shelfBoard' || s.kind === 'beam')) {
     addRegion(solid.kind === 'beam' ? 'support-beam' : 'support-shelf', {
       x0: solid.min[0], x1: solid.max[0], z0: solid.min[2], z1: solid.max[2],
     }, solid.max[1], solid.kind === 'beam' ? room.desk.height - room.desk.thickness - solid.max[1] : BED_UNDERSIDE_Y - solid.max[1])
   }
-  addRegion('typing', zones.typing.rect, zones.typing.y, BED_UNDERSIDE_Y - zones.typing.y)
-  addRegion('cup', zones.cup.rect, zones.cup.y, BED_UNDERSIDE_Y - zones.cup.y)
-  const safe = [zones.deskSurface.rect].flatMap((r) => subtractRect(r, zones.typing.rect)).flatMap((r) => subtractRect(r, zones.cup.rect))
-  safe.forEach((r, i) => addRegion(`desk-clear-${i}`, r, room.desk.height, BED_UNDERSIDE_Y - room.desk.height))
+  addRegion('typing', zones.typing.rect, zones.typing.y, ceiling - zones.typing.y)
+  addRegion('cup', zones.cup.rect, zones.cup.y, ceiling - zones.cup.y)
+  const safe = (zones.deskSurfaces ?? [zones.deskSurface]).map((s) => s.rect).flatMap((r) => subtractRect(r, zones.typing.rect, hasFixedFurniture(room))).flatMap((r) => subtractRect(r, zones.cup.rect, hasFixedFurniture(room)))
+  safe.forEach((r, i) => addRegion(`desk-clear-${i}`, r, room.desk.height, ceiling - room.desk.height))
   addRegion('under-desk', zones.underDesk.rect, 0, zones.underDesk.clearance)
   const ids = (prefix: string) => regions.filter((r) => r.id.startsWith(prefix)).map((r) => r.id)
   const shelfIds = ids('support-shelf')
+  const storageIds = [...shelfIds, ...ids('support-drawer')]
   const clearIds = ids('desk-clear-')
   printerSideRegions(zones, input.objects.filter((o) => o.model.shape === 'monitor')).forEach((side, index) => {
-    addRegion(`printer-side-${index}`, side.rect, side.y, BED_UNDERSIDE_Y - side.y)
+    addRegion(`printer-side-${index}`, side.rect, side.y, ceiling - side.y)
   })
   const printerIds = ids('printer-side-')
   for (const object of input.objects.filter((o) => o.model.shape === 'monitor')) {
     const view = monitorViewRegion(object, zones)
-    if (view) addRegion(`monitor-view-${object.id}`, view.rect, view.y, BED_UNDERSIDE_Y - view.y)
+    if (view) addRegion(`monitor-view-${object.id}`, view.rect, view.y, ceiling - view.y)
   }
   const items = input.objects.map((object): PackingItem => {
     const shape = object.model.shape
@@ -123,10 +166,10 @@ export function toPackingScene(input: {
       if (!printerIds.length && !object.fixed && !object.locked) throw new ApiError(`${object.name}：桌面没有可用的侧部设备区，请调整键鼠区或显示器位置`, { kind: 'input' })
       allowed = printerIds
     }
-    else if (shape === 'laptop' || shape === 'lamp') allowed = clearIds
+    else if (shape === 'laptop' || shape === 'lamp' || shape === 'powerAdapter') allowed = clearIds
     else if (object.powerStrip || shape === 'powerStrip') {
-      allowed = ['support-beam', ...clearIds]
-      preferred = ['support-beam']
+      allowed = [...(hasFixedFurniture(room) ? [] : ['support-beam']), ...clearIds]
+      preferred = hasFixedFurniture(room) ? clearIds : ['support-beam']
     } else if (shape === 'computerTower') {
       allowed = ['under-desk', ...clearIds]
       preferred = ['under-desk']
@@ -134,10 +177,10 @@ export function toPackingScene(input: {
       allowed = [...shelfIds, ...clearIds]
       preferred = preferences.preferredStorageZone === 'desk' || object.frequent ? clearIds : shelfIds
     } else if (object.category === 'storage' || shape === 'storageBox') {
-      allowed = [...shelfIds, ...clearIds, ...(allowsFloorPlacement(object, preferences) ? ['under-desk'] : [])]
+      allowed = [...storageIds, ...clearIds, ...(allowsFloorPlacement(object, preferences) ? ['under-desk'] : [])]
       preferred = object.frequent || preferences.preferredStorageZone === 'desk' ? clearIds
-        : preferences.preferredStorageZone === 'underDesk' && allowsFloorPlacement(object, preferences) ? ['under-desk'] : shelfIds
-    } else allowed = [...clearIds, ...(!object.frequent ? shelfIds : [])]
+        : preferences.preferredStorageZone === 'underDesk' && allowsFloorPlacement(object, preferences) ? ['under-desk'] : storageIds
+    } else allowed = [...clearIds, ...(!object.frequent ? storageIds : [])]
     const allowedRegions = allowed.filter((id) => regions.some((r) => r.id === id))
     const source = object.recognition?.dimensionSource === 'user' || object.source === 'manual'
       ? 'user' : object.source === 'demo' ? 'template' : 'estimated'
@@ -145,7 +188,7 @@ export function toPackingScene(input: {
       id: p.id,
       type: p.type === 'power-ac' || p.type === 'dc' ? (p.powered && !object.powerStrip ? 'power_sink' : 'power_source')
         : p.type === 'hdmi' ? 'hdmi' : p.type === 'rj45' ? 'network' : 'usb',
-      local_position: resolvePortOffset(object, p), local_direction: localDirVec(p.direction ?? 'back'), capacity: 1, confirmed: false,
+      local_position: resolvePortOffset(object, p), local_direction: resolvePortLocalDirection(p), capacity: 1, confirmed: false,
     }))
     // The strip bus is a sink; all sockets are sources regardless of display powered flags.
     if (object.powerStrip) {
@@ -169,11 +212,12 @@ export function toPackingScene(input: {
   })
   return {
     schema_version: '1.0', scene_id: input.ref?.sceneId ?? input.projectId, scene_revision: input.ref?.sceneRevision ?? 1,
-    baseline_id: input.ref?.baselineId ?? null, template_id: room.template,
+    baseline_id: input.ref?.baselineId ?? null, template_id: room.furnitureModel ?? room.template,
     desk: { width_m: room.desk.width, depth_m: room.desk.depth, top_height_m: room.desk.height },
-    wall: { z_m: -DESK_GAP, bounds_xy_m: [(room.desk.width - room.length) / 2, (room.desk.width + room.length) / 2, 0, room.height] },
+    wall: { z_m: toPackingPosition([0, 0, 0], room)[2], bounds_xy_m: [toPackingPosition([-room.length / 2, 0, 0], room)[0], toPackingPosition([room.length / 2, 0, 0], room)[0], 0, room.height] },
     items, regions, obstacles: solids.map((s) => ({ id: `furniture:${s.id}`, min: toPackingPosition(s.min, room), max: toPackingPosition(s.max, room) })),
-    reserved_zones: [], exposure_zones: [], routing_graph: { nodes: [], edges: [] }, cables: [],
+    reserved_zones: reservedZones, exposure_zones: [], routing_graph: { nodes: [], edges: [] }, cables: [],
+    constraints: { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M },
   }
 }
 
@@ -204,9 +248,13 @@ export function canonicalScene(raw: unknown, expected?: PackingScene, expectedRe
   const scene = record(raw)
   if (scene.schema_version !== '1.0' || typeof scene.scene_id !== 'string' || !scene.scene_id || !Number.isInteger(scene.scene_revision) || Number(scene.scene_revision) < 1 || typeof scene.baseline_id !== 'string' || !scene.baseline_id) fail('后端未返回有效的正式场景标识、版本或原始快照')
   if (!Array.isArray(scene.items) || !Array.isArray(scene.regions) || !Array.isArray(scene.obstacles)) fail('后端正式场景结构不完整')
+  if (scene.constraints !== undefined) {
+    const constraints = record(scene.constraints)
+    if (typeof constraints.min_item_gap_m !== 'number' || !Number.isFinite(constraints.min_item_gap_m) || constraints.min_item_gap_m < 0) fail('后端正式场景的物品最小间距无效')
+  }
   if (expectedRef && (scene.scene_id !== expectedRef.sceneId || scene.scene_revision !== expectedRef.sceneRevision || scene.baseline_id !== expectedRef.baselineId)) fail('后端正式场景标识或版本与本次提交不匹配')
   if (expected) {
-    for (const key of ['template_id', 'desk', 'wall', 'regions', 'obstacles', 'reserved_zones', 'exposure_zones', 'routing_graph', 'cables'] as const) {
+    for (const key of ['template_id', 'desk', 'wall', 'regions', 'obstacles', 'reserved_zones', 'exposure_zones', 'routing_graph', 'cables', 'constraints'] as const) {
       if (!sameStructure(scene[key], expected[key])) fail('后端正式场景意外修改了提交的支撑区域或碰撞几何')
     }
     const expectedIds = new Set(expected.items.map((i) => i.id))
@@ -234,7 +282,7 @@ export interface PackingMapContext {
 }
 
 export function organizationInputSignature(input: { objects: SceneObject[]; room: RoomConfig; preferences: OrganizationPreferences }): string {
-  return JSON.stringify([input.objects, input.room, input.preferences])
+  return JSON.stringify([input.objects, input.room, input.preferences, { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M }])
 }
 
 export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContext): OrganizationPlan {
@@ -269,7 +317,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     const original = ctx.scene.items.find((i) => i.id === object.id)!
     if (placement === 'placed' && (!original.allowed_region_ids.includes(String(item.target_region_id)) || !original.allowed_rotations_y_rad.some((r) => Math.abs(r - rotation) < 1e-7))) fail(`${object.name}：目标区域或朝向不符合输入约束`)
     let reason = issues.filter((i) => i.entity_id === object.id).map((i) => i.message).join('；') || (typeof item.reason === 'string' ? item.reason : typeof item.reason_code === 'string' ? item.reason_code : '后端已复核的目标位置')
-    const zone: ZoneKind = Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
+    const zone: ZoneKind = String(item.target_region_id).startsWith('support-drawer') ? 'shelf' : Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
     const target = { ...object, visible: true, transform: { position, rotationY: rotation } }
     if (object.model.shape === 'printer' && !object.fixed && !object.locked) {
       reason = placement === 'unplaced' ? `打印机未找到合法侧部设备位，保留原位；${reason}`
@@ -301,6 +349,18 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
   }
   if (pending.size) fail('整理结果未覆盖所有输入物品')
   const localIssues: OrganizationIssue[] = targets.flatMap((object) => placementIssues(object, object.transform.position, targets, ctx.room).map((issue) => ({ entity_id: object.id, code: issue.type, message: issue.message })))
+  const reservedZones = ctx.scene.reserved_zones.map((zone) => ({ id: zone.id, label: '出线孔上方保留空间',
+    min: fromPackingPosition(zone.min, ctx.room), max: fromPackingPosition(zone.max, ctx.room) }))
+  const minimumGap = ctx.scene.constraints?.min_item_gap_m ?? 0
+  localIssues.push(...organizationClearanceIssues(targets, ctx.room, minimumGap, reservedZones))
+  // Detail messages are capped per object, so their count cannot recover pair totals.
+  const bodies = targets.map((object) => worldCollision(object))
+  let overlapCount = 0
+  for (let i = 0; i < bodies.length; i += 1) {
+    for (let j = i + 1; j < bodies.length; j += 1) {
+      if (collisionsOverlap(bodies[i], bodies[j])) overlapCount += 1
+    }
+  }
   for (const printer of targets.filter((object) => object.model.shape === 'printer' && !object.fixed && !object.locked && assignments.find((a) => a.objectId === object.id)?.placementStatus !== 'unplaced')) {
     const bounds = worldCollision(printer).bounds
     const sharesViewColumn = targets.filter((object) => object.model.shape === 'monitor').some((monitor) => {
@@ -309,7 +369,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     })
     if (sharesViewColumn) localIssues.push({ entity_id: printer.id, code: 'device_access', message: '打印机未位于最终显示器的侧部，需调整设备位置后重新整理' })
   }
-  const applicable = status !== 'infeasible' && localIssues.length === 0 && !issues.some((i) => i.code === 'target_region')
+  const applicable = status !== 'infeasible' && localIssues.length === 0 && !issues.some((i) => i.code === 'target_region' || i.code === 'item_spacing')
   issues.push(...localIssues)
   if (status === 'success' && unplaced.length > 0) fail('成功布局包含未放置物品')
   const poses = (objects: SceneObject[]) => objects.map((object) => ({ object, position: object.transform.position }))
@@ -328,7 +388,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     metrics: {
       deskFreeAreaBefore: area('desk_free_before', estimateDeskFreeArea(ctx.room, poses(ctx.objects))), deskFreeAreaAfter: area('desk_free_after', estimateDeskFreeArea(ctx.room, poses(targets))),
       placedCount: assignments.filter((a) => a.placementStatus === 'placed').length, movableCount: ctx.objects.filter((o) => !o.fixed && !o.locked).length,
-      unplacedCount: unplaced.length, overlapCount: localIssues.filter((i) => i.code === 'overlap').length / 2,
+      unplacedCount: unplaced.length, overlapCount,
       outOfBoundsCount: localIssues.filter((i) => i.code === 'outOfBounds').length,
       method: `完整当前场景复查含固定和残留物品、真实凸体碰撞、家具实体及支撑；${metrics.desk_free_before !== undefined && metrics.desk_free_after !== undefined ? '面积来自后端连续可用面积计算，null表示未知。' : '缺失的面积由真实足迹本地估算。'}`,
     },

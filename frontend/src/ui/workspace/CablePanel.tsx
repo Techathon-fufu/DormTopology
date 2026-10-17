@@ -34,6 +34,7 @@ import {
   endpointLabel,
   resolveCableThickness,
   resolveCableVisibility,
+  validateCableConnection,
 } from '@/scene/cables'
 import { checkCableRoute } from '@/scene/cableRoute'
 import { computeCableAvoidZones, computeRouteNodes, routeNodeMap } from '@/scene/routeNodes'
@@ -54,8 +55,8 @@ import { cn } from '@/lib/utils'
 
 /**
  * 走线模式·右侧面板（选中线缆属性）：
- * 连接信息编辑 / 路径节点列表与微调 / 实际线长与预留 / 平滑路径障碍检查 / 原始-建议对比 / 收拢动画。
- * 所有检查与估算均为本地计算（规则式演示），界面就地标注，不显示为「已完成真实算法验证」。
+ * 连接信息编辑 / 路径节点列表与微调 / 所需线长与预留 / 平滑路径障碍检查 / 原始-建议对比 / 收拢动画。
+ * 显示后端验证结果；手动编辑后的本地检查仅作补充，不替代后端路径验证。
  */
 export function CablePanel({
   project,
@@ -64,6 +65,7 @@ export function CablePanel({
   onFlash,
   className,
   onClose,
+  showPlanningActions = true,
 }: {
   project: Project
   busy: boolean
@@ -71,6 +73,7 @@ export function CablePanel({
   onFlash: (msg: string) => void
   className?: string
   onClose?: () => void
+  showPlanningActions?: boolean
 }) {
   const selectedCableId = useCableStore((s) => s.selectedCableId)
   const selectCable = useCableStore((s) => s.selectCable)
@@ -108,6 +111,7 @@ export function CablePanel({
       // 线缆间距（咨询级）：与同项目其它线缆比较，按各自线径计算最小净间隙
       cables: project.cables,
       selfCableId: cable.id,
+      smooth: routeView === 'original' || cable.route.smooth !== false,
     })
   }, [cable, displayPoints, project.objects, project.room, avoidZones, project.cables])
 
@@ -122,7 +126,9 @@ export function CablePanel({
     )
   }
 
-  const status = CABLE_STATUS_META[cable.status]
+  const legacyRoute = cable.planSource === 'demo-rule'
+  const displayStatus = legacyRoute && cable.status !== 'conflict' ? 'stale' : cable.status
+  const status = CABLE_STATUS_META[displayStatus]
   const kindMeta = CABLE_KIND_META[cable.kind]
   const visInfo = resolveCableVisibility(cable, project.objects)
   const visMeta = CABLE_VISIBILITY_META[visInfo.visibility]
@@ -136,11 +142,13 @@ export function CablePanel({
       ? cable.route.nodeIds
       : cable.route.points.map(() => null)
 
-  const est = check.lengthM
+  const est = routeView === 'suggested' && (legacyRoute || cable.status === 'conflict' || displayPoints.length < 2)
+    ? null
+    : routeView === 'suggested' ? cable.route.pathLengthM ?? check.lengthM : check.lengthM
   const reserve = cable.reserveLengthM ?? 0
   const actual = cable.actualLengthM ?? 0
-  const required = est + reserve
-  const shortage = actual > 0 && actual < required - 0.0005
+  const required = est === null ? null : est + reserve
+  const shortage = required !== null && actual > 0 && actual < required - 0.0005
 
   const usedNodeLabels = Array.from(
     new Set(ids.filter((id): id is string => Boolean(id))),
@@ -160,9 +168,20 @@ export function CablePanel({
     const object = project.objects.find((o) => o.id === objectId)
     const port = object?.ports.find((p) => p.id === portId)
     if (!object || !port) return
+    const endpoint = endpointOf(object, port)
+    const validation = validateCableConnection(
+      project,
+      which === 'from' ? endpoint : cable.from,
+      which === 'to' ? endpoint : cable.to,
+      { excludeCableId: cable.id, kind: cable.kind },
+    )
+    if (!validation.ok) {
+      onFlash(validation.reason)
+      return
+    }
     updateCable(project.id, cable.id, (c) => ({
       ...c,
-      [which]: endpointOf(object, port),
+      [which]: endpoint,
       status: 'stale',
       note: '连接端点已修改：走线需重新计算',
       updatedAt: Date.now(),
@@ -234,8 +253,8 @@ export function CablePanel({
   }
 
   const removeNode = (index: number) => {
-    if (cable.route.points.length <= 3) {
-      onFlash('路径至少保留 3 个控制点（含两端接口），无法继续删除')
+    if (cable.route.points.length <= 2) {
+      onFlash('路径必须保留两端接口，无法继续删除')
       return
     }
     mutateRoute((points, nids) => {
@@ -302,19 +321,27 @@ export function CablePanel({
             <span className="text-[11px] text-faint">当前路径：{CABLE_STRATEGY_META[cable.route.strategy].label}</span>
           ) : null}
           {cable.planSource === 'demo-rule' ? (
-            <DataBadge kind="computed" label="规则式演示" />
+            <DataBadge kind="computed" label="历史路径 · 未验证" />
           ) : cable.planSource === 'algorithm' ? (
             <DataBadge kind="real" label="后端算法路径" />
           ) : null}
         </div>
 
-        {cable.status === 'stale' ? (
+        {cable.note ? <p className={cn('text-xs', cable.status === 'conflict' ? 'text-danger' : 'text-muted-foreground')}>{cable.note}</p> : null}
+        {cable.planSource === 'algorithm' && cable.route.verification?.status === 'valid' ? (
+          <p className="text-xs text-success">
+            后端曲线已验证 · 版本 {cable.route.verification.sceneRevision}
+            {cable.route.verification.supportStatus === 'not_evaluated' ? ' · 安装支撑未复核' : ' · 支撑已验证'}
+          </p>
+        ) : null}
+
+        {displayStatus === 'stale' || displayStatus === 'conflict' ? (
           <div className="space-y-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[11px] leading-relaxed text-warning">
             <p className="flex items-start gap-1">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-              关联设备 / 接口 / 线材类型已修改：当前路径需要重新计算（原路径保留，可对比 / 撤销）。
+              {displayStatus === 'conflict' ? '走线未通过检查，请修改参数后重新规划。' : legacyRoute ? '历史路径未经后端验证，请重新规划。' : '场景或线缆参数已修改：当前路径需要重新计算。'}
             </p>
-            <Button
+            {showPlanningActions ? <Button
               size="sm"
               variant="outline"
               className="h-7 w-full border-warning/50 text-warning"
@@ -323,7 +350,7 @@ export function CablePanel({
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
               更新此走线
-            </Button>
+            </Button> : null}
           </div>
         ) : null}
 
@@ -364,6 +391,8 @@ export function CablePanel({
                 value={cable.kind}
                 onChange={(e) => {
                   const kind = e.target.value as CableKind
+                  const validation = validateCableConnection(project, cable.from, cable.to, { excludeCableId: cable.id, kind })
+                  if (!validation.ok) { onFlash(validation.reason); return }
                   updateCable(project.id, cable.id, (c) => ({
                     ...c,
                     kind,
@@ -414,7 +443,7 @@ export function CablePanel({
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                 当前路径为「{CABLE_STRATEGY_META[cable.route.strategy].label}」，与线材类型不符：点击按钮按新类型生成候选路径（原路径保留，可对比 / 撤销）。
               </p>
-              <Button
+              {showPlanningActions ? <Button
                 size="sm"
                 variant="outline"
                 className="h-7 w-full border-warning/50 text-warning"
@@ -423,13 +452,13 @@ export function CablePanel({
               >
                 {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                 按「{visMeta.label}」重新规划
-              </Button>
+              </Button> : null}
             </div>
           ) : null}
           <div className="flex items-center justify-between gap-2">
             <Label>线径</Label>
             <span className="text-[11px] text-faint">
-              参考直径 ≈ {Math.round(thicknessMeta.diameterM * 10000) / 10} mm · 最小弯曲半径 ≈ {Math.round(thicknessMeta.minBendRadiusM * 1000)} mm
+              参考直径 ≈ {Math.round(thicknessMeta.diameterM * 10000) / 10} mm
             </span>
           </div>
           <Segmented
@@ -439,7 +468,7 @@ export function CablePanel({
             onChange={(v: CableThickness) => {
               updateCable(project.id, cable.id, (c) => ({ ...c, thickness: v, updatedAt: Date.now() }))
               onFlash(
-                `线径已改为「${CABLE_THICKNESS_META[v].label}」：三维管径 / 碰撞与长度检查 / 线缆间距要求已按新线径重跑`,
+                `线径已改为「${CABLE_THICKNESS_META[v].label}」，请重新规划走线`,
               )
             }}
             options={[
@@ -524,11 +553,12 @@ export function CablePanel({
                 </div>
               )
             })}
-            {innerCount === 0 ? (
-              <p className="text-[11px] leading-relaxed text-faint">
-                路径为两端直连；点击节点行右侧「+」可插入自由节点后再拖动调整。
-              </p>
-            ) : null}
+            {innerCount === 0 && cable.route.points.length >= 2 ? (
+              <Button size="sm" variant="outline" className="w-full" onClick={() => insertNodeAfter(0)}>
+                <Plus className="h-3.5 w-3.5" />
+                添加路径节点
+              </Button>
+            ) : cable.route.points.length < 2 ? <p className="text-xs text-muted-foreground">暂无可用路径</p> : null}
           </div>
         </section>
 
@@ -541,45 +571,29 @@ export function CablePanel({
             <DataBadge kind="computed" />
           </div>
           <div className="flex items-center justify-between text-[13px]">
-            <span className="text-muted-foreground">估算走线长度（{routeView === 'original' ? '原始走线' : '当前走线'}）</span>
-            <span className="font-medium tabular-nums">{formatMeters(est)}</span>
+            <span className="text-muted-foreground">路径长度（{routeView === 'original' ? '原始走线' : '当前走线'}）</span>
+            <span className="font-medium tabular-nums">{est === null ? '未知' : formatMeters(est)}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-[11px]">预留长度</Label>
-              <MmInput
-                value={reserve}
-                min={0}
-                max={5000}
-                onChange={(v) =>
-                  updateCable(project.id, cable.id, (c) => ({
-                    ...c,
-                    reserveLengthM: v,
-                    updatedAt: Date.now(),
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px]">实际线长（0=未填写）</Label>
-              <MmInput
-                value={actual}
-                min={0}
-                max={10000}
-                onChange={(v) =>
-                  updateCable(project.id, cable.id, (c) => ({
-                    ...c,
-                    actualLengthM: v > 0 ? v : undefined,
-                    updatedAt: Date.now(),
-                  }))
-                }
-              />
-            </div>
+          <div className="space-y-1">
+            <Label className="text-[11px]">预留长度</Label>
+            <MmInput
+              label="预留长度"
+              value={reserve}
+              min={0}
+              max={5000}
+              onChange={(v) =>
+                updateCable(project.id, cable.id, (c) => ({
+                  ...c,
+                  reserveLengthM: v,
+                  updatedAt: Date.now(),
+                }))
+              }
+            />
           </div>
           <p className="text-[12px] text-muted-foreground">
-            需求 = 估算 {formatMm(est)} + 预留 {formatMm(reserve)} = <span className="font-medium">{formatMm(required)}</span>
+            {est === null || required === null ? '可行路径尚未生成，所需线长未知。' : <>所需线长：路径 {formatMm(est)} + 预留 {formatMm(reserve)} = <span className="font-medium">{formatMm(required)}</span></>}
           </p>
-          {actual > 0 ? (
+          {actual > 0 && required !== null ? (
             shortage ? (
               <p className="rounded-md bg-danger/10 px-2 py-1.5 text-[12px] font-medium text-danger">
                 长度不足：实际 {formatMm(actual)}，还差 {formatMm(required - actual)}（建议更换更长线缆或减少预留）
@@ -589,9 +603,7 @@ export function CablePanel({
                 长度充足：余量 {formatMm(actual - required)}
               </p>
             )
-          ) : (
-            <p className="text-[11px] text-faint">填写「实际线长」后会给出长度不足提示。</p>
-          )}
+          ) : null}
         </section>
 
         <Separator />
@@ -599,13 +611,13 @@ export function CablePanel({
         {/* 路径检查 */}
         <section className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>路径检查（平滑后）</Label>
+            <Label>{cable.route.smooth === false ? '路径采样复查' : '路径检查（平滑后）'}</Label>
             <DataBadge kind="computed" label="本地规则" />
           </div>
           {check.ok ? (
             <p className="flex items-center gap-1.5 rounded-md bg-success/10 px-2 py-1.5 text-[12px] text-success">
               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-              未发现与避让区 / 物品 / 桌板相交（演示规则检查）
+              未发现与避让区 / 物品 / 桌板相交（本地采样检查）
             </p>
           ) : (
             <ul className="space-y-1">
@@ -643,7 +655,9 @@ export function CablePanel({
             </ul>
           ) : null}
           <p className="text-[11px] leading-relaxed text-faint">
-            平滑曲线（Catmull-Rom）仅用于显示与长度估算；检查对象为平滑后的采样点，不是真实寻路算法。
+            {cable.route.smooth === false
+              ? '使用后端返回的曲线采样点；此处显示补充的本地采样检查。'
+              : '当前曲线使用 Catmull-Rom 采样；本地检查不替代后端路径验证。'}
           </p>
           <p className="text-[11px] leading-relaxed text-faint">
             线缆间距为咨询级提示（不阻断通过）：按「粗线 6.5mm / 细线 3.5mm 参考直径 + 8mm 净间隙」计算；与其它线缆共用路由节点的并排走线视为有意共槽，不作提示。
@@ -766,7 +780,7 @@ function EndpointRow({
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: meta.color }} />
         <span className="min-w-0 flex-1 truncate">{meta.text}</span>
       </div>
-      <Select className="h-8 text-[13px]" value={value} onChange={(e) => onChange(e.target.value)}>
+      <Select aria-label={`${label}接口`} className="h-8 text-[13px]" value={value} onChange={(e) => onChange(e.target.value)}>
         {options.some((o) => o.value === value) ? null : <option value={value}>（当前接口缺失）</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>

@@ -11,7 +11,8 @@ def sub(a, b):
 
 
 def dot(a, b):
-    return sum(x*y for x, y in zip(a, b))
+    # Fixed 3D expression: faster than zip/sum, identical within TOLERANCE.
+    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
 
 
 def cross(a, b):
@@ -96,20 +97,52 @@ def local_parts(item):
     return ((vertices,((1,0,0),(0,1,0),(0,0,1)),((1,0,0),(0,1,0),(0,0,1))),)
 
 
+@lru_cache(maxsize=8192)
+def _transform_part(part, angle, position):
+    """Rotate/translate one immutable prepared part. Keyed by value tuples only."""
+    vertices, normals, edges = part
+    return (
+        tuple(tuple(a+b for a, b in zip(rotate(v, angle), position)) for v in vertices),
+        tuple(rotate(n, angle) for n in normals),
+        tuple(rotate(e, angle) for e in edges),
+    )
+
+
 def world_parts(item):
     angle, position = item['rotation_y_rad'], item['position']
-    return tuple((tuple(tuple(a+b for a,b in zip(rotate(v,angle),position)) for v in vertices),
-                  tuple(rotate(n,angle) for n in normals),tuple(rotate(e,angle) for e in edges))
-                 for vertices,normals,edges in local_parts(item))
+    # Copy to immutable value tuples so the cache observes in-place edits to the
+    # item's position/rotation regardless of its list identity.
+    key_angle = float(angle)
+    key_position = (position[0], position[1], position[2])
+    return tuple(_transform_part(p, key_angle, key_position) for p in local_parts(item))
+
+
+@lru_cache(maxsize=16384)
+def _cached_bounds(vertices):
+    return tuple(min(v[i] for v in vertices) for i in range(3)), tuple(max(v[i] for v in vertices) for i in range(3))
 
 
 def bounds(vertices):
-    return tuple(min(v[i] for v in vertices) for i in range(3)), tuple(max(v[i] for v in vertices) for i in range(3))
+    return _cached_bounds(tuple(map(tuple, vertices)))
+
+
+@lru_cache(maxsize=16384)
+def _projections(vertices, n):
+    # Cached support interval of an immutable vertex tuple along a unit axis.
+    lo = hi = dot(n, vertices[0])
+    for v in vertices[1:]:
+        p = dot(n, v)
+        if p < lo:
+            lo = p
+        elif p > hi:
+            hi = p
+    return lo, hi
 
 
 def overlap(a, b):
     av,an,ae = a
     bv,bn,be = b
+    av, bv = tuple(map(tuple, av)), tuple(map(tuple, bv))
     amin,amax,bmin,bmax = *bounds(av),*bounds(bv)
     if any(min(amax[i],bmax[i])-max(amin[i],bmin[i]) <= TOLERANCE for i in range(3)):
         return False
@@ -117,22 +150,42 @@ def overlap(a, b):
         n = unit(axis)
         if n is None:
             continue
-        pa,pb = [dot(v,n) for v in av],[dot(v,n) for v in bv]
-        if min(max(pa),max(pb))-max(min(pa),min(pb)) <= TOLERANCE:
+        amin_p,amax_p = _projections(av, n)
+        bmin_p,bmax_p = _projections(bv, n)
+        if min(amax_p,bmax_p)-max(amin_p,bmin_p) <= TOLERANCE:
             return False
     return True
 
 
+def _parts_bounds(parts):
+    """Aggregate AABB over a tuple of already-transformed world parts."""
+    lo = [math.inf, math.inf, math.inf]
+    hi = [-math.inf, -math.inf, -math.inf]
+    for part in parts:
+        pmin, pmax = bounds(part[0])
+        for i in range(3):
+            if pmin[i] < lo[i]:
+                lo[i] = pmin[i]
+            if pmax[i] > hi[i]:
+                hi[i] = pmax[i]
+    return tuple(lo), tuple(hi)
+
+
 def items_overlap(a, b):
-    return any(overlap(pa,pb) for pa in world_parts(a) for pb in world_parts(b))
+    aw, bw = world_parts(a), world_parts(b)
+    alo, ahi = _parts_bounds(aw)
+    blo, bhi = _parts_bounds(bw)
+    if any(min(ahi[i], bhi[i]) - max(alo[i], blo[i]) <= TOLERANCE for i in range(3)):
+        return False
+    return any(overlap(pa,pb) for pa in aw for pb in bw)
 
 
 @lru_cache(maxsize=4096)
 def _support_slabs(vertices, normals):
     slabs = []
     for n in normals:
-        projections = [dot(n,v) for v in vertices]
-        slabs.append((n,min(projections),max(projections)))
+        lo, hi = _projections(vertices, n)
+        slabs.append((n, lo, hi))
     return tuple(slabs)
 
 

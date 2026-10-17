@@ -1,4 +1,5 @@
 import type { Port, PortDirection, PortType, SceneObject, Vec3 } from '@/types/project'
+import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 
 /**
  * 电气设备接口：默认接口生成 + 接口世界坐标 / 朝向推导。
@@ -79,7 +80,7 @@ export function portWorldPosition(object: SceneObject, port: Port): Vec3 {
 
 /** 接口世界朝向（单位向量） */
 export function portWorldDirection(object: SceneObject, port: Port): Vec3 {
-  return rotateLocalVecY(localDirVec(port.direction ?? 'back'), object.transform.rotationY)
+  return rotateLocalVecY(resolvePortLocalDirection(port), object.transform.rotationY)
 }
 
 /**

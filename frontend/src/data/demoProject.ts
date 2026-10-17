@@ -8,43 +8,46 @@ import {
   type Vec3,
 } from '@/types/project'
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
+import { endpointOf } from '@/scene/cables'
 import { prefabModelRef } from '@/scene/prefabItems'
-import { DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
 
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
 
 /**
  * 内置示例项目的数据种子版本。
- * 每次修改示例场景（尺寸、物品、线缆等）都要 +1：浏览器里已存在的示例项目会在载入时
- * 按最新数据重种，避免"代码已更新、页面仍是旧场景"。
+ * 重建示例场景（尺寸、物品或家具）时 +1：浏览器已有示例会先归档再重种。
+ * 可安全识别的旧默认接线错误由 projectsStore 原位修复，保留用户布局与已编辑接线。
  * 与持久化 schema 版本（projectsStore 的 persist version）相互独立，二者不要混用。
  * v2：桌面 1600×800、三本独立书本、新增打印机 / 主机 / 电源适配器 / 保温杯（17 件物品）。
  * v3：墙面插座收敛为一块「双插孔 ×2」面板（固定模型口径），说明文案更新。
- * v4：接入 Prefabmodel 最新预制物品模型与随包碰撞数据（渲染 + 摆放校验同一几何；
- *     尺寸改用实测值）；示例物品位置按真实桌面支撑面校正。
+ * v4：来源分支分别接入家具几何和预制物品。
+ * v5：合并真实 L 形桌面、书架及抽屉支撑与预制物品尺寸/碰撞；归档两个不同的旧 v4 示例。
+ * v6：键鼠区左移 6cm，给真实笔记本留出主桌面侧位，避免与打印机争用回台。
+ * v7：合并预制物品碰撞与双输出适配器接线，键鼠区左移 10cm 以保留 20mm 净距。
  */
-export const DEMO_SEED_VERSION = 4
+export const DEMO_SEED_VERSION = 7
 
 export const DEMO_ROOM_NOTE =
-  '固定标准空间：床桌 / 房间 / 立柱为预设固定模型（不可编辑）；书架 / 出线孔 / 插座可在「空间配置」中调整'
+  '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
 
 /** 默认空间：上床下桌标准款（单位：米） */
 export function createStandardRoom(): RoomConfig {
   return {
     template: 'loft-standard',
+    furnitureModel: 'dormdesk-v1',
     length: 2.6,
     width: 2.0,
     height: 2.7,
-    desk: { width: 1.6, depth: 0.8, thickness: 0.025, height: 0.75 },
-    shelf: { enabled: true, levels: 1, heightAboveDesk: 0.38, depth: 0.2 },
+    desk: { width: 1.45, depth: 0.86, thickness: 0.025, height: 0.75 },
+    shelf: { enabled: true, levels: 2, heightAboveDesk: 0.701, depth: 0.25 },
     posts: [
-      { id: 'post-fl', position: [-0.93, 0, 0.07], section: 0.04 },
-      { id: 'post-fr', position: [0.93, 0, 0.07], section: 0.04 },
-      { id: 'post-bl', position: [-0.93, 0, 0.83], section: 0.04 },
-      { id: 'post-br', position: [0.93, 0, 0.83], section: 0.04 },
+      { id: 'post-fl', position: [-0.97, 0, 0.03], section: 0.06 },
+      { id: 'post-fr', position: [0.97, 0, 0.03], section: 0.06 },
+      { id: 'post-bl', position: [-0.97, 0, 0.87], section: 0.06 },
+      { id: 'post-br', position: [0.97, 0, 0.87], section: 0.06 },
     ],
-    cableHoles: [{ id: 'hole-1', position: [0.65, 0.75, 0.12], diameter: 0.05 }],
+    cableHoles: [{ id: 'hole-1', position: [0.5, 0.75, 0.28], diameter: 0.05 }],
     outlets: [
       { id: 'outlet-1', position: [0, OUTLET_FIXED_Y_M, 0.01], label: '后墙插座（双插孔 ×2）', slots: 2 },
     ],
@@ -55,7 +58,6 @@ export function createStandardRoom(): RoomConfig {
 /** 扩展演示物品库：独立书本与桌面设备，尺寸为示例值（单位：米）。 */
 export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject[] {
   const deskY = 0.75
-  const beamY = deskBeamTopY(createStandardRoom())
   const base = {
     projectId,
     visible: true,
@@ -64,7 +66,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
     frequent: false,
   }
 
-  const items: SceneObject[] = [
+  return [
     {
       id: 'demo-laptop',
       ...base,
@@ -112,7 +114,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       name: '显示器',
       category: 'electrical',
       dimensions: { width: 0.6, height: 0.55, depth: 0.18 },
-      // 避开书架搁板 z 范围 [0.05, 0.25]：显示器高 0.55 > 搁板下净空，必须放在搁板投影之外
+      // 初始位置仍为待整理状态；规划使用实测碰撞体与真实家具支撑。
       transform: { position: [0.1, deskY, 0.4], rotationY: 0.1 },
       model: prefabModelRef('monitor', 'monitor'),
       ports: [
@@ -122,7 +124,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: '电源',
           powered: true,
           maxWatt: 40,
-          offset: [0.12, 0.05, -0.092],
+          offset: [0.12, 0.15, -0.012],
           direction: 'back',
         },
         {
@@ -130,7 +132,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           type: 'hdmi',
           label: 'HDMI 输入',
           powered: false,
-          offset: [-0.12, 0.05, -0.092],
+          offset: [-0.12, 0.15, -0.012],
           direction: 'back',
         },
       ],
@@ -195,7 +197,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: '电源',
           powered: true,
           maxWatt: 8,
-          offset: [0, 0.06, -0.092],
+          offset: [0, 0.009, -0.073],
           direction: 'back',
         },
       ],
@@ -262,9 +264,10 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       model: prefabModelRef('charger', 'powerAdapter'),
       ports: [
         { id: 'port-adapter-ac', type: 'power-ac', label: '交流输入', powered: true, offset: [-0.029, 0.014, 0], direction: 'left' },
-        { id: 'port-adapter-usbc', type: 'usb-c', label: 'USB-C 输出', powered: true, offset: [0.029, 0.014, 0], direction: 'right' },
+        { id: 'port-adapter-usbc', type: 'usb-c', label: 'USB-C 输出 1', powered: true, offset: [0.029, 0.014, -0.015], direction: 'right' },
+        { id: 'port-adapter-usbc-phone', type: 'usb-c', label: 'USB-C 输出 2', powered: true, offset: [0.029, 0.014, 0.015], direction: 'right' },
       ],
-      quantity: 1, needsPower: true, source: 'demo', note: '演示物品：独立电源适配器，接线待用户确认',
+      quantity: 1, needsPower: true, source: 'demo', note: '演示物品：双 USB-C 输出适配器，两个输出分别连接笔记本与手机，交流输入连接插排',
     },
     {
       ...base, id: 'demo-thermos', name: '保温杯', category: 'nonElectrical',
@@ -341,7 +344,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       needsPower: true,
       frequent: true,
       source: 'demo',
-      note: '演示物品：手机（充电线默认「可见线」，规划后从桌面出线槽走线；线径默认细线）',
+      note: '演示物品：手机（充电线默认「可见线」，优先沿桌面后缘规划；线径默认细线）',
     },
     {
       id: 'demo-power-strip',
@@ -350,7 +353,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       category: 'electrical',
       dimensions: { width: 0.21, height: 0.03, depth: 0.05 },
       // 优先放在桌面下方横梁（走线 / 插拔方便）；可在属性面板中切换 4 / 6 / 8 位并移动位置
-      transform: { position: [-0.35, beamY, DESK_BEAM_Z], rotationY: 0 },
+      transform: { position: [0.4, deskY, 0.13], rotationY: 0 },
       powerStrip: { socketCount: 4, socketSpacing: 0.05, maxLoadW: 2500 },
       model: { status: 'placeholder', source: 'demo', format: 'placeholder-box', shape: 'powerStrip' },
       ports: [1, 2, 3, 4].map((n) => ({
@@ -367,11 +370,22 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       needsPower: true,
       fixed: true,
       source: 'demo',
-      note: '演示物品：4 位排插（放在桌面下方横梁上；规格 4/6/8 位可切换，位置可移动）',
+      note: '演示物品：4 位排插，放在真实桌面上；规格 4/6/8 位可切换',
     },
-  ]
-  // 缩放基准 = 种子原始尺寸（属性面板「整体缩放」的 100% 口径）
-  return items.map((item) => ({ ...item, baseDimensions: { ...item.dimensions } }))
+  ].map((object) => {
+    const positions: Record<string, Vec3> = {
+      'demo-laptop': [-.26, deskY, .23], 'demo-monitor': [.1, deskY, .3],
+      'demo-keyboard': [-.15, deskY, .5], 'demo-mouse': [.16, deskY, .5],
+      'demo-lamp': [.48, deskY, .47], 'demo-printer': [.795, deskY, .55],
+      'demo-computer-tower': [.4, 0, .34], 'demo-thermos': [.8, deskY, .29],
+      'demo-cup': [.8, deskY, .4], 'demo-storage-box': [.41, 1.46, .17],
+      'demo-book-math': [-.25, deskY, .35], 'demo-book-english': [.16, deskY, .45],
+      'demo-book-programming': [.1, deskY, .4],
+      'demo-book-notebook': [.12, deskY, .5],
+    }
+    // 缩放基准 = 种子原始尺寸（属性面板「整体缩放」的 100% 口径）
+    return { ...object, transform: { position: positions[object.id] ?? object.transform.position, rotationY: 0 }, baseDimensions: { ...object.dimensions } } as SceneObject
+  })
 }
 
 function endpoint(objectId: string, portId: string | undefined, position: Vec3): CableEndpoint {
@@ -402,7 +416,8 @@ function makeCable(
 }
 
 /**
- * 演示用「现状线缆」：略微散乱，尚未走线（电源 ×3、视频 ×1、数据 ×1、充电 ×1）。
+ * 演示用「现状线缆」：略微散乱，尚未走线（电源 ×4、视频 ×1、数据 ×1、充电 ×1）。
+ * USB 充电经过独立适配器；七根设备线暂不包含插排至墙插的总线。
  * 端点坐标在渲染时由接口实时推导；散乱的折线仅作「原始走线」示意。
  * 线材类型（可见线 / 隐藏线）默认按设备名称推断：显示器 / 台灯 → 隐藏线，手机 / 笔记本 → 可见线。
  */
@@ -417,7 +432,8 @@ export function createDemoCables(
   const strip = find('demo-power-strip')
   const keyboard = find('demo-keyboard')
   const phone = find('demo-phone')
-  if (!laptop || !monitor || !lamp || !strip) return []
+  const adapter = find('demo-power-adapter')
+  if (!laptop || !monitor || !lamp || !strip || !adapter) return []
 
   const s = strip.transform.position
   const stripPoint: Vec3 = [s[0] + 0.03, s[1] + 0.03, s[2] + 0.01]
@@ -426,6 +442,8 @@ export function createDemoCables(
   const mp = monitor.transform.position
   const la = lamp.transform.position
   const kb = keyboard?.transform.position
+  const adapterOutput = endpointOf(adapter, adapter.ports.find((p) => p.id === 'port-adapter-usbc'))
+  const adapterInput = endpointOf(adapter, adapter.ports.find((p) => p.id === 'port-adapter-ac'))
 
   const cables: CableConnection[] = [
     makeCable(
@@ -433,7 +451,7 @@ export function createDemoCables(
       'demo-cable-laptop',
       'power',
       endpoint(laptop.id, 'port-laptop-usbc', [lp[0] - 0.06, 0.76, lp[2] - 0.06]),
-      endpoint(strip.id, 'port-strip-1', stripPoint),
+      adapterOutput,
       [
         [lp[0] - 0.06, 0.76, lp[2] - 0.06],
         [lp[0] - 0.16, 0.754, lp[2] + 0.06],
@@ -441,10 +459,19 @@ export function createDemoCables(
         [lp[0] - 0.02, 0.45, 0.04],
         [lp[0] - 0.08, 0.02, 0.1],
         [lp[0] - 0.14, 0.02, 0.24],
-        stripPoint,
+        adapterOutput.position,
       ],
-      '现状：笔记本充电线在桌面拖出松散弯折后斜跨垂落（待规划）',
+      '现状：笔记本 USB-C 充电线连接适配器输出 1（待规划）',
     ),
+    { ...makeCable(
+      projectId,
+      'demo-cable-adapter-ac',
+      'power',
+      adapterInput,
+      endpoint(strip.id, 'port-strip-1', stripPoint),
+      [adapterInput.position, [adapterInput.position[0], 0.757, 0.2], stripPoint],
+      '现状：适配器交流输入连接插排 1 号口（待规划）',
+    ), visibility: 'hidden' },
     makeCable(
       projectId,
       'demo-cable-monitor',
@@ -515,22 +542,23 @@ export function createDemoCables(
 
   if (phone) {
     const pp = phone.transform.position
+    const phoneOutput = endpointOf(adapter, adapter.ports.find((p) => p.id === 'port-adapter-usbc-phone'))
     cables.push(
       makeCable(
         projectId,
         'demo-cable-phone',
         'charging',
         endpoint(phone.id, 'port-phone-usbc', [pp[0], pp[1] + 0.006, pp[2] - 0.08]),
-        endpoint(strip.id, 'port-strip-4', stripPoint),
+        phoneOutput,
         [
           [pp[0], pp[1] + 0.006, pp[2] - 0.08],
           [pp[0] - 0.05, 0.757, pp[2] + 0.06],
           [pp[0] + 0.06, 0.75, 0.44],
           [lp[0] + 0.28, 0.44, 0.2],
           [lp[0] + 0.16, 0.02, 0.12],
-          stripPoint,
+          phoneOutput.position,
         ],
-        '现状：手机充电线散在桌面（默认「可见线」：规划后从桌面出线槽走线；线径默认细线）',
+        '现状：手机 USB-C 充电线连接适配器输出 2（待规划，默认细线）',
       ),
     )
   }
@@ -552,7 +580,8 @@ export function createDemoProject(): Project {
     room: createStandardRoom(),
     objects,
     cables: createDemoCables(objects),
-    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, cupCorner: 'backLeft' },
+    // 保留 55cm 键鼠区；左移 10cm，为真实笔记本及显示器之间保留 20mm 净距。
+    organization: { ...DEFAULT_ORGANIZATION_PREFERENCES, typingOffsetX: -0.10, cupCorner: 'backRight' },
     demoSeedVersion: DEMO_SEED_VERSION,
     stage: 'organize',
   }

@@ -56,6 +56,7 @@ function MmField({
     <div className={cn('space-y-1', className)}>
       <Label className={cn(disabled && 'opacity-50')}>{label}</Label>
       <MmInput
+        label={label}
         value={mmToM(valueMm)}
         min={minMm}
         disabled={disabled}
@@ -184,7 +185,7 @@ export function SpaceSetupPage() {
       <PageIntro
         step="01 / 确认空间"
         title="为你的书桌，建立空间"
-        description="床桌与房间为固定模型、无需填写尺寸；调整书架、出线孔与插座位置，右侧预览会同步变化。所有输入均以毫米（mm）为单位。"
+        description="空间配置"
       >
         <ProjectSteps projectId={project.id} current="setup" className="flex-wrap" />
       </PageIntro>
@@ -204,7 +205,7 @@ export function SpaceSetupPage() {
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
             <p>
-              床桌 / 房间 / 立柱采用预设固定模型（尺寸不可编辑；右侧预览加载与三维工作台同源的正式模型），页面无需再填写这些尺寸。
+              {form.furnitureModel ? 'L 形床桌、四格书架和三层抽屉' : '标准床桌'}
             </p>
           </div>
 
@@ -216,9 +217,10 @@ export function SpaceSetupPage() {
                   type="checkbox"
                   className="accent-[#0F9D8A]"
                   checked={form.shelfEnabled}
+                  disabled={!!form.furnitureModel}
                   onChange={(e) => patch({ shelfEnabled: e.target.checked })}
                 />
-                配置书架（床板下搁板）
+                书架
               </label>
             }
           >
@@ -227,7 +229,7 @@ export function SpaceSetupPage() {
                 <Label className={cn(!form.shelfEnabled && 'opacity-50')}>层数</Label>
                 <Select
                   value={String(form.shelfLevels)}
-                  disabled={!form.shelfEnabled}
+                  disabled={!form.shelfEnabled || !!form.furnitureModel}
                   onChange={(e) => patch({ shelfLevels: Number(e.target.value) })}
                 >
                   <option value="1">1 层</option>
@@ -238,27 +240,27 @@ export function SpaceSetupPage() {
               <MmField
                 label="离桌高度（最下层）"
                 minMm={0}
-                disabled={!form.shelfEnabled}
+                disabled={!form.shelfEnabled || !!form.furnitureModel}
                 valueMm={form.shelfAbove}
                 onChangeMm={(v) => patch({ shelfAbove: v })}
               />
               <MmField
                 label="搁板深度"
                 minMm={0}
-                disabled={!form.shelfEnabled}
+                disabled={!form.shelfEnabled || !!form.furnitureModel}
                 valueMm={form.shelfDepth}
                 onChangeMm={(v) => patch({ shelfDepth: v })}
               />
             </div>
             <p className="text-xs text-faint">
-              校验参考示例床架下沿约 1580 mm：桌面高度 + 离桌高度 + 250 mm 取物空间不可超过该值。
+              {form.furnitureModel ? '四格书架与三层抽屉按家具实际尺寸固定。' : '书架尺寸须留足床板下方取物空间。'}
             </p>
           </SectionCard>
 
           <SectionCard title="② 出线孔与电源">
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
-                出线孔位于桌面（x 以桌面中心为 0，z 为距后墙距离，孔需距桌边 ≥ 40 mm）。
+                出线孔
               </p>
               <div className="flex flex-wrap items-end gap-2">
                 <MmField className="w-28" label="孔 X（左右）" valueMm={form.hole.x} onChangeMm={(v) => patch({ hole: { ...form.hole, x: v } })} />
@@ -324,7 +326,7 @@ export function SpaceSetupPage() {
             <h2 className="mb-2 text-sm font-semibold">三维预览</h2>
             <SpacePreview3D room={previewRoom} />
             <p className="mt-2 text-xs leading-relaxed text-faint">
-              预览加载正式模型（与三维工作台同源）；书架 / 出线孔 / 插座随当前表单实时更新；模型加载失败时自动回退简化几何。
+              {form.furnitureModel ? 'L 形床桌' : '标准床桌'}
             </p>
           </div>
 
@@ -338,7 +340,7 @@ export function SpaceSetupPage() {
               <div className="flex justify-between gap-3">
                 <dt>书架</dt>
                 <dd className="tabular-nums">
-                  {form.shelfEnabled ? `${form.shelfLevels} 层 · 离桌 ${form.shelfAbove} mm` : '未配置'}
+                  {form.furnitureModel ? '四格 · 左格分层' : form.shelfEnabled ? `${form.shelfLevels} 层 · 离桌 ${form.shelfAbove} mm` : '未配置'}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">

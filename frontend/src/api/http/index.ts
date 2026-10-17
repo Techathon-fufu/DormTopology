@@ -4,21 +4,24 @@ import { ApiError, isApiError } from '../core/errors'
 import { runRemoteJob } from '../core/jobs'
 import { requestJson } from '../core/client'
 import { canonicalScene, organizationInputSignature, packingBaseline, sceneRef, toPackingScene, type PackingScene } from '../core/packingWire'
-import { knownOrganizationScene, rememberOrganizationScene, withOrganizationSceneLock, type StoredOrganizationScene } from '../core/organizationScenes'
-import { placementIssues } from '@/scene/sceneValidation'
+import { knownOrganizationScene, rememberOrganizationScene, withOrganizationSceneLock } from '../core/organizationScenes'
+import { synchronizeScene } from '../core/sceneSync'
+import { assertRecommendedScenePlacement } from '@/lib/organizationValidation'
+import { invalidateCableRoutes } from '@/scene/cables'
+import { useProjectsStore } from '@/state/projectsStore'
+import { useCableStore } from '@/state/cableStore'
+import { cablePlanningInputSignature, mapRoutingResult, routingBaseline, toRoutingScene } from '../core/routingWire'
 import {
-  mapCablePlanResult,
   mapLayoutPlanResult,
   mapModelGenerationResult,
   mapOrganizationResult,
   mapRecognitionResult,
   toWireItem,
-  toWirePreferences,
   toWireScenePayload,
 } from '../core/wire'
 
 /**
- * 真实后端服务适配器（VITE_API_MODE=real）。
+ * 后端服务适配器；规划固定使用，供应商能力由构建配置启用。
  *
  * - 所有调用统一经 core/client（超时 / 网络 / 非 2xx / JSON 异常）与 core/jobs（jobId 轮询）；
  * - 返回结果经 core/wire 本地校验后再交给界面（见 docs/api-integration.md 契约与字段缺口）；
@@ -38,19 +41,6 @@ function photoExt(blob: Blob): string {
   if (type.includes('webp')) return 'webp'
   if (type.includes('heic') || type.includes('heif')) return 'heic'
   return 'jpg'
-}
-
-function synchronizedScene(raw: unknown, expected: PackingScene, known: StoredOrganizationScene | null, baselineSourceId: string): PackingScene {
-  const canonical = canonicalScene(raw, expected)
-  const ref = sceneRef(canonical)
-  const sameBaseline = known?.baselineSourceId === baselineSourceId
-  const valid = known
-    ? ref.sceneId === known.sceneId && (sameBaseline
-      ? [known.sceneRevision, known.sceneRevision + 1].includes(ref.sceneRevision) && ref.baselineId === known.baselineId
-      : ref.sceneRevision === known.sceneRevision + 1 && ref.baselineId !== known.baselineId)
-    : ref.sceneRevision === 1
-  if (!valid) throw new ApiError('后端同步返回了不匹配的场景标识或版本', { kind: 'malformed' })
-  return canonical
 }
 
 export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
@@ -136,25 +126,29 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
     },
 
     cablePlanning: {
-      async planCables({ projectId, objects, room, cables, targetIds, preferences, onProgress, signal }) {
-        return runRemoteJob({
-          capability: 'cable',
-          projectId,
-          label: targetIds && targetIds.length > 0 ? '更新走线（真实后端）' : '规划走线（真实后端）',
-          body: {
-            project_id: projectId,
-            scene: toWireScenePayload({ projectId, objects, room, cables }),
-            target_cable_ids: targetIds ?? null,
-            preferences: toWirePreferences(preferences),
-          },
-          requestSummary: {
-            objects: objects.length,
-            cables: targetIds && targetIds.length > 0 ? targetIds.length : cables.length,
-            preferences,
-          },
-          onProgress,
-          signal,
-          mapResult: (wire) => mapCablePlanResult(wire, { cables, room }),
+      async planCables({ projectId, project, baseline, confirmed = false, targetIds, onProgress, signal }) {
+        if (!project || project.id !== projectId || !baseline) throw new ApiError('真实走线需要当前项目及完整整理前快照，请重新进入工作台', { kind: 'input' })
+        if (targetIds && (!targetIds.length || new Set(targetIds).size !== targetIds.length || targetIds.some((id) => !project.cables.some((cable) => cable.id === id)))) throw new ApiError('待规划线缆列表包含重复或未知连接', { kind: 'input' })
+        return withOrganizationSceneLock(projectId, async () => {
+          const signature = cablePlanningInputSignature(project)
+          const known = knownOrganizationScene(projectId)
+          const scene = toRoutingScene({ project, confirmed, ref: known })
+          const canonical = await synchronizeScene({ projectId, scene, baseline: routingBaseline(baseline, project, known), baselineSourceId: baseline.id, known, signal })
+          const ref = sceneRef(canonical)
+          rememberOrganizationScene(projectId, { ...ref, baselineSourceId: baseline.id })
+          return runRemoteJob({
+            capability: 'cable', projectId,
+            label: targetIds ? '更新走线（真实后端）' : '规划走线（真实后端）',
+            body: { scene_id: ref.sceneId, scene_revision: ref.sceneRevision, ...(targetIds ? { target_ids: targetIds } : {}) },
+            requestSummary: { objects: project.objects.length, cables: project.cables.length, target_ids: targetIds ?? null, scene_revision: ref.sceneRevision },
+            onProgress, signal,
+            mapResult: async (wire) => {
+              if (cablePlanningInputSignature(project) !== signature) throw new ApiError('走线期间场景发生变化，请重新规划', { kind: 'input' })
+              const current = await requestJson<PackingScene>(`/projects/${encodeURIComponent(projectId)}/scene`, { signal })
+              canonicalScene(current, canonical, ref)
+              return mapRoutingResult(wire, { scene: canonical, project })
+            },
+          })
         })
       },
     },
@@ -167,23 +161,15 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
           const input = { projectId, objects, room, preferences, confirmed, ref: known }
           const scene = toPackingScene(input)
           const baselineScene = packingBaseline(baseline, input)
-          let canonical: PackingScene
-          try {
-            const raw = await requestJson<PackingScene>(`/projects/${encodeURIComponent(projectId)}/scene`, {
-              method: 'PUT', signal,
-              body: { scene, expected_revision: known?.sceneRevision ?? null, baseline_source_id: baseline.id,
-                ...(!known || known.baselineSourceId !== baseline.id ? { baseline: baselineScene } : {}) },
-            })
-            canonical = synchronizedScene(raw, scene, known, baseline.id)
-          } catch (error) {
-            if (signal?.aborted || !isApiError(error) || !(error.kind === 'network' || error.kind === 'timeout' || error.status === 409)) throw error
-            try {
-              // Recover only an exact committed draft with its original baseline source.
-              const saved = await requestJson<{ scene: unknown; baseline_source_id: unknown }>(`/projects/${encodeURIComponent(projectId)}/scene-state`, { signal })
-              if (signal?.aborted || saved.baseline_source_id !== baseline.id) throw error
-              canonical = synchronizedScene(saved.scene, scene, known, baseline.id)
-            } catch { throw error }
+          // This write replaces routing inputs and may commit even if its response is lost.
+          const currentProject = useProjectsStore.getState().projects[projectId]
+          if (currentProject?.cables.some((cable) => cable.route.verification)) {
+            useProjectsStore.getState().update(projectId, (current) => ({
+              ...current, cables: invalidateCableRoutes(current.cables),
+            }))
+            useCableStore.getState().resetAnim()
           }
+          const canonical = await synchronizeScene({ projectId, scene, baseline: baselineScene, baselineSourceId: baseline.id, known, signal })
           const ref = sceneRef(canonical)
           rememberOrganizationScene(projectId, { ...ref, baselineSourceId: baseline.id })
           let jobId = ''
@@ -212,7 +198,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
             if (!target) throw new ApiError('整理结果引用错误', { kind: 'input' })
             return { ...object, visible: true, transform: { position: target.position, rotationY: target.rotationY } }
           })
-          if (targets.some((object) => placementIssues(object, object.transform.position, targets, room).length > 0)) throw new ApiError('当前目标布局复查未通过，不能应用', { kind: 'input' })
+          assertRecommendedScenePlacement(targets, room, objects)
           const expected = toPackingScene({ projectId, objects: targets, room, preferences, confirmed: true, ref: known })
           const nextRef = { ...known, sceneRevision: known.sceneRevision + 1 }
           let canonical: PackingScene
@@ -240,5 +226,5 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
   }
 }
 
-/** 生产使用的真实服务实例（VITE_API_MODE=real 时由 api/index.ts 装配） */
+/** 由 api/index.ts 装配的后端服务实例。 */
 export const httpServices: AppServices = createHttpServices()

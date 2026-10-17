@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { MonitorOff } from 'lucide-react'
 import { CameraRig } from '@/scene/CameraRig'
-import { DeskShelf } from '@/scene/DeskShelf'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
 import { Segmented } from '@/ui/kit/segmented'
@@ -12,10 +11,10 @@ import type { ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
 
 /**
- * 空间配置三维预览（正式模型）：家具加载与三维工作台同源的桌体分离件
- * （无抽屉桌体 + 三只抽屉，支持单击开 / 关与拖拽推拉），
- * 书架搁板 / 出线孔 / 插座等可编辑项以叠加标记随表单实时更新；
- * 模型加载失败时 DormDeskModel 自动回退参数化几何（提示见工作台）。
+ * 空间配置三维预览：与三维工作台共用同一套家具加载逻辑——DormDeskModel 负责
+ * 加载无抽屉桌体 + 三只抽屉分离件（GLB 成功时渲染正式模型并叠加 ParametricDesk
+ * desktopOnly 桌面开孔；失败 / 简化时回退参数化几何），并按固定家具的支撑与
+ * 出线孔几何隐藏参数化床架 / 孔位标记；俯视时对家具模型做显示-only 剖切。
  */
 export function SpacePreview3D({ room }: { room: RoomConfig }) {
   const [view, setView] = useState<ViewPreset>('persp')
@@ -54,10 +53,8 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
           showCableHoles={deskGlbLoaded}
         />
         <DormDeskModel room={room} hideBedParts={view === 'top'} respectToolbar={false} />
-        {/* GLB 无「离桌高度」可调搁板（模型自带的是上层四格固定书架）：叠加配置层书架实时反馈 */}
-        {deskGlbLoaded ? <DeskShelf room={room} /> : null}
         {/* 小画布取景：拉远 + 抬高注视点，容纳整组家具（默认机位按桌面区域取景会裁掉床） */}
-        <CameraRig preset={view} zoomOut={1.75} targetShiftY={0.3} />
+        <CameraRig preset={view} furnitureModel={room.furnitureModel} zoomOut={1.75} targetShiftY={0.3} />
       </Canvas>
       <div className="absolute right-2 top-2">
         <Segmented

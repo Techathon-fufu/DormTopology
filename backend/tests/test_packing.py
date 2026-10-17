@@ -502,6 +502,17 @@ class PackingTests(unittest.TestCase):
 
 
 class AreaTests(unittest.TestCase):
+    def test_l_shaped_support_excludes_air_and_does_not_double_count_regions(self):
+        scene = simple_scene()
+        scene["regions"] = [
+            region("main", (0, 0.7, 0, 0.4)),
+            region("return", (0.7, 1, 0, 0.6)),
+            region("typing", (0.2, 0.6, 0.2, 0.4)),
+        ]
+        self.assertAlmostEqual(measure_free_area(scene), 0.46)
+        scene["regions"] = []
+        self.assertEqual(measure_free_area(scene), 0)
+
     def test_grid_capacity_is_rejected_with_a_typed_input_error(self):
         for width, depth in ((1e308, 0.6), (1, 1e308), (20, 20)):
             with self.subTest(width=width, depth=depth):

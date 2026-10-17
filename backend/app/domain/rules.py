@@ -101,6 +101,10 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
     wall = _object(scene["wall"], "z_m bounds_xy_m", "wall")
     _number(wall["z_m"], "wall.z_m")
     _bounds(wall["bounds_xy_m"], "wall.bounds_xy_m")
+    if "constraints" in scene:
+        constraints = _object(scene["constraints"], "min_item_gap_m", "constraints")
+        if _number(constraints["min_item_gap_m"], "constraints.min_item_gap_m") < 0:
+            _fail("constraints.min_item_gap_m", "must be non-negative")
 
     seen: set[str] = set()
 
@@ -418,8 +422,11 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             ("mode", {"slot", "backboard"}),
         ):
             _enum(cable[key], choices, path + "." + key)
-        for key in ("length_m", "diameter_m", "min_bend_radius_m"):
-            _number(cable[key], path + "." + key, positive=True)
+        if cable["length_m"] is not None:
+            _number(cable["length_m"], path + ".length_m", positive=True)
+        _number(cable["diameter_m"], path + ".diameter_m", positive=True)
+        if _number(cable["min_bend_radius_m"], path + ".min_bend_radius_m") < 0:
+            _fail(path + ".min_bend_radius_m", "must be nonnegative")
         if _number(cable["slack_m"], path + ".slack_m") < 0:
             _fail(path + ".slack_m", "must be nonnegative")
         if "baseline_path_points" in cable:

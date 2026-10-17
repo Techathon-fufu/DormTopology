@@ -13,12 +13,12 @@ class LimitedExecutor:
             raise ValueError("max_pending must be at least max_workers >= 1")
         self._slots = BoundedSemaphore(max_pending)
         self._pool = ThreadPoolExecutor(
-            max_workers=max_workers, thread_name_prefix="organization"
+            max_workers=max_workers, thread_name_prefix="planning"
         )
 
     def reserve(self) -> None:
         if not self._slots.acquire(blocking=False):
-            raise CapacityExceeded("Organization task capacity reached; retry later")
+            raise CapacityExceeded("Planning task capacity reached; retry later")
 
     def release(self) -> None:
         self._slots.release()

@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict'
 import { createDemoProject, DEMO_PROJECT_ID, DEMO_SEED_VERSION } from '../src/data/demoProject'
-import { isDemoProjectStale } from '../src/state/projectsStore'
+import { isDemoProjectStale, useProjectsStore } from '../src/state/projectsStore'
 import type { Project } from '../src/types/project'
 
 // ── 示例数据本身：种子版本与场景规模 ─────────────────────────────────────────
 const fresh = createDemoProject()
 assert.equal(fresh.demoSeedVersion, DEMO_SEED_VERSION, '新种入的示例项目带当前种子版本')
-assert.equal(fresh.room.desk.width, 1.6, '示例桌面宽 1600mm')
-assert.equal(fresh.room.desk.depth, 0.8, '示例桌面深 800mm')
+assert.equal(fresh.room.desk.width, 1.45, 'L 形桌面包络宽 1450mm')
+assert.equal(fresh.room.desk.depth, 0.86, 'L 形桌面包络深 860mm')
+assert.equal(fresh.room.furnitureModel, 'dormdesk-v1')
 assert.equal(fresh.objects.length, 17, '示例场景 17 件物品')
+assert.equal(fresh.cables.length, 7, '六根设备连接与独立适配器交流输入，不含插排总线')
+assert.equal(fresh.cables.find((cable) => cable.id === 'demo-cable-adapter-ac')?.visibility, 'hidden',
+  '适配器交流电源线默认沿桌后隐藏走线')
+assert.equal(fresh.objects.find((o) => o.id === 'demo-power-adapter')?.ports.filter((p) => p.type === 'usb-c').length, 2,
+  '笔记本与手机分别使用适配器的独立输出接口')
+assert.equal(fresh.organization?.typingOffsetX, -.10, '真实笔记本需要主桌面的侧部净宽及 20mm 物品净距')
+assert.equal(fresh.organization?.typingWidth, .55, '键鼠区保持原宽度')
 assert.equal(fresh.room.outlets.length, 1, '示例房间仅一块插座面板（固定模型口径）')
 assert.equal(fresh.room.outlets[0].id, 'outlet-1', '插座面板 id 稳定')
 assert.deepEqual(fresh.room.outlets[0].position, [0, 0.35, 0.01], '插座后墙居中、距地 350mm')
@@ -36,7 +44,7 @@ assert.equal(isDemoProjectStale(userProject), false, '用户自建项目不受�
 
 // ── 旧数据重种后：外观确实是新场景 ──────────────────────────────────────────
 const reseeded = isDemoProjectStale(legacy) ? createDemoProject() : legacy
-assert.equal(reseeded.room.desk.width, 1.6, '重种后桌面为新尺寸')
+assert.equal(reseeded.room.desk.width, 1.45, '重种后桌面为新尺寸')
 assert.equal(reseeded.objects.length, 17, '重种后物品数为新场景规模')
 assert.ok(
   reseeded.objects.some((o) => o.id === 'demo-thermos'),
@@ -51,6 +59,29 @@ assert.ok(
   '重种后不再有旧的叠放书本 id',
 )
 
+// A reseed must preserve edits in the archived demo and leave user projects intact.
+const initialProjects = useProjectsStore.getState().projects
+const editedPrevious = {
+  ...fresh, demoSeedVersion: DEMO_SEED_VERSION - 1,
+  objects: fresh.objects.map((o, i) => i === 0 ? { ...o, name: '保留用户编辑', dimensions: { ...o.dimensions, width: .4 } } : o),
+}
+try {
+  useProjectsStore.setState({ projects: { [DEMO_PROJECT_ID]: editedPrevious, [userProject.id]: userProject } })
+  useProjectsStore.getState().ensureDemo()
+  const projects = useProjectsStore.getState().projects
+  const archives = Object.values(projects).filter((p) => p.id.startsWith(`${DEMO_PROJECT_ID}-seed-`))
+  assert.equal(archives.length, 1)
+  assert.equal(archives[0].objects[0].name, '保留用户编辑')
+  assert.deepEqual(archives[0].objects[0].dimensions, editedPrevious.objects[0].dimensions)
+  assert.equal(archives[0].objects[0].projectId, archives[0].id)
+  assert.equal(archives[0].isDemo, false)
+  assert.deepEqual(projects[userProject.id], userProject)
+  assert.equal(projects[DEMO_PROJECT_ID].demoSeedVersion, DEMO_SEED_VERSION)
+  assert.equal(projects[DEMO_PROJECT_ID].organization?.typingOffsetX, -.10)
+} finally {
+  useProjectsStore.setState({ projects: initialProjects })
+}
+
 console.log(
-  'Demo seed checks passed: seed version stamp, staleness boundaries (missing field / older / newer / user project), reseed produces the 1600x800 17-item scene with a single dual-socket outlet panel.',
+  'Demo seed checks passed: seed boundaries, versioned L-shaped furniture and the 17-item scene with a single dual-socket outlet panel.',
 )

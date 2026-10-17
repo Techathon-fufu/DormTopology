@@ -19,11 +19,16 @@ import { disposeObject3D, loadModelFromUrl } from '@/scene/modelLoader'
 import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useDrawerStore } from '@/state/drawerStore'
+import { hasFixedFurniture } from './fixedFurniture'
 
 /**
- * 桌体渲染：加载 dorm_desk_body.glb（无抽屉桌体）与三只抽屉分离件
- * （dorm_desk_drawer_{bottom,middle,top}.glb，清单见 scene/dormDeskDrawers.ts），
+ * 桌体渲染：加载 models/dormdesk_parts/dormdesk_body.glb（无抽屉桌体）与三只抽屉分离件
+ * （同目录 drawer_{bottom,middle,top}.glb，清单见 scene/dormDeskDrawers.ts），
  * 加载完成前 / 加载失败 / 用户选择简化几何时回退参数化桌体（ParametricDesk，与逻辑尺寸一致）。
+ *
+ * 固定家具（hasFixedFurniture）走 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
+ * （FURNITURE_OFFSET 由 mountDeskModel 施加），并隐藏模型自带 Desk_Top_* 面片；
+ * 桌面出线孔由 ParametricDesk desktopOnly 叠加显示。非固定家具沿用历史归一化路径。
  *
  * 抽屉推拉：每只抽屉包一层滑动组，逐帧由 drawerStore 的 progress 驱动
  * （单击开 / 关、拖拽跟手、松手吸附；交互见 scene/useDrawerInteraction.ts）。
@@ -69,6 +74,7 @@ export function DormDeskModel({
 
   // 桌面尺寸配置变化时重新归一化；仅依赖影响归一化的标量，避免项目对象引用变化触发重载
   const roomShapeKey = [
+    room.furnitureModel,
     room.desk.width,
     room.desk.depth,
     room.desk.height,
@@ -89,7 +95,7 @@ export function DormDeskModel({
       useDrawerStore.getState().reset()
     }
 
-    if (forceFallback) {
+    if (forceFallback || !hasFixedFurniture(room)) {
       clearParts()
       useDeskModelStore.getState().markSkipped()
       return
@@ -149,6 +155,15 @@ export function DormDeskModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceFallback, retryNonce, roomShapeKey])
 
+  // 固定家具：隐藏模型自带 Desk_Top_* 面片（出线孔由 ParametricDesk desktopOnly 叠加）
+  useEffect(() => {
+    if (!parts) return
+    if (!hasFixedFurniture(room)) return
+    parts.body.traverse((node) => {
+      if (node.name.startsWith('Desk_Top_')) node.visible = false
+    })
+  }, [parts, room])
+
   // 显示-only 剖切（俯视）：隐藏床体 / 护栏 / 爬梯，便于查看桌面与地面布局
   useEffect(() => {
     if (!parts) return
@@ -169,7 +184,7 @@ export function DormDeskModel({
     [],
   )
 
-  const useGlb = !forceFallback && status === 'loaded' && parts !== null
+  const useGlb = hasFixedFurniture(room) && !forceFallback && status === 'loaded' && parts !== null
   return (
     <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
       {useGlb && parts ? (
@@ -178,9 +193,10 @@ export function DormDeskModel({
           {parts.drawers.map(({ spec, scene }) => (
             <DeskDrawerPart key={spec.id} spec={spec} scene={scene} />
           ))}
+          <ParametricDesk room={room} desktopOnly />
         </>
       ) : (
-        <ParametricDesk room={room} />
+        <ParametricDesk room={room} hideBedParts={hideBedParts} />
       )}
     </group>
   )

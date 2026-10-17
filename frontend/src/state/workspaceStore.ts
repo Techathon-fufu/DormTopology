@@ -4,13 +4,16 @@ import type {
   LayoutAssignment,
   LayoutPlan,
   PowerStripConfig,
+  RoomConfig,
   SceneObject,
   Vec3,
 } from '@/types/project'
+import type { CableManagementConfig } from '@/types/cableManagement'
 import { ensureDefaultPorts as defaultPortsForObject } from '@/scene/ports'
+import { cableRoutingObjectsSignature, invalidateCableRoutes } from '@/scene/cables'
 import { computePowerStripSpecChange, stripLengthFor } from '@/scene/powerStrip'
 import { clonePlanData } from '@/lib/plans'
-import { assertScenePlacement, objectsWithAssignments } from '@/lib/organizationValidation'
+import { assertRecommendedScenePlacement, assertScenePlacement, objectsWithAssignments } from '@/lib/organizationValidation'
 import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
@@ -29,7 +32,7 @@ export interface DragState {
   /** 已吸附的预览位置（米） */
   position: Vec3
   /** 吸附到的支撑面 */
-  support: 'desk' | 'shelf' | 'beam' | 'floor' | 'none'
+  support: 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'none'
   /** 预览位置是否通过越界 / 相交校验 */
   valid: boolean
   /** 上一次有效预览位置（指针未命中支撑面时回退用） */
@@ -60,6 +63,7 @@ export type ObjectPatch = Partial<
 interface HistorySnapshot {
   objects: SceneObject[]
   cables: CableConnection[]
+  cableManagement?: RoomConfig['cableManagement']
 }
 
 const HISTORY_LIMIT = 40
@@ -87,20 +91,20 @@ function pushPast(past: HistorySnapshot[], snapshot: HistorySnapshot): HistorySn
 }
 
 /**
- * 设备移动 / 旋转 / 接口变化后，把引用该设备的线缆标记为「需重新计算」。
+ * Any changed object can obstruct any route, including routes attached to other devices.
  * 仅在状态确实变化时返回新数组（避免无意义的存储写入）。
  */
 function markStaleCables(cables: CableConnection[], objectIds: string[]): CableConnection[] {
-  if (objectIds.length === 0) return cables
-  const ids = new Set(objectIds)
-  let changed = false
-  const next = cables.map((c) => {
-    if (!ids.has(c.from.objectId) && !ids.has(c.to.objectId)) return c
-    if (c.status === 'stale') return c
-    changed = true
-    return { ...c, status: 'stale' as const, updatedAt: Date.now() }
+  return objectIds.length === 0 ? cables : invalidateCableRoutes(cables)
+}
+
+function cableInputs(cable: CableConnection): string {
+  return JSON.stringify({
+    from: cable.from, to: cable.to, kind: cable.kind, thickness: cable.thickness,
+    visibility: cable.visibility, actualLengthM: cable.actualLengthM,
+    reserveLengthM: cable.reserveLengthM, route: { points: cable.route.points,
+      nodeIds: cable.route.nodeIds, smooth: cable.route.smooth, strategy: cable.route.strategy },
   })
-  return changed ? next : cables
 }
 
 /**
@@ -118,12 +122,14 @@ interface WorkspaceState {
   past: HistorySnapshot[]
   future: HistorySnapshot[]
   lastScore: number | null
+  notice: string | null
   setMode: (mode: WorkspaceMode) => void
   setViewPreset: (p: ViewPreset) => void
   /** 应用视角预设并强制重新应用相机（重复进入同一预设也会生效；导览步骤切换用） */
   applyViewPreset: (p: ViewPreset) => void
   resetView: () => void
   setDrag: (drag: DragState | null) => void
+  setNotice: (notice: string | null) => void
   select: (id: string | null) => void
   resetHistory: () => void
   setLastScore: (score: number | null) => void
@@ -168,26 +174,41 @@ interface WorkspaceState {
   ) => void
   removeCable: (projectId: string, cableId: string, record?: boolean) => void
   replaceCables: (projectId: string, cables: CableConnection[], record?: boolean) => void
+  updateCableManagement: (projectId: string, config: CableManagementConfig) => void
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   /** 统一的「记录历史 + 写入项目」入口（物品与线缆一并快照） */
   function commit(
     projectId: string,
-    patch: { objects?: SceneObject[]; cables?: CableConnection[] },
+    patch: { objects?: SceneObject[]; cables?: CableConnection[]; cableManagement?: CableManagementConfig },
     record: boolean,
   ) {
     if (useOrganizeStore.getState().applying) throw new Error('整理方案正在应用，请稍后再修改场景')
     const project = useProjectsStore.getState().projects[projectId]
     if (!project) return
+    let cables = patch.cables ?? project.cables
+    if (patch.objects && cableRoutingObjectsSignature(patch.objects) !== cableRoutingObjectsSignature(project.objects)) {
+      cables = markStaleCables(cables, ['scene-geometry'])
+      const objects = new Map(patch.objects.map((o) => [o.id, o]))
+      cables = cables.map((c) => {
+        const hasPort = (end: CableConnection['from']) => objects.get(end.objectId)?.ports.some((p) => p.id === end.portId)
+        return hasPort(c.from) && hasPort(c.to) ? c : {
+          ...c, status: 'conflict' as const,
+          note: '端点设备或接口已被删除，请重新指定连接（原线缆保留）',
+        }
+      })
+      useCableStore.getState().resetAnim()
+    }
     set((s) => ({
-      past: record ? pushPast(s.past, { objects: project.objects, cables: project.cables }) : s.past,
+      past: record ? pushPast(s.past, { objects: project.objects, cables: project.cables, cableManagement: project.room.cableManagement }) : s.past,
       future: record ? [] : s.future,
     }))
     useProjectsStore.getState().update(projectId, (p) => ({
       ...p,
       objects: patch.objects ?? p.objects,
-      cables: patch.cables ?? p.cables,
+      room: patch.cableManagement ? { ...p.room, cableManagement: patch.cableManagement } : p.room,
+      cables,
     }))
   }
 
@@ -200,13 +221,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     past: [],
     future: [],
     lastScore: null,
+    notice: null,
     setMode: (mode) => set({ mode }),
     setViewPreset: (viewPreset) => set({ viewPreset }),
     applyViewPreset: (viewPreset) => set((s) => ({ viewPreset, viewNonce: s.viewNonce + 1 })),
     resetView: () => set((s) => ({ viewPreset: 'persp', viewNonce: s.viewNonce + 1 })),
     setDrag: (drag) => set({ drag }),
+    setNotice: (notice) => set({ notice }),
     select: (selectedId) => set({ selectedId }),
-    resetHistory: () => set({ past: [], future: [], lastScore: null }),
+    resetHistory: () => set({ past: [], future: [], lastScore: null, notice: null }),
     setLastScore: (lastScore) => set({ lastScore }),
 
     undo(projectId) {
@@ -218,15 +241,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({
         past: state.past.slice(0, -1),
         future: [
-          { objects: project.objects, cables: project.cables },
+          { objects: project.objects, cables: project.cables, cableManagement: project.room.cableManagement },
           ...state.future,
         ].slice(0, HISTORY_LIMIT),
       })
       useProjectsStore.getState().update(projectId, (p) => ({
         ...p,
         objects: prev.objects,
-        cables: prev.cables,
+        room: { ...p.room, cableManagement: prev.cableManagement },
+        cables: invalidateCableRoutes(prev.cables),
       }))
+      useCableStore.getState().resetAnim()
     },
 
     redo(projectId) {
@@ -237,28 +262,49 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (!next || !project) return
       set({
         future: state.future.slice(1),
-        past: pushPast(state.past, { objects: project.objects, cables: project.cables }),
+        past: pushPast(state.past, { objects: project.objects, cables: project.cables, cableManagement: project.room.cableManagement }),
       })
       useProjectsStore.getState().update(projectId, (p) => ({
         ...p,
         objects: next.objects,
-        cables: next.cables,
+        room: { ...p.room, cableManagement: next.cableManagement },
+        cables: invalidateCableRoutes(next.cables),
       }))
+      useCableStore.getState().resetAnim()
+    },
+
+    updateCableManagement(projectId, config) {
+      const project = useProjectsStore.getState().projects[projectId]
+      if (!project || JSON.stringify(project.room.cableManagement) === JSON.stringify(config)) return
+      commit(projectId, { cableManagement: config, cables: invalidateCableRoutes(project.cables) }, true)
+      useCableStore.getState().resetAnim()
     },
 
     updateObject(projectId, objectId, patch, record = true) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
       const { transform: tPatch, dimensions: dPatch, model: mPatch, ...rest } = patch
-      // 位置 / 旋转 / 接口变化 → 相关走线标记为「需重新计算」
-      const touchesRoute = Boolean(tPatch) || rest.ports !== undefined
       const next = project.objects.map((o) => {
         if (o.id !== objectId) return o
+        const dimensions = dPatch ? { ...o.dimensions, ...dPatch } : o.dimensions
+        const dimensionsChanged = JSON.stringify(dimensions) !== JSON.stringify(o.dimensions)
+        const ports = (rest.ports ?? o.ports).map((inputPort) => {
+          let port = inputPort
+          const previous = o.ports.find((p) => p.id === port.id)
+          // Legacy axis editor explicitly overrides a previously picked free normal.
+          if (previous && port.direction !== previous.direction && JSON.stringify(port.localDirection) === JSON.stringify(previous.localDirection)) {
+            port = { ...port, localDirection: undefined }
+          }
+          const geometry = (p: typeof port) => JSON.stringify({ type: p.type, powered: p.powered, offset: p.offset, direction: p.direction, localDirection: p.localDirection })
+          return dimensionsChanged || !previous || geometry(previous) !== geometry(port)
+            ? { ...port, confirmed: false } : port
+        })
         return {
           ...o,
           ...rest,
           transform: tPatch ? { ...o.transform, ...tPatch } : o.transform,
-          dimensions: dPatch ? { ...o.dimensions, ...dPatch } : o.dimensions,
+          dimensions,
+          ports,
           model: mPatch ? { ...o.model, ...mPatch } : o.model,
         }
       })
@@ -266,7 +312,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         projectId,
         {
           objects: next,
-          cables: touchesRoute ? markStaleCables(project.cables, [objectId]) : project.cables,
+          cables: project.cables,
         },
         record,
       )
@@ -313,6 +359,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const strip = project.objects.find((o) => o.id === objectId)
       if (!strip) return null
       const change = computePowerStripSpecChange(strip, project.cables, next)
+      change.object.ports = change.object.ports.map((port) => ({ ...port, confirmed: false }))
       const removed = new Set(change.removedPortCableIds)
       const affected = new Set(change.affectedCableIds)
       const cables = project.cables.map((c) => {
@@ -391,8 +438,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             rotationY: a.rotationY,
           }))
         const nextObjects = objectsWithAssignments(project.objects, assignments)
-        assertScenePlacement(nextObjects, project.room, project.objects)
-        commit(projectId, { objects: nextObjects, cables: markStaleCables(project.cables, assignments.map((assignment) => assignment.objectId)) }, true)
+        assertRecommendedScenePlacement(nextObjects, project.room, project.objects)
+        commit(projectId, { objects: nextObjects, cables: invalidateCableRoutes(project.cables) }, true)
+        useCableStore.getState().resetAnim()
         return finish({
           objects: assignments.length,
           cables: 0,
@@ -430,7 +478,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           ports: snap.ports ? clonePlanData(snap.ports) : o.ports,
         }
       })
-      assertScenePlacement(nextObjects, project.room, project.objects)
+      assertRecommendedScenePlacement(nextObjects, project.room, project.objects)
 
       const portIdsByObject = new Map(nextObjects.map((o) => [o.id, new Set(o.ports.map((p) => p.id))]))
       const endpointOk = (end: CableConnection['from']): boolean => {
@@ -462,7 +510,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         keptCables += 1
       }
 
-      commit(projectId, { objects: nextObjects, cables: restoredCables }, true)
+      commit(projectId, { objects: nextObjects, cables: invalidateCableRoutes(restoredCables) }, true)
+      useCableStore.getState().resetAnim()
       return finish({
         objects: appliedObjects,
         cables: restoredCables.length - keptCables,
@@ -504,20 +553,40 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     addCable(projectId, cable) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
-      commit(projectId, { cables: [...project.cables, cable] }, true)
+      commit(projectId, { cables: invalidateCableRoutes([...project.cables, cable]) }, true)
+      useCableStore.getState().resetAnim()
     },
 
     updateCable(projectId, cableId, updater, record = true) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
-      const next = project.cables.map((c) => (c.id === cableId ? updater(c) : c))
-      commit(projectId, { cables: next }, record)
+      let changed = false
+      const next = project.cables.map((c) => {
+        if (c.id !== cableId) return c
+        const updated = updater(c)
+        if (cableInputs(updated) === cableInputs(c)) return updated
+        changed = true
+        const { verification: _verification, pathLengthM: _pathLengthM, ...route } = updated.route
+        useCableStore.getState().resetAnim()
+        return {
+          ...updated, route,
+          planSource: 'manual' as const,
+          status: updated.status === 'conflict' ? 'conflict' as const : 'stale' as const,
+          updatedAt: Date.now(),
+        }
+      })
+      const cables = changed ? invalidateCableRoutes(next).map((cable) =>
+        cable.id === cableId && next.find((entry) => entry.id === cableId)?.status === 'conflict'
+          ? { ...cable, status: 'conflict' as const } : cable,
+      ) : next
+      commit(projectId, { cables }, record)
     },
 
     removeCable(projectId, cableId, record = true) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
-      commit(projectId, { cables: project.cables.filter((c) => c.id !== cableId) }, record)
+      commit(projectId, { cables: invalidateCableRoutes(project.cables.filter((c) => c.id !== cableId)) }, record)
+      useCableStore.getState().resetAnim()
       useCableStore.getState().onCableRemoved(cableId)
     },
 

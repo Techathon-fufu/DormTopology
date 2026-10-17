@@ -208,7 +208,7 @@ export interface WireCablePayload {
   mode: 'slot' | 'backboard'
   diameter_m: number
   min_bend_radius_m: number
-  /** 当前草稿未填实际线长时为 null；调用领域规划前须补齐并校验有限正数，见 docs/api-integration.md 字段缺口。 */
+  /** 现有线材长度未知时为 null；已知时为有限正数。所需线长由规划路径计算。 */
   length_m: number | null
 }
 
@@ -229,11 +229,11 @@ export interface WireScenePayload {
 export const CABLE_DIAMETER_PRESETS: Record<'thick' | 'thin', { diameter_m: number; min_bend_radius_m: number }> = {
   thick: {
     diameter_m: CABLE_THICKNESS_META.thick.diameterM,
-    min_bend_radius_m: CABLE_THICKNESS_META.thick.minBendRadiusM,
+    min_bend_radius_m: 0,
   },
   thin: {
     diameter_m: CABLE_THICKNESS_META.thin.diameterM,
-    min_bend_radius_m: CABLE_THICKNESS_META.thin.minBendRadiusM,
+    min_bend_radius_m: 0,
   },
 }
 
@@ -289,7 +289,7 @@ export function toWireCable(c: CableConnection, objects: SceneObject[]): WireCab
     to: { object_id: c.to.objectId, port_id: c.to.portId },
     mode: visibility === 'hidden' ? 'backboard' : 'slot',
     diameter_m: meta.diameterM,
-    min_bend_radius_m: meta.minBendRadiusM,
+    min_bend_radius_m: 0,
     length_m: c.actualLengthM ?? null,
   }
 }

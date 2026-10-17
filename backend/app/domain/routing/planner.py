@@ -10,7 +10,7 @@ from __future__ import annotations
 import heapq
 import math
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import pairwise
 
 from ..errors import SceneInputError
@@ -35,6 +35,7 @@ from .geometry import (
     add,
     beziers_arc_length,
     collision_from_item,
+    cross,
     distance,
     dot,
     exposed_bezier_length,
@@ -80,6 +81,7 @@ class ResolvedEndpoint:
     position: Point
     direction: Point
     collision_box: CollisionBody
+    leadout_extension_m: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -245,6 +247,7 @@ def _polyline_to_beziers(
     start_direction: Point | None = None,
     end_direction: Point | None = None,
     endpoint_handle_factor: float | None = None,
+    flexible_corners: bool = False,
 ) -> list[tuple[Point, Point, Point, Point]] | None:
     cleaned: list[Point] = []
     for value in points:
@@ -264,7 +267,7 @@ def _polyline_to_beziers(
         route_points = cleaned[first_route_index : last_route_index + 1]
         if len(route_points) < 2:
             return None
-        core = _polyline_to_beziers(route_points, minimum_radius)
+        core = _polyline_to_beziers(route_points, minimum_radius, flexible_corners=flexible_corners)
         if not core:
             return None
         adjusted = list(core)
@@ -312,12 +315,18 @@ def _polyline_to_beziers(
             continue
         if turn >= math.pi - 1e-5:
             return None
-        tangent = minimum_radius * math.tan(turn / 2.0)
+        corner_radius = minimum_radius
+        if flexible_corners:
+            # Near a reversal, a fixed radius cuts far away from the graph
+            # vertex. Keep the local trim small as well as fitting both arms.
+            maximum_trim = min(minimum_radius, min(previous_length, following_length) / 4)
+            corner_radius = min(corner_radius, maximum_trim / math.tan(turn / 2))
+        tangent = corner_radius * math.tan(turn / 2.0)
         if tangent > previous_length / 2.0 or tangent > following_length / 2.0:
             return None
         entry = sub(current, scale(incoming, tangent))
         exit = add(current, scale(outgoing, tangent))
-        handle = (4.0 / 3.0) * minimum_radius * math.tan(turn / 4.0)
+        handle = (4.0 / 3.0) * corner_radius * math.tan(turn / 4.0)
         corners[index] = (entry, exit, add(entry, scale(incoming, handle)), sub(exit, scale(outgoing, handle)))
 
     segments: list[tuple[Point, Point, Point, Point]] = []
@@ -371,6 +380,7 @@ def _offset_beziers(
     *,
     preserve_start_segment: bool = False,
     preserve_end_segment: bool = False,
+    ramp_fraction: float = 0.5,
 ) -> list[tuple[Point, Point, Point, Point]]:
     """Offset a curve through a shared channel while keeping its endpoints.
 
@@ -392,10 +402,15 @@ def _offset_beziers(
         start_fraction, end_fraction = prefix / total, (prefix + segment_length) / total
 
         def ramp(fraction: float) -> float:
-            return sign * offset * math.sin(math.pi * fraction) ** 2
+            local = min(fraction, 1.0 - fraction, ramp_fraction) / ramp_fraction
+            return sign * offset * math.sin(math.pi * local / 2) ** 2
 
         def slope(fraction: float) -> float:
-            return sign * offset * math.pi * math.sin(2.0 * math.pi * fraction) / total
+            if ramp_fraction <= fraction <= 1.0 - ramp_fraction:
+                return 0.0
+            local = min(fraction, 1.0 - fraction) / ramp_fraction
+            side = 1.0 if fraction < ramp_fraction else -1.0
+            return sign * side * offset * math.pi * math.sin(math.pi * local) / (2 * ramp_fraction * total)
 
         start_offset, end_offset = ramp(start_fraction), ramp(end_fraction)
         # Match the offset derivative to each segment's endpoint speed. This
@@ -420,13 +435,16 @@ def _lane_candidates(
     *,
     preserve_start_segment: bool = False,
     preserve_end_segment: bool = False,
+    flexible: bool = False,
 ) -> Iterable[list[tuple[Point, Point, Point, Point]]]:
     if not occupied:
         return ()
     direction = sub(segments[-1][-1], segments[0][0])
     if length(direction) <= 1e-9:
         return ()
-    lateral = _lateral_direction(normalize(direction))
+    direction = normalize(direction)
+    lateral = _lateral_direction(direction)
+    lane_axes = (lateral, normalize(cross(direction, lateral))) if flexible else (lateral,)
     required = max(
         radius + other_radius + EPSILON + 2.0 * BEZIER_SAMPLE_ERROR
         for _, other_radius in occupied
@@ -435,18 +453,21 @@ def _lane_candidates(
     if available + EPSILON < required:
         return ()
     candidates: list[list[tuple[Point, Point, Point, Point]]] = []
-    for sign in (1.0, -1.0):
-        for factor in (1.0, 1.5, 2.0, 3.0, 5.0, 7.0):
-            offset = required * factor
-            if offset <= available + EPSILON:
-                candidates.append(_offset_beziers(
-                    segments,
-                    offset,
-                    sign,
-                    lateral,
-                    preserve_start_segment=preserve_start_segment,
-                    preserve_end_segment=preserve_end_segment,
-                ))
+    for ramp_fraction in ((0.5, 0.2, 0.05) if flexible else (0.5,)):
+        for lane_axis in lane_axes:
+            for sign in (1.0, -1.0):
+                for factor in (1.0, 1.5, 2.0, 3.0, 5.0, 7.0):
+                    offset = required * factor
+                    if offset <= available + EPSILON:
+                        candidates.append(_offset_beziers(
+                            segments,
+                            offset,
+                            sign,
+                            lane_axis,
+                            preserve_start_segment=preserve_start_segment,
+                            preserve_end_segment=preserve_end_segment,
+                            ramp_fraction=ramp_fraction,
+                        ))
     return candidates
 
 
@@ -493,8 +514,8 @@ def _curve_collides(
 
     start_allowed = finite_leadout(start_endpoint)
     end_allowed = finite_leadout(end_endpoint, reverse=True)
-    start_remainder = _leadout_remainder(start_endpoint)
-    end_remainder = _leadout_remainder(end_endpoint)
+    start_remainder = _leadout_remainder(start_endpoint, radius)
+    end_remainder = _leadout_remainder(end_endpoint, radius)
     for index, (start, end) in enumerate(chords):
         if any(segment_intersects_box(start, end, box, clearance) for box in forbidden):
             return True
@@ -519,7 +540,40 @@ def _arc_clearance(
     return _segment_clear(start, end, radius, boxes)
 
 
+def _port_host_parts(endpoint: ResolvedEndpoint, radius: float) -> tuple:
+    body = endpoint.collision_box
+    if not isinstance(body, Compound):
+        return ()
+    containing = tuple(
+        part for part in body.parts
+        if segment_hits(endpoint.position, endpoint.position, (part,), TOLERANCE)
+    )
+    if containing:
+        return containing
+    # A confirmed port can sit just outside its shell. Only the nearest solid
+    # directly behind its outward normal is its host; a separate part ahead
+    # must still block the finite lead-out.
+    clearance = radius + EPSILON + BEZIER_SAMPLE_ERROR
+    direction = normalize(endpoint.direction)
+    behind = []
+    for part in body.parts:
+        interval = segment_interval(endpoint.position, direction, part)
+        if (
+            interval is not None
+            and -clearance <= interval[1] <= TOLERANCE
+            and segment_hits(endpoint.position, endpoint.position, (part,), clearance)
+        ):
+            behind.append((interval[1], part))
+    nearest = max((exit for exit, _ in behind), default=-math.inf)
+    return tuple(part for exit, part in behind if exit >= nearest - TOLERANCE)
+
+
 def _endpoint_exit(endpoint: ResolvedEndpoint, radius: float) -> Point:
+    shell_exit = _shell_exit(endpoint, radius)
+    return add(shell_exit, scale(normalize(endpoint.direction), endpoint.leadout_extension_m))
+
+
+def _shell_exit(endpoint: ResolvedEndpoint, radius: float) -> Point:
     """Return a short point beyond the port's containing solids.
 
     The extra tolerance keeps the post-exit graph segment from being rejected
@@ -530,9 +584,7 @@ def _endpoint_exit(endpoint: ResolvedEndpoint, radius: float) -> Point:
         direction = normalize(endpoint.direction)
         clearance = radius + EPSILON + BEZIER_SAMPLE_ERROR
         exits: list[float] = []
-        for part in endpoint.collision_box.parts:
-            if not segment_hits(endpoint.position, endpoint.position, (part,), TOLERANCE):
-                continue
+        for part in _port_host_parts(endpoint, radius):
             interval = segment_interval(endpoint.position, direction, part, clearance)
             if interval is not None:
                 exits.append(interval[1])
@@ -540,7 +592,9 @@ def _endpoint_exit(endpoint: ResolvedEndpoint, radius: float) -> Point:
             return endpoint.position
         return add(endpoint.position, scale(direction, max(exits) + EPSILON))
     oriented = endpoint.collision_box if isinstance(endpoint.collision_box, OBB) else None
-    box = (oriented.local_box if oriented else endpoint.collision_box).inflated(radius + EPSILON)
+    box = (oriented.local_box if oriented else endpoint.collision_box).inflated(
+        radius + EPSILON + BEZIER_SAMPLE_ERROR
+    )
     origin = oriented.to_local(endpoint.position) if oriented else endpoint.position
     direction = normalize(endpoint.direction)
     if oriented:
@@ -562,11 +616,11 @@ def _endpoint_exit(endpoint: ResolvedEndpoint, radius: float) -> Point:
     return oriented.to_world(result) if oriented else result
 
 
-def _leadout_remainder(endpoint: ResolvedEndpoint) -> Compound | None:
-    # Only solids containing the port may share its finite exit exemption.
+def _leadout_remainder(endpoint: ResolvedEndpoint, radius: float = 0.0) -> Compound | None:
     body = endpoint.collision_box
     if isinstance(body, Compound):
-        return body.excluding_containing(endpoint.position)
+        hosts = _port_host_parts(endpoint, radius)
+        return Compound(tuple(part for part in body.parts if part not in hosts))
     return None
 
 
@@ -600,7 +654,7 @@ def _search_path(
         box for item_id, box in item_boxes.items() if item_id != end.item_id
     ]
     for endpoint, connection_boxes in ((start, start_connection_boxes), (end, end_connection_boxes)):
-        remainder = _leadout_remainder(endpoint)
+        remainder = _leadout_remainder(endpoint, spec.radius)
         if remainder is not None:
             connection_boxes.append(remainder)
     start_exit = _endpoint_exit(start, spec.radius)
@@ -667,7 +721,7 @@ def _search_path(
 
     required_kind = "slot" if spec.mode == "slot" else "fixing_point"
     positions = {node_id: value[0] for node_id, value in nodes.items()}
-    exposure_penalty = 0.2
+    exposure_penalty = 3.0
     bend_penalty = 0.03
     start_states: list[tuple[str, bool, bool, str | None, float]] = []
     for arc in adjacency[start_node]:
@@ -713,16 +767,23 @@ def _search_path(
             if arc.target == end_node and not (next_passed and next_used_edge):
                 continue
             turn_cost = 0.0
-            if previous not in (None, start_node) and node_id in positions and previous in positions:
-                previous_vector = sub(positions[node_id], positions[previous])
+            if previous is not None and node_id in positions:
+                previous_position = start_exit if previous == start_node else positions[previous]
+                previous_vector = sub(positions[node_id], previous_position)
                 next_vector = sub(
-                    (end.position if arc.target == end_node else positions[arc.target]),
+                    (end_exit if arc.target == end_node else positions[arc.target]),
                     positions[node_id],
                 )
                 if length(previous_vector) > 1e-9 and length(next_vector) > 1e-9:
                     previous_direction = normalize(previous_vector)
                     next_direction = normalize(next_vector)
-                    turn_cost = bend_penalty * (1.0 - dot(previous_direction, next_direction))
+                    alignment = dot(previous_direction, next_direction)
+                    # The curve builder cannot round an exact reversal. Search
+                    # a different exit instead of repeatedly selecting a spur
+                    # out to a strategy node and back along the same channel.
+                    if alignment < -1.0 + 1e-5:
+                        continue
+                    turn_cost = bend_penalty * (1.0 - alignment)
             next_cost = cost + arc.length + (exposure_penalty * arc.length if arc.exposed else 0.0) + turn_cost + 3.0 * arc.unsupported_length
             next_state = (arc.target, next_passed, next_used_edge, node_id)
             if next_cost + 1e-12 >= costs.get(next_state, math.inf):
@@ -865,11 +926,11 @@ def _validate_curve(
         return "collision", 0.0
     if _tube_conflicts(samples, spec.radius, occupied):
         return "no_path", 0.0
-    radius = minimum_curve_radius(segments)
-    if radius + EPSILON < spec.min_bend_radius:
+    if spec.min_bend_radius > 0 and minimum_curve_radius(segments) + EPSILON < spec.min_bend_radius:
         return "no_path", 0.0
     path_length = beziers_arc_length(segments)
-    if path_length + spec.cable["slack_m"] > spec.cable["length_m"] + EPSILON:
+    available_length = spec.cable["length_m"]
+    if available_length is not None and path_length + spec.cable["slack_m"] > available_length + EPSILON:
         return "length_exceeded", path_length
     if support_context and not analyze_support(segments, support_context, spec.radius).valid:
         return "unsupported_span", path_length
@@ -888,9 +949,22 @@ def _plan_one(
     occupied: Sequence[tuple[Sequence[Point], float]],
     use_dijkstra: bool,
     support_context: SupportContext | None = None,
+    leadout_extension_m: float | None = None,
 ) -> tuple[dict, tuple[Sequence[Point], float] | None]:
+    if cable["min_bend_radius_m"] == 0 and leadout_extension_m is None:
+        for extension in (0.04, 0.02, 0.0):
+            result, tube = _plan_one(
+                scene, cable, endpoints, nodes, edges, obstacle_boxes, reserved_boxes,
+                item_boxes, occupied, use_dijkstra, support_context, extension,
+            )
+            if tube is not None:
+                return result, tube
+        return result, None
     start = endpoints[cable["start_port_id"]]
     end = endpoints[cable["end_port_id"]]
+    if leadout_extension_m:
+        start = replace(start, leadout_extension_m=leadout_extension_m)
+        end = replace(end, leadout_extension_m=leadout_extension_m)
     spec = CableSpec(cable, cable["diameter_m"] / 2.0, cable["mode"], cable["min_bend_radius_m"])
     port_map = {
         port["id"]: port
@@ -928,8 +1002,9 @@ def _plan_one(
     last_reason = "no_path"
     saw_length_exceeded = False
     saw_unsupported = False
-    for _attempt in range(3):
-        search_occupied = occupied if _attempt else ()
+    saw_geometry_failure = False
+    for _attempt in range(1 if leadout_extension_m else 3):
+        search_occupied = occupied if (_attempt or leadout_extension_m) else ()
         search_path, start_candidates, end_candidates = _search_path(
             nodes,
             edges,
@@ -956,17 +1031,22 @@ def _plan_one(
                         item_boxes, banned_edges, use_dijkstra, candidate_node_ids,
                         occupied=search_occupied,
                     )
-                    if geometric_path is not None:
+                    if geometric_path is not None and not saw_geometry_failure:
                         last_reason = "unsupported_span"
             break
         start_exit = _endpoint_exit(start, spec.radius)
         end_exit = _endpoint_exit(end, spec.radius)
-        # Keep established geometry first. Two local handle profiles can avoid
-        # long normal-directed bulges without consuming another path attempt.
-        for endpoint_handle_factor in (None, 1.2, 1.3):
+        # Zero disables the physical bend limit, but still uses finite smooth
+        # corners. Smaller local profiles stay close to tight edge channels.
+        profiles = (
+            ((0.005, None), (0.005, 0.35), (0.002, 0.35), (0.0005, 0.25))
+            if spec.min_bend_radius == 0
+            else tuple((spec.min_bend_radius * 1.1, factor) for factor in (None, 1.2, 1.3))
+        )
+        for smoothing_radius, endpoint_handle_factor in profiles:
             segments = _polyline_to_beziers(
                 search_path.points,
-                spec.min_bend_radius * 1.1,
+                smoothing_radius,
                 start_direction=start.direction
                 if distance(start.position, start_exit) > 1e-9
                 else None,
@@ -974,16 +1054,18 @@ def _plan_one(
                 if distance(end.position, end_exit) > 1e-9
                 else None,
                 endpoint_handle_factor=endpoint_handle_factor,
+                flexible_corners=spec.min_bend_radius == 0,
             )
             if not segments:
                 last_reason = "no_path"
+                saw_geometry_failure = True
                 continue
             # Ports already outside the device still require their confirmed
             # tangent, even though they have no collision-box lead-out.
             first = list(segments[0])
             first_handle = _port_handle_length(
                 first[0], first[2], start.direction,
-                distance(first[0], first[1]), spec.min_bend_radius * 1.1,
+                distance(first[0], first[1]), smoothing_radius,
                 endpoint_handle_factor,
             )
             first[1] = add(first[0], scale(start.direction, first_handle))
@@ -991,7 +1073,7 @@ def _plan_one(
             last = list(segments[-1])
             last_handle = _port_handle_length(
                 last[3], last[1], end.direction,
-                distance(last[2], last[3]), spec.min_bend_radius * 1.1,
+                distance(last[2], last[3]), smoothing_radius,
                 endpoint_handle_factor,
             )
             last[2] = add(last[3], scale(end.direction, last_handle))
@@ -1036,6 +1118,7 @@ def _plan_one(
                     channel_clearance,
                     preserve_start_segment=distance(start.position, start_exit) > 1e-9,
                     preserve_end_segment=distance(end.position, end_exit) > 1e-9,
+                    flexible=spec.min_bend_radius == 0,
                 ):
                     lane_samples = sample_beziers(lane_segments, spec.min_bend_radius)
                     lane_reason, lane_length = _validate_curve(
@@ -1064,6 +1147,8 @@ def _plan_one(
                 saw_length_exceeded = True
             if last_reason == "unsupported_span":
                 saw_unsupported = True
+            elif last_reason in {"no_path", "collision", "endpoint_blocked"}:
+                saw_geometry_failure = True
         if search_path.edge_ids:
             banned_edges.add(search_path.edge_ids[min(_attempt, len(search_path.edge_ids) - 1)])
         else:
@@ -1129,7 +1214,7 @@ def _candidate_count(
         box for item_id, box in item_boxes.items() if item_id != end.item_id
     ]
     for endpoint, connection_boxes in ((start, start_boxes), (end, end_boxes)):
-        remainder = _leadout_remainder(endpoint)
+        remainder = _leadout_remainder(endpoint, radius)
         if remainder is not None:
             connection_boxes.append(remainder)
     start_leadout_clear = _arc_clearance(start.position, start_exit, radius, start_boxes)
@@ -1177,28 +1262,33 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
             cable["id"],
         ),
     )
-    results_by_id: dict[str, dict] = {}
-    occupied: list[tuple[Sequence[Point], float]] = []
-    for cable in ordered_cables:
-        if cable["start_port_id"] in occupied_ports or cable["end_port_id"] in occupied_ports:
-            results_by_id[cable["id"]] = _issue(cable, "port_occupied")
-            continue
-        result, tube = _plan_one(
-            scene,
-            cable,
-            endpoints,
-            nodes,
-            edges,
-            obstacle_boxes,
-            reserved_boxes,
-            item_boxes,
-            occupied,
-            use_dijkstra,
-            support_context,
-        )
-        results_by_id[cable["id"]] = result
-        if tube is not None:
-            occupied.append(tube)
+    def route_in_order(cables: Sequence[dict]) -> dict[str, dict]:
+        results_by_id: dict[str, dict] = {}
+        occupied: list[tuple[Sequence[Point], float]] = []
+        for cable in cables:
+            if cable["start_port_id"] in occupied_ports or cable["end_port_id"] in occupied_ports:
+                results_by_id[cable["id"]] = _issue(cable, "port_occupied")
+                continue
+            result, tube = _plan_one(
+                scene, cable, endpoints, nodes, edges, obstacle_boxes,
+                reserved_boxes, item_boxes, occupied, use_dijkstra, support_context,
+            )
+            results_by_id[cable["id"]] = result
+            if tube is not None:
+                occupied.append(tube)
+        return results_by_id
+
+    results_by_id = route_in_order(ordered_cables)
+    blocked = {identifier for identifier, result in results_by_id.items() if result["reason_code"] == "no_path"}
+    if blocked and len(blocked) < len(ordered_cables) and all(cable["min_bend_radius_m"] == 0 for cable in ordered_cables):
+        # One earlier route can consume a shared channel's useful lane. Retry
+        # the complete set once, promoting failures and retaining one verified
+        # set; never combine individual paths from different attempts.
+        promoted = [cable for cable in ordered_cables if cable["id"] in blocked]
+        promoted.extend(cable for cable in ordered_cables if cable["id"] not in blocked)
+        retry = route_in_order(promoted)
+        if sum(result["status"] == "valid" for result in retry.values()) > sum(result["status"] == "valid" for result in results_by_id.values()):
+            results_by_id = retry
 
     results = [results_by_id[cable["id"]] for cable in scene["cables"]]
     issues = [

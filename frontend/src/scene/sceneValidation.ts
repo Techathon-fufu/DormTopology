@@ -3,6 +3,7 @@ import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { DeskSurfaceMetrics } from '@/scene/deskModel'
 import { bottomContacts, containedInCavity, objectRoomHits, objectsCollide, worldCollision } from './collisionGeometry'
 import { cachedRoomSolids } from './roomCollision'
+import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
 
 /**
  * 场景摆放校验与支撑面计算（本地真实计算，非模拟）。
@@ -13,7 +14,7 @@ import { cachedRoomSolids } from './roomCollision'
  * - 相交检测使用共享模型部件的三维凸体 SAT；碰撞与可见实体使用相同几何
  */
 
-export type SupportKind = 'desk' | 'shelf' | 'beam' | 'floor' | 'none'
+export type SupportKind = 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'none'
 
 export interface SupportInfo {
   kind: SupportKind
@@ -52,10 +53,12 @@ const ROOM_CLEARANCE = 0.001
 
 /** 桌面高度：优先采用桌体 GLB 实测锚点（deskModelStore.metrics），否则回退 RoomConfig */
 export function deskTopY(room: RoomConfig, metrics?: DeskSurfaceMetrics | null): number {
+  if (hasFixedFurniture(room)) return .75
   return metrics?.deskTopY ?? room.desk.height
 }
 
 export function shelfTopY(room: RoomConfig, metrics?: DeskSurfaceMetrics | null): number {
+  if (hasFixedFurniture(room)) return 1.46
   return metrics?.shelfTopY ?? room.desk.height + room.shelf.heightAboveDesk + SHELF_THICKNESS / 2
 }
 
@@ -67,6 +70,13 @@ export function supportsContaining(
   metrics?: DeskSurfaceMetrics | null,
 ): SupportInfo[] {
   const list: SupportInfo[] = []
+  if (hasFixedFurniture(room)) {
+    furnitureSurfaces(room).forEach((s) => {
+      if (x >= s.rect.x0 - 1e-7 && x <= s.rect.x1 + 1e-7 && z >= s.rect.z0 - 1e-7 && z <= s.rect.z1 + 1e-7) list.push({ kind: s.kind, y: s.y, label: s.label })
+    })
+    if (Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width) list.push({ kind: 'floor', y: 0, label: '地面' })
+    return list
+  }
   const desk = room.desk
   if (
     room.shelf.enabled &&
@@ -133,6 +143,10 @@ export function raycastSupports(
   }
 
   tryPlane(0, 'floor', '地面', (x, z) => Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width)
+  if (hasFixedFurniture(room)) {
+    furnitureSurfaces(room).forEach((s) => tryPlane(s.y, s.kind, s.label, (x, z) => x >= s.rect.x0 && x <= s.rect.x1 && z >= s.rect.z0 && z <= s.rect.z1))
+    return hits.sort((a, b) => ray.origin.distanceToSquared(new THREE.Vector3(a.x, a.y, a.z)) - ray.origin.distanceToSquared(new THREE.Vector3(b.x, b.y, b.z)))[0] ?? null
+  }
   tryPlane(
     deskTopY(room, metrics),
     'desk',

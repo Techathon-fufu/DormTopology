@@ -11,6 +11,7 @@ import { GuidePage } from '@/ui/pages/GuidePage'
 import { ApiRuntime } from '@/ui/service/ApiRuntime'
 import { AlgorithmLabPage } from '@/algorithm-lab/AlgorithmLabPage'
 import { useProjectsStore } from '@/state/projectsStore'
+import { WorkflowPage } from '@/workflow/WorkflowPage'
 
 export default function App() {
   const ensureDemo = useProjectsStore((s) => s.ensureDemo)
@@ -22,7 +23,7 @@ export default function App() {
 
   return (
     <>
-      {/* API 运行时：真实模式下做健康检查与长任务状态恢复查询（演示模式无网络调用） */}
+      {/* 后端健康检查与长任务状态恢复查询。 */}
       <ApiRuntime />
       <Routes>
         <Route element={<AppShell />}>
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/projects/:id/workspace" element={<WorkspacePage />} />
         <Route path="/projects/:id/compare" element={<PlanComparePage />} />
         <Route path="/algorithm-lab" element={<AlgorithmLabPage />} />
+        <Route path="/workflow" element={<WorkflowPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

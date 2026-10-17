@@ -8,6 +8,7 @@
  */
 
 import type { OrganizationPreferences } from './organization'
+import type { CableManagementConfig, CableTrayAnalysis } from './cableManagement'
 
 export type Vec3 = [number, number, number]
 
@@ -65,6 +66,8 @@ export interface PowerOutlet {
 
 export interface RoomConfig {
   template: 'loft-standard' | 'custom'
+  /** Versioned fixed furniture; absent means the historical parametric room. */
+  furnitureModel?: 'dormdesk-v1'
   /** 房间长度（x 向，米） */
   length: number
   /** 房间进深（z 向，米） */
@@ -76,6 +79,8 @@ export interface RoomConfig {
   posts: PostConfig[]
   cableHoles: CableHole[]
   outlets: PowerOutlet[]
+  /** Attachment proposals and user-confirmed installed cable management. */
+  cableManagement?: CableManagementConfig
   /** 创建时的说明（如：固定标准模型 / 可调范围） */
   note?: string
 }
@@ -131,6 +136,16 @@ export interface Port {
   offset?: Vec3
   /** 接口朝向（局部方向），默认朝后 */
   direction?: PortDirection
+  /**
+   * 接口局部朝向（单位向量，设备自身坐标系）。
+   * 显式填写时优先于六轴 `direction`；非法（非有限 / 零向量）时回退 `direction`。
+   * 与 `direction` 同义（不是新的走线字段，仅本地存储更精确方向）。
+   */
+  localDirection?: Vec3
+  /** 用户本地备注（仅本地元数据，不参与后端走线 JSON） */
+  note?: string
+  /** 用户已核对当前局部接口位置、方向及类型；编辑这些字段后须重新确认。 */
+  confirmed?: boolean
 }
 
 // ───────────────────────────── 场景对象 ─────────────────────────────
@@ -343,7 +358,7 @@ export const CABLE_STRATEGY_META: Record<CableRouteStrategy, { label: string }> 
   backboard: { label: '背板后走线' },
 }
 
-/** 线径档位：粗线 / 细线（影响渲染管径、最小弯曲半径与线缆间距检查） */
+/** 线径档位：粗线 / 细线（影响渲染管径、净空与线缆间距检查） */
 export type CableThickness = 'thick' | 'thin'
 
 export const CABLE_THICKNESS_META: Record<
@@ -354,7 +369,7 @@ export const CABLE_THICKNESS_META: Record<
     diameterM: number
     /** 三维渲染半径（米，约按真实半径 1.7 倍放大以便观察，界面需标注） */
     renderRadiusM: number
-    /** 最小弯曲半径参考值（米） */
+    /** 旧场景的弯曲半径参考值（米）；产品走线不按粗细档位限制转弯。 */
     minBendRadiusM: number
   }
 > = {
@@ -382,6 +397,16 @@ export interface CableRoute {
   smooth?: boolean
   /** 本条路径实际采用的走线策略（由线材类型推导；用于「类型变更后需重算」判定） */
   strategy?: CableRouteStrategy
+  /** 真实后端沿已验证连续曲线积分得到的长度，不能重新平滑后沿用。 */
+  pathLengthM?: number
+  verification?: {
+    sceneId: string
+    sceneRevision: number
+    status: 'valid' | 'failed'
+    reasonCode?: string
+    supportStatus: 'verified' | 'not_evaluated'
+    maxUnsupportedSpanM?: number | null
+  }
 }
 
 export type CableRouteStatus = 'existing' | 'planned' | 'adjusted' | 'stale' | 'conflict'
@@ -425,7 +450,7 @@ export interface CableConnection {
    * 未规划过的线缆没有该字段。
    */
   originalRoute?: CableRoute
-  /** 用户填写的实际线长（米；undefined = 未填写） */
+  /** 已知的现有线材长度（米；undefined = 未知），不作为规划必填项。 */
   actualLengthM?: number
   /** 用户填写的预留长度（米；undefined = 按 0 处理） */
   reserveLengthM?: number
@@ -565,6 +590,8 @@ export interface Project {
   /** 当前场景配置（工作台实时编辑并持久化） */
   objects: SceneObject[]
   cables: CableConnection[]
+  /** Backend tray recommendations from the same validated cable scene revision. */
+  cableTrayAnalysis?: CableTrayAnalysis
   /** 空间整理偏好（打字活动区 / 水杯活动区 / 偏好收纳分区等，用户可调整） */
   organization?: OrganizationPreferences
   /** 最近一次接受的整理方案来源（用于「保存方案」记录布局来源；未记录 = undefined） */

@@ -73,6 +73,10 @@ class Wall(TypedDict):
     bounds_xy_m: list[float]
 
 
+class LayoutConstraints(TypedDict):
+    min_item_gap_m: float
+
+
 class Scene(TypedDict):
     schema_version: str
     scene_id: str
@@ -88,6 +92,7 @@ class Scene(TypedDict):
     exposure_zones: list[BoxZone]
     routing_graph: dict
     cables: list[dict]
+    constraints: NotRequired[LayoutConstraints]
 
 
 class LayoutCheck(TypedDict):

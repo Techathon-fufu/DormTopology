@@ -20,6 +20,7 @@ import {
   resolveCableVisibility,
   resolveEndpointDirection,
   resolveEndpointPosition,
+  validateCableConnection,
 } from '@/scene/cables'
 import { DESK_GAP } from '@/scene/sceneValidation'
 import { polylineLength } from '@/scene/geometry'
@@ -28,13 +29,13 @@ import { polylineLength } from '@/scene/geometry'
  * 走线路径：平滑采样 + 障碍检查 + 规则式演示规划。
  *
  * 诚实标注：
- * - Catmull-Rom 曲线只用于「渲染」与「长度估算」；避让结论来自对平滑采样点的障碍检查；
- * - 该检查是本地几何规则（采样点 vs 避让区 / 物品包围盒 / 桌板），不是真实寻路算法；
+ * - 演示路径以同一条 Catmull-Rom 曲线采样，做长度、局部弯曲和线径扫掠检查；
+ * - 该检查是本地几何规则，仍有端点引出和采样近似，不替代后端连续曲线与支撑验证；
  * - 规划器在少量候选节点链中挑选第一条无碰撞链（演示路径优先经过桌边 / 桌底 / 立柱 / 出线孔），
  *   全部候选失败时返回问题清单，由用户调整路径节点。
  */
 
-const SAMPLE_DIVISIONS = 64
+const SAMPLE_DIVISIONS = 128
 
 /**
  * 地面穿透保护：Catmull-Rom 在「竖直下落 → 地面长走线」转角处会轻微回弹到 y<0，
@@ -72,14 +73,16 @@ export function sampleCurve(points: Vec3[], divisions = SAMPLE_DIVISIONS): Vec3[
 }
 
 /** 平滑路径长度估算（米） */
-export function estimateCableLength(points: Vec3[]): number {
-  return polylineLength(sampleCurve(points))
+export function estimateCableLength(points: Vec3[], smooth = true): number {
+  return polylineLength(smooth ? sampleCurve(points) : points)
 }
 
 // ───────────────────────────── 障碍检查 ─────────────────────────────
 
 export interface CableCheckInput {
   points: Vec3[]
+  /** Backend-verified paths are already sampled and must not be fitted again. */
+  smooth?: boolean
   from: CableEndpoint
   to: CableEndpoint
   objects: SceneObject[]
@@ -94,23 +97,7 @@ export interface CableCheckInput {
   selfCableId?: string
   /** 当前线缆线径（未提供 selfCableId 时使用；缺省按粗线） */
   thickness?: CableThickness
-}
-
-function pointInZoneXZ(p: Vec3, zone: CableAvoidZone, margin: number): boolean {
-  return (
-    p[0] >= zone.rect.x0 - margin &&
-    p[0] <= zone.rect.x1 + margin &&
-    p[2] >= zone.rect.z0 - margin &&
-    p[2] <= zone.rect.z1 + margin
-  )
-}
-
-function pointHitsZone(p: Vec3, zone: CableAvoidZone): boolean {
-  return pointInZoneXZ(p, zone, 0.012) && p[1] >= zone.y0 - 0.01 && p[1] <= zone.y1
-}
-
-function pointHitsObject(p: Vec3, o: SceneObject): boolean {
-  return segmentHitsObject(p,p,o,.012)
+  cable?: CableConnection
 }
 
 function dist3(a: Vec3, b: Vec3): number {
@@ -118,12 +105,12 @@ function dist3(a: Vec3, b: Vec3): number {
 }
 
 /**
- * 对平滑后的路径做障碍检查（避让区 / 物品 / 桌板 / 房间边界），
+ * 对展示路径做本地连接、长度及几何检查（物品 / 桌板 / 房间边界），
  * 返回采样点、长度与问题清单（去重：同类问题仅保留第一条位置）。
  */
 export function checkCableRoute(input: CableCheckInput): CableCheckResult {
-  const { points, from, to, objects, room, avoidZones } = input
-  const samples = sampleCurve(points)
+  const { points, from, to, objects, room } = input
+  const samples = input.smooth === false ? points : sampleCurve(points)
   const lengthM = polylineLength(samples)
   const issues: CableCheckIssue[] = []
   const seen = new Set<string>()
@@ -140,31 +127,40 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
   const toPos = resolveEndpointPosition(objects, to)
   const fromObject = objects.find((o) => o.id === from.objectId)
   const toObject = objects.find((o) => o.id === to.objectId)
+  const cable = input.cable ?? input.cables?.find((c) => c.id === input.selfCableId)
+  const thickness = cable ? resolveCableThickness(cable) : input.thickness ?? 'thick'
+  const physical = CABLE_THICKNESS_META[thickness]
+  const radius = physical.diameterM / 2
+  const connection = validateCableConnection({ objects, cables: input.cables ?? [] }, from, to, {
+    excludeCableId: cable?.id ?? input.selfCableId,
+    kind: cable?.kind,
+  })
+  if (!connection.ok) addIssue('endpoint', fromPos, connection.reason)
+  if (samples.length < 2 || !Number.isFinite(lengthM) || lengthM <= 0.000001) {
+    addIssue('cable', fromPos, '路径必须包含至少两个不同的有效端点')
+  }
+  if (cable) {
+    const reserve = cable.reserveLengthM ?? 0
+    if (!Number.isFinite(reserve) || reserve < 0) addIssue('cable', fromPos, '预留长度必须是非负的有限数值')
+    if (cable.actualLengthM !== undefined) {
+      if (!Number.isFinite(cable.actualLengthM) || cable.actualLengthM <= 0) {
+        addIssue('cable', fromPos, '实际线长必须是大于零的有限数值')
+      } else if (cable.actualLengthM + 0.0005 < lengthM + reserve) {
+        addIssue('cable', fromPos, `线长不足：路径及预留需要 ${Math.ceil((lengthM + reserve) * 1000)} mm，实际只有 ${Math.round(cable.actualLengthM * 1000)} mm`)
+      }
+    }
+  }
 
-  // 端点位于避让区内时豁免该区（如键盘本身就放在打字活动区里）
-  const activeZones = avoidZones.filter(
-    (z) => !pointInZoneXZ(fromPos, z, 0.06) && !pointInZoneXZ(toPos, z, 0.06),
-  )
-  const testObjects = objects.filter(
-    (o) => o.visible && o.id !== from.objectId && o.id !== to.objectId,
-  )
-  // 端点 55mm 范围内视为「出线空间」：插头附近线缆贴靠邻近物品属正常，不判定相交
-  const nearEndpoint = (p: Vec3) => dist3(p, fromPos) < 0.055 || dist3(p, toPos) < 0.055
+  const testObjects = objects.filter((o) => o.visible)
 
-  for (const p of samples) {
+  for (let index = 0; index < samples.length; index += 1) {
+    const p = samples[index]
+    const previous = samples[Math.max(0, index - 1)]
     // 1) 房间边界
     if (p[1] < -0.002) addIssue('bounds', p, '路径低于地面（越界）')
     if (p[1] > room.height - 0.005) addIssue('bounds', p, '路径超过层高（越界）')
     if (Math.abs(p[0]) > room.length / 2 - 0.004) addIssue('bounds', p, '路径超出房间左右边界')
     if (p[2] < -0.004 || p[2] > room.width - 0.004) addIssue('bounds', p, '路径超出房间前后边界')
-
-    // 2) 避让区（立体区间）
-    for (const z of activeZones) {
-      if (pointHitsZone(p, z)) {
-        addIssue('zone', p, `与「${z.label}」相交（避让区）`)
-        break
-      }
-    }
 
     // 3) 桌板（允许从出线孔穿过）
     if (
@@ -176,18 +172,18 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
       p[1] < y + 0.002
     ) {
       const nearHole = room.cableHoles.some(
-        (h) => Math.hypot(p[0] - h.position[0], p[2] - h.position[2]) < h.diameter / 2 + 0.03,
+        (h) => Math.hypot(p[0] - h.position[0], p[2] - h.position[2]) + radius + 0.001 < h.diameter / 2,
       )
       if (!nearHole) addIssue('slab', p, '路径穿过桌板（可从出线孔走线）')
     }
 
-    // 4) 物品包围盒（不含线缆两端设备；端点附近为出线空间）
-    if (!nearEndpoint(p)) {
-      for (const o of testObjects) {
-        if (pointHitsObject(p, o)) {
-          addIssue('object', p, `与「${o.name}」相交`)
-          break
-        }
+    // Local demo egress exemption applies only to the owning endpoint object.
+    for (const o of testObjects) {
+      if (o.id === from.objectId && dist3(p, fromPos) < 0.055 && dist3(previous, fromPos) < 0.055) continue
+      if (o.id === to.objectId && dist3(p, toPos) < 0.055 && dist3(previous, toPos) < 0.055) continue
+      if (segmentHitsObject(previous, p, o, radius + 0.001)) {
+        addIssue('object', p, `与「${o.name}」相交（含线径净空）`)
+        break
       }
     }
   }
@@ -722,6 +718,7 @@ export function planCableRoute(
   objects: SceneObject[],
   room: RoomConfig,
   avoidZones: CableAvoidZone[],
+  cables: CableConnection[] = [],
 ): PlanCableResult {
   const nodes = computeRouteNodes(room)
   const map = routeNodeMap(nodes)
@@ -739,6 +736,9 @@ export function planCableRoute(
       objects,
       room,
       avoidZones,
+      cable,
+      cables,
+      selfCableId: cable.id,
     })
     if (result.ok) {
       return {

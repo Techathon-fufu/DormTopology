@@ -1,17 +1,22 @@
 import * as THREE from 'three'
 import type { RoomConfig, Vec3 } from '@/types/project'
 import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
+import { FURNITURE_OFFSET, hasFixedFurniture } from './fixedFurniture'
 
 /**
- * 桌体 GLB 模型（frontend/public/models/dorm_desk_body.glb + 三只抽屉分离件，源资产
+ * 桌体 GLB 模型（frontend/public/models/dormdesk_parts/dormdesk_body.glb + 三只抽屉分离件，源资产
  * Prefabmodel/dormdesk_parts/）接入：配置、归一化与实测锚点。
  *
+ * 固定家具（hasFixedFurniture）使用 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
+ * （FURNITURE_OFFSET），四份 GLB 共享同一父节点变换；本模块的通用归一化与锚点工具
+ * 保留给历史资产检查及独立模型导入。
+ *
  * 口径说明（与 sceneValidation / deskModelStore 的分工）：
- * - 逻辑坐标（吸附面 / 碰撞边界 / 校验）仍以 RoomConfig 为单一事实来源；
+ * - 固定家具的支撑和碰撞由 fixedFurniture 提供，不依赖异步加载；
  * - GLB 加载后统一换算为米制，并做底部对齐 / 居中 / 坐标轴校正（见下方配置项）；
  * - 模型若带可识别的命名节点（桌面 / 搁板 / 出线孔），实测高度以「锚点」形式经
  *   deskModelStore.metrics 提供给交互层（拖拽 / 校验 / 吸附优先采用实测面）；
- *   整理分区与规则式布局当前仍按 RoomConfig 计算（见 frontend/docs/desk-model.md 已知限制）。
+ *   历史参数化项目保留 RoomConfig 几何（见 frontend/docs/desk-model.md）。
  *
  * 本模块为纯计算（依赖 three 与 RoomConfig），可在无浏览器环境下单测。
  */
@@ -49,7 +54,7 @@ export interface DeskModelConfig {
 /**
  * 默认配置：仓库内置的整组「上床下桌」固定家具（无抽屉桌体；抽屉为独立分离件，
  * 清单与运动学见 scene/dormDeskDrawers.ts）。运行时副本
- * frontend/public/models/dorm_desk_body.glb（由 scripts/sync-desk-parts.ts 从
+ * frontend/public/models/dormdesk_parts/dormdesk_body.glb（由 scripts/sync-desk-parts.ts 从
  * Prefabmodel/dormdesk_parts/dormdesk_body.glb 同步）。
  *
  * 摆放口径（固定模型，实测见 frontend/docs/desk-model.md）：
@@ -58,9 +63,15 @@ export interface DeskModelConfig {
  * - x 居中到桌面中心，背面（最小 z）贴后墙 z = 0；
  * - 桌面锚点（Desk_Top_Main / Desk_Top_L_Return）对齐到逻辑桌面高度 room.desk.height，
  *   使物品摆放面与模型桌面一致（模型标称 770mm → 对齐后整体下沉约 20mm，底脚藏于地面内）。
+ *
+ * 注：`Prefabmodel/dormdesk_parts/` 的拆分版资产（无抽屉桌体 + 三个独立抽屉）
+ * 共用同一建模坐标系与世界原点，抽屉为可抽拉分离件。固定家具由 mountDeskModel 直接施加
+ * FURNITURE_OFFSET（四份 GLB 共享同一父节点变换），不再走独立归一化；
+ * 每个抽屉分离件套用桌体归一化后的同一变换矩阵（见 DormDeskModel），因此抽屉与柜体
+ * 共享归一化矩阵，不会错位（见 docs/data_contract.md 第 1.1 节）。
  */
 export const DORM_DESK_MODEL_CONFIG: DeskModelConfig = {
-  url: 'models/dorm_desk_body.glb',
+  url: 'models/dormdesk_parts/dormdesk_body.glb',
   unitScale: 1,
   axisRotationY: 0,
   fitWidthM: null,
@@ -246,6 +257,7 @@ export function configDeskTopY(room: RoomConfig): number {
 
 /** RoomConfig 口径的搁板上表面高度（与 RoomShell / sceneValidation 一致） */
 export function configShelfTopY(room: RoomConfig): number {
+  if (hasFixedFurniture(room)) return 1.46
   return room.desk.height + room.shelf.heightAboveDesk + SHELF_THICKNESS / 2
 }
 
@@ -287,6 +299,14 @@ export interface MountedDeskModel {
 
 /** 挂载前完整归一化流程：单位换算 + 轴校正 → 预提取锚点 → 归一化 → 最终锚点 → 指标 */
 export function mountDeskModel(root: THREE.Object3D, config: DeskModelConfig, room: RoomConfig): MountedDeskModel {
+  if (hasFixedFurniture(room)) {
+    root.position.set(...FURNITURE_OFFSET)
+    root.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(root)
+    const normalize: DeskNormalizeResult = { size: box.getSize(new THREE.Vector3()).toArray() as Vec3, minY: box.min.y, appliedScale: 1, deskTopShiftY: FURNITURE_OFFSET[1], alignUsed: 'deskTop' }
+    const anchors = extractDeskAnchors(root, config.anchorPatterns)
+    return { normalize, anchors, metrics: resolveDeskSurfaceMetrics(room, anchors, normalize) }
+  }
   if (config.unitScale !== 1) root.scale.multiplyScalar(config.unitScale)
   if (config.axisRotationY !== 0) root.rotation.y += config.axisRotationY
   root.updateMatrixWorld(true)

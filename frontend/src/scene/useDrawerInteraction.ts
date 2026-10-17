@@ -103,31 +103,39 @@ export function useDrawerInteraction(
       useDrawerStore.getState().setProgress(spec.id, clampDrawerProgress(progress))
     }
 
-    const finish = () => {
+    // 结束会话：仅对同一指针 / 无指针（Escape / cancel）生效；幂等，避免 pointerup 与
+    // pointercancel / Escape 竞态导致重复吸附或未移动也切换抽屉。
+    const finish = (options: { toggleIfUnmoved: boolean; pointerId?: number }) => {
+      if (options.pointerId !== undefined && options.pointerId !== pointerId) return
+      if (cleanupRef.current === null) return // 已结束：保证幂等
       cleanup()
       const current = useDrawerStore.getState()
-      // 松手（含 Esc / 触摸取消）吸附到最近吸附点；未移动视为单击：开 / 关切换
       if (moved) current.snapAfterDrag(spec.id)
-      else current.toggle(spec.id)
+      // 未移动：仅真正的 click 完成（pointerup）才切换；pointercancel / Escape 不切换。
+      else if (options.toggleIfUnmoved) current.toggle(spec.id)
       current.endDrag()
       document.body.style.cursor = 'auto'
     }
 
+    const onPointerMove = (ev: PointerEvent) => onMove(ev)
+    const onPointerUp = (ev: PointerEvent) => finish({ toggleIfUnmoved: true, pointerId: ev.pointerId })
+    const onPointerCancel = (ev: PointerEvent) => finish({ toggleIfUnmoved: false, pointerId: ev.pointerId })
+
     const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') finish()
+      if (ev.key === 'Escape') finish({ toggleIfUnmoved: false })
     }
 
     const cleanup = () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', finish)
-      window.removeEventListener('pointercancel', finish)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerCancel)
       window.removeEventListener('keydown', onKeyDown)
       cleanupRef.current = null
     }
 
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', finish)
-    window.addEventListener('pointercancel', finish)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerCancel)
     window.addEventListener('keydown', onKeyDown)
     cleanupRef.current = cleanup
   }

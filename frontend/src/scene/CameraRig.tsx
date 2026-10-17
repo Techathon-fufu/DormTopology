@@ -3,16 +3,20 @@ import { OrbitControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useDrawerStore } from '@/state/drawerStore'
+import { useObjectResizeStore } from '@/state/objectResizeStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
+import type { RoomConfig } from '@/types/project'
 
 const PRESETS: Record<ViewPreset, { pos: [number, number, number]; target: [number, number, number] }> = {
   persp: { pos: [1.35, 1.2, 1.9], target: [0, 0.78, 0.35] },
   front: { pos: [0, 1.05, 3.0], target: [0, 0.95, 0.4] },
   top: { pos: [0, 2.7, 0.46], target: [0, 0.75, 0.45] },
-  left: { pos: [-2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
+  // 从室内斜前方看抽屉，避免左墙遮挡操作面。
+  left: { pos: [-1.05, 1.35, 1.95], target: [0.55, 0.6, 0.7] },
   right: { pos: [2.6, 1.3, 0.7], target: [0, 0.9, 0.45] },
   desk: { pos: [0.75, 1.9, 2.0], target: [0, 0.85, 0.45] },
 }
+const FIXED_PERSPECTIVE = { pos: [.05, 1.45, 2.8], target: [.07, .96, .35] } as const
 
 /**
  * 视角预设 + 轨道控制：
@@ -27,8 +31,10 @@ export function CameraRig({
   preset,
   zoomOut = 1,
   targetShiftY = 0,
+  furnitureModel,
 }: {
   preset: ViewPreset
+  furnitureModel?: RoomConfig['furnitureModel']
   /** 距离倍数（>1 拉远）；1 = 工作台默认取景 */
   zoomOut?: number
   /** 目标点高度微调（米） */
@@ -36,32 +42,38 @@ export function CameraRig({
 }) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const camera = useThree((s) => s.camera)
+  const size = useThree((s) => s.size)
   const nonce = useWorkspaceStore((s) => s.viewNonce)
   const objectDragActive = useWorkspaceStore((s) => s.drag !== null)
   const drawerDragActive = useDrawerStore((s) => s.draggingId !== null)
+  const resizeActive = useObjectResizeStore((s) => s.preview !== null)
+  const currentPreset = furnitureModel === 'dormdesk-v1' && preset === 'persp'
+    ? FIXED_PERSPECTIVE : PRESETS[preset]
 
   useEffect(() => {
-    const p = PRESETS[preset]
+    // Approach the fixed L desk from the front so its ladder does not obscure the workspace.
+    const p = currentPreset
+    const distanceScale = zoomOut * Math.max(1, 1.1 / (size.width / Math.max(1, size.height)))
     const tx = p.target[0]
     const ty = p.target[1] + targetShiftY
     const tz = p.target[2]
     camera.position.set(
-      tx + (p.pos[0] - p.target[0]) * zoomOut,
-      ty + (p.pos[1] - p.target[1]) * zoomOut,
-      tz + (p.pos[2] - p.target[2]) * zoomOut,
+      tx + (p.pos[0] - p.target[0]) * distanceScale,
+      ty + (p.pos[1] - p.target[1]) * distanceScale,
+      tz + (p.pos[2] - p.target[2]) * distanceScale,
     )
     const controls = controlsRef.current
     if (controls) {
       controls.target.set(tx, ty, tz)
       controls.update()
     }
-  }, [preset, nonce, camera, zoomOut, targetShiftY])
+  }, [currentPreset, nonce, camera, size.width, size.height, zoomOut, targetShiftY])
 
   return (
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enabled={!objectDragActive && !drawerDragActive}
+      enabled={!objectDragActive && !drawerDragActive && !resizeActive}
       enableDamping
       dampingFactor={0.08}
       enablePan
@@ -70,7 +82,7 @@ export function CameraRig({
       minDistance={0.5}
       maxDistance={8}
       maxPolarAngle={Math.PI / 2 - 0.02}
-      target={[0, 0.9, 0.45]}
+      target={[currentPreset.target[0], currentPreset.target[1] + targetShiftY, currentPreset.target[2]]}
     />
   )
 }

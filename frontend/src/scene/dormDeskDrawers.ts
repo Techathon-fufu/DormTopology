@@ -3,7 +3,7 @@ import * as THREE from 'three'
 /**
  * 抽屉推拉（桌柜分离模型）运行时：部件清单、运动学纯函数与悬停高亮。
  *
- * 模型来源 `Prefabmodel/dormdesk_parts/`（清单 `drawers.manifest.json`：`pull_axis = -x`、
+ * 模型来源 `models/dormdesk_parts/`（清单 `drawers.manifest.json`：`pull_axis = -x`、
  * 坐标与桌体同一建模坐标系，未施加平移）；运行时副本由 `scripts/sync-desk-parts.ts`
  * 同步（含材质注入）。设计与交互口径见 `frontend/docs/drawer-interaction.md`。
  *
@@ -23,9 +23,9 @@ export interface DormDeskDrawerSpec {
 
 /** 三只抽屉的运行时清单（顺序 = 自上而下语义：下 / 中 / 上层） */
 export const DORM_DESK_DRAWERS: DormDeskDrawerSpec[] = [
-  { id: 'bot', url: 'models/dorm_desk_drawer_bottom.glb', label: '下层抽屉', travelM: 0.3 },
-  { id: 'mid', url: 'models/dorm_desk_drawer_middle.glb', label: '中层抽屉', travelM: 0.3 },
-  { id: 'top', url: 'models/dorm_desk_drawer_top.glb', label: '上层抽屉', travelM: 0.3 },
+  { id: 'bot', url: 'models/dormdesk_parts/drawer_bottom.glb', label: '下层抽屉', travelM: 0.3 },
+  { id: 'mid', url: 'models/dormdesk_parts/drawer_middle.glb', label: '中层抽屉', travelM: 0.3 },
+  { id: 'top', url: 'models/dormdesk_parts/drawer_top.glb', label: '上层抽屉', travelM: 0.3 },
 ]
 
 /** 滑出方向（模型局部 -x）：抽屉前板 / 拉手槽位于 x 最小侧（与清单 pull_axis=-x 一致） */

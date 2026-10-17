@@ -183,6 +183,41 @@ class CompoundRoutingTests(unittest.TestCase):
         self.assertEqual(route["path_points"][0], [0.1, 0.1, 0.1])
         self.assertEqual(route["path_points"][-1], [0.75, 0.1, 0.1])
 
+    def test_external_ports_within_clearance_keep_finite_host_leadouts(self):
+        for offset in (0.001, 0.002):
+            with self.subTest(offset=offset):
+                scene = scene_for()
+                for item in scene["items"]:
+                    item["collision"] = {
+                        "type": "compound",
+                        "parts": [box_part((0.1, 0.1, 0.1), (0.0, 0.05, 0.0))],
+                    }
+                scene["items"][0]["ports"][0]["local_position"][2] += offset
+                scene["items"][1]["ports"][0]["local_position"][0] -= offset
+                route = plan_routes(scene)["cables"][0]
+                self.assertEqual(route["status"], "valid")
+                self.assertAlmostEqual(route["path_points"][0][0], 0.1 + offset)
+                self.assertAlmostEqual(route["path_points"][-1][0], 0.75 - offset)
+
+    def test_external_host_does_not_exempt_a_separate_part_ahead(self):
+        scene = scene_for()
+        source = scene["items"][0]
+        source["size_m"] = [0.1, 0.1, 0.3]
+        source["ports"][0]["local_position"][2] += 0.002
+        source["collision"] = {
+            "type": "compound",
+            "parts": [
+                box_part((0.1, 0.1, 0.1), (0.0, 0.05, 0.0)),
+                box_part((0.1, 0.1, 0.05), (0.0, 0.05, 0.080)),
+            ],
+        }
+        for minimum_radius in (0, 0.02):
+            with self.subTest(minimum_radius=minimum_radius):
+                scene["cables"][0]["min_bend_radius_m"] = minimum_radius
+                route = plan_routes(scene)["cables"][0]
+                self.assertEqual(route["reason_code"], "endpoint_blocked")
+                self.assertEqual(route["path_points"], [])
+
     def test_smoothed_curve_that_enters_a_compound_solid_is_rejected(self):
         scene = scene_for()
         scene["items"].append(compound_item(

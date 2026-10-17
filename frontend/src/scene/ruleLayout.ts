@@ -1,4 +1,5 @@
 import { describePrimitive } from './primitiveGeometry'
+import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
 import { localCollision, objectExtent, objectFootprint, objectToWorld } from './collisionGeometry'
 import { allowsFloorPlacement, monitorViewRegion, printerSideRegions } from './organizationPolicy'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
@@ -338,10 +339,8 @@ export function estimateDeskFreeArea(
   poses: Array<{ object: SceneObject; position: Vec3 }>,
 ): number {
   const desk = room.desk
-  const dx0 = -desk.width / 2
-  const dx1 = desk.width / 2
-  const dz0 = 0.05
-  const dz1 = 0.05 + desk.depth
+  const surfaces = hasFixedFurniture(room) ? furnitureSurfaces(room).filter((s) => s.kind === 'desk').map((s) => s.rect)
+    : [{ x0: -desk.width / 2, x1: desk.width / 2, z0: .05, z1: .05 + desk.depth }]
   let occupied = 0
   for (const { object, position } of poses) {
     if (!object.visible) continue
@@ -355,13 +354,13 @@ export function estimateDeskFreeArea(
     if (contained) continue // 收纳在容器内的小件按容器面积一并估算，避免重复计入
     // 按真实碰撞足迹计入占用：台灯 / 显示器比声明盒窄，声明盒会高估占用面积。
     const footprint = objectFootprint(object, position)
-    const x0 = Math.max(dx0, footprint.x0)
-    const x1 = Math.min(dx1, footprint.x1)
-    const z0 = Math.max(dz0, footprint.z0)
-    const z1 = Math.min(dz1, footprint.z1)
-    if (x1 > x0 && z1 > z0) occupied += (x1 - x0) * (z1 - z0)
+    for (const s of surfaces) {
+      const x0 = Math.max(s.x0, footprint.x0), x1 = Math.min(s.x1, footprint.x1)
+      const z0 = Math.max(s.z0, footprint.z0), z1 = Math.min(s.z1, footprint.z1)
+      if (x1 > x0 && z1 > z0) occupied += (x1 - x0) * (z1 - z0)
+    }
   }
-  return Math.max(0, desk.width * desk.depth - occupied)
+  return Math.max(0, surfaces.reduce((a, s) => a + (s.x1 - s.x0) * (s.z1 - s.z0), 0) - occupied)
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100

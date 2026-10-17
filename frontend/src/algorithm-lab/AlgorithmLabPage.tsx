@@ -7,6 +7,7 @@ import { parseBundle, parseManifest, type Bundle, type FixtureCase, type Issue, 
 import './algorithm-lab.css'
 
 const labels: Record<string, string> = {
+  item_spacing: '物品间距不足',
   'packing-success': '整理 · 全部完成', 'packing-partial': '整理 · 部分完成',
   'packing-infeasible': '整理 · 不可行', 'packing-revision-2': '整理 · 版本 2',
   'routing-slot': '走线 · 穿线孔', 'routing-backboard': '走线 · 背板后',
@@ -218,7 +219,7 @@ export function AlgorithmLabPage() {
         <section className="lab-section" data-testid="issues">
           <div className="lab-section-title"><h2>问题</h2><span>{issues.length}</span></div>
           {issues.length ? <ul className="lab-issues">{issues.map((issue, index) => <li key={`${issue.entity_id}-${issue.code}-${index}`}>
-            <button disabled={!shown?.items.some(current => current.id === issue.entity_id)} onClick={() => setSelected(issue.entity_id)}>{issue.entity_id ?? '场景'}<code>{issue.code}</code></button>
+            <button disabled={!shown?.items.some(current => current.id === issue.entity_id)} onClick={() => setSelected(issue.entity_id)}>{issue.entity_id ?? '场景'}<code>{labels[issue.code] ?? issue.code}</code></button>
             <p>{issue.message}</p>
           </li>)}</ul> : <p className="lab-empty">{bundle ? '无报告问题' : '等待场景'}</p>}
         </section>

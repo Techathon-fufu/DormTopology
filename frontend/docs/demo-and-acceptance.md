@@ -1,6 +1,6 @@
 # 演示与验收说明（一键演示 · 流程检查 · 能力边界）
 
-对应交付轮次：**演示与验收收尾、工作台复检、GLB 管线、服务适配、线材配置与候选方案对比**（2026-10-17，0.4–0.8 阶段）。本文档保留产品演示流程各阶段的验收结论与后续接入位置；运行命令以 [../README.md](../README.md) 为准，仓库字段与坐标约定以 [数据契约](../../docs/data_contract.md) 为准。
+**历史记录**：对应交付轮次为**演示与验收收尾、工作台复检、GLB 管线、服务适配、线材配置与候选方案对比**（2026-10-17，0.4–0.8 阶段）。本文档第 2 节起保留各阶段当时的演示、模式与验收结论，不表示这些旧模式当前仍可用。当前启动方式见下节与 [../README.md](../README.md)，服务行为以[前后端服务接入](api-integration.md)为准，仓库字段与坐标约定以 [数据契约](../../docs/data_contract.md) 为准。
 
 独立 `/algorithm-lab` 的 14 组真实领域样例与 Playwright 自动检查另见[算法可视化验证](../../docs/algorithm_visual_testing.md)。下文产品交互的历史手动验证和状态层冒烟不计为完整产品流程的自动化覆盖，也不代表真实后端、Rodin 或实际手机验收完成。
 
@@ -8,10 +8,12 @@
 
 ## 1. 启动方式
 
+当前整理和理线必须连接后端。先按[前后端服务接入](api-integration.md#1-本地运行)启动 FastAPI，再从仓库根目录启动前端：
+
 ```bash
 cd frontend
 npm install          # 首次；Node.js ≥ 20，依赖版本已固定
-npm run dev          # http://localhost:5173
+VITE_API_MODE=mock npm run dev  # http://localhost:5173
 ```
 
 检查命令（可重复执行）：
@@ -21,8 +23,9 @@ npm run typecheck    # tsc --noEmit
 npm run build        # tsc --noEmit && vite build
 ```
 
-- 默认 `VITE_API_MODE=mock`：产品流程中的识别 / 模型生成 / 布局与走线规划为本地模拟与规则计算，不调用外部接口。
-- `VITE_API_MODE=real` 使用已实现的 HTTP 适配层和长任务轮询，仍待真实后端联调；兼容旧变量 `VITE_SERVICE_MODE=mock|service`。本地 Mock 演示不需要后端与网络。
+- 整理、理线及遗留布局固定请求应用后端；整理与理线已接入真实算法，后端不可用时显示实际错误，网页不提供规则演示规划或运行时模式切换。遗留布局端点仍返回 HTTP 501。
+- 默认 `VITE_API_MODE=mock` 仅让识别与模型生成使用明确标记的模拟数据；`real` 会请求尚未完成的供应商应用接口并如实失败。旧变量 `VITE_SERVICE_MODE=mock|service` 仍可配置这两项供应商能力，`VITE_API_MODE` 优先。
+- `VITE_ORGANIZATION_API_MODE`、`VITE_CABLE_API_MODE` 和浏览器 `dormtopology.api-mode-override` 已不再生效。内置示例导览中的整理和理线也需要后端；下列历史验收里的规则规划与模式切换不能作为当前操作指引。
 - Rodin 等第三方凭证只在后端持有；前端不配置、不直接调用供应商接口。
 
 ## 2. 演示操作顺序
@@ -150,7 +153,7 @@ npm run build        # tsc --noEmit && vite build
 
 | 要求（任务清单口径） | 结论 | 说明与依据 |
 | --- | --- | --- |
-| 加载 `models/dorm_desk_assembled.glb`，开发与构建后路径正确 | 管线就绪（资产未入库） | `frontend/public/models/dorm_desk_assembled.glb` 经 `import.meta.env.BASE_URL` 解析（dev `/models/...`、构建复制到 `dist/models/`）；仓库当前无该文件，未伪造资产 |
+| 加载 `models/dormdesk_body.glb`，开发与构建后路径正确 | 管线就绪（资产未入库） | `frontend/public/models/dormdesk_body.glb` 经 `import.meta.env.BASE_URL` 解析（dev `/models/...`、构建复制到 `dist/models/`）；仓库当前无该文件，未伪造资产 |
 | 桌体封装为独立组件，支持位置 / 缩放 / 旋转 / 显隐 / 加载中 / 失败状态 | 通过 | `scene/DormDeskModel.tsx`（position / rotationY / visible 属性 + 状态提示 `ui/workspace/DeskModelNotice.tsx`；工具栏显示 / 隐藏开关） |
 | 米制统一、居中 / 底部对齐 / 坐标轴校正 | 通过 | `scene/deskModel.ts` 归一化（unitScale / axisRotationY / fitWidthM / centerXZ / verticalAlign / offset），冒烟覆盖各分支 |
 | 按桌面 / 书架 / 穿线孔实际位置更新吸附面与碰撞边界 | 通过（交互层） | 桌面 / 搁板吸附、悬空校验、射线命中优先采用命名锚点实测值（`sceneValidation` 可选 `metrics`）；整理分区与规则布局仍按 RoomConfig（文档列明限制） |
@@ -159,7 +162,7 @@ npm run build        # tsc --noEmit && vite build
 | GLB 逻辑不散落工作台页面 | 通过 | 集中在 `scene/`（deskModel / modelLoader / importModel / DormDeskModel / ParametricDesk）与 `state/deskModelStore.ts`；页面仅组装 |
 | 不删除示例项目与 mock 数据 | 通过 | 示例项目 / mock / 演示流程未改动；回退路径继续以参数化几何完成演示 |
 
-**未完成（如实声明）**：`dorm_desk_assembled.glb` 真实文件不在仓库，视觉验收（桌面比例、地面高度、真实吸附）需资产入库后复核；独立单品 GLB 与 Rodin 未接入。
+**未完成（如实声明）**：`dormdesk_body.glb` 真实文件不在仓库，视觉验收（桌面比例、地面高度、真实吸附）需资产入库后复核；独立单品 GLB 与 Rodin 未接入。
 
 ## 9. 后端服务适配层（第 06 阶段）
 

@@ -4,6 +4,8 @@ from itertools import combinations
 
 from ..geometry import (
     EPSILON,
+    NUMERIC_EPSILON,
+    aabb_from_item,
     aabb_from_zone,
     fits_region,
     item_intersects_box,
@@ -12,6 +14,7 @@ from ..geometry import (
 from ..models import Issue, LayoutCheck, Scene
 from ..plug_mounts import plug_mount_geometry_issues
 from ..rules import validate_scene
+from .spacing import spacing_conflict
 
 WALL_CATEGORIES = {"wall_socket", "wall_network"}
 
@@ -57,9 +60,17 @@ def item_geometry_issues(scene: Scene, item: dict) -> list[Issue]:
                 "No full support region satisfies bounds and clearance height",
             )
         )
+    bounds = aabb_from_item(item)
     for key in ("obstacles", "reserved_zones"):
         for zone in scene[key]:
-            if item_intersects_box(item, aabb_from_zone(zone)):
+            box = aabb_from_zone(zone)
+            if any(
+                min(bounds.maximum[i], box.maximum[i])
+                - max(bounds.minimum[i], box.minimum[i]) <= NUMERIC_EPSILON
+                for i in range(3)
+            ):
+                continue
+            if item_intersects_box(item, box):
                 problems.append(
                     issue(item["id"], "collision", f"Intersects {key} {zone['id']}")
                 )
@@ -77,6 +88,14 @@ def check_layout(scene: Scene) -> LayoutCheck:
                 (
                     issue(a["id"], "collision", f"Overlaps item {b['id']}"),
                     issue(b["id"], "collision", f"Overlaps item {a['id']}"),
+                )
+            )
+        elif spacing_conflict(scene, a, b):
+            gap = scene["constraints"]["min_item_gap_m"]
+            problems.extend(
+                (
+                    issue(a["id"], "item_spacing", f"Needs at least {gap:g} m horizontal clearance from item {b['id']}"),
+                    issue(b["id"], "item_spacing", f"Needs at least {gap:g} m horizontal clearance from item {a['id']}"),
                 )
             )
     geometry_valid = not problems
