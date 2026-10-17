@@ -1,0 +1,36 @@
+{
+ "schema": "dormtopology.colliders/1",
+ "unit": "m",
+ "up": "y",
+ "anchor": "model world coords (desk-origin, as authored)",
+ "models": {
+  "dormdesk_body.glb": {
+   "file": "dormdesk_body.collision.json",
+   "strategy": "convex",
+   "collider_parts": 46,
+   "vertices": 370,
+   "faces": 556
+  },
+  "drawer_bottom.glb": {
+   "file": "drawer_bottom.collision.json",
+   "strategy": "shell",
+   "collider_parts": 9,
+   "vertices": 72,
+   "faces": 108
+  },
+  "drawer_middle.glb": {
+   "file": "drawer_middle.collision.json",
+   "strategy": "shell",
+   "collider_parts": 9,
+   "vertices": 72,
+   "faces": 108
+  },
+  "drawer_top.glb": {
+   "file": "drawer_top.collision.json",
+   "strategy": "shell",
+   "collider_parts": 11,
+   "vertices": 88,
+   "faces": 132
+  }
+ }
+}
