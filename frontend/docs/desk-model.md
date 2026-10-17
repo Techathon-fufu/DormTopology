@@ -11,6 +11,11 @@
 - 路径解析：`scene/deskModel.ts` 的 `resolvePublicAssetUrl()` 基于 `import.meta.env.BASE_URL`，
   子路径部署（`vite.config.ts` 的 `base`）同样正确。
 - 仓库内另存有 Blender 源文件 `objects/dorm_desk.blend`（导出 GLB 的流程未在仓库内自动化，需手工导出）。
+- 注意目录分工：`objects/` 只保留 Blender / OBJ **源文件**；仓库内全部 GLB 资产统一存放在仓库根的
+  **`Prefabmodel/`** 下（低模 prefab 走关键词路由，Rodin 高模以 `_detail` 后缀共存）。
+  但桌体 GLB 是**前端静态资源**，仍需导出后放入 `frontend/public/models/` 才会被加载 —— 这是
+  运行时可访问性的要求（`public/` 会被 Vite 原样复制），与 `Prefabmodel/` 的资产归档职责不同。
+  单品 GLB 若要直接进入场景渲染，同样需要先复制到 `frontend/public/` 下的可访问路径。
 
 ## 2. 模型约定（导出时建议满足）
 

@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.app.adapters.rodin_adapter import RodinClient, RodinAPIError
+from backend.app.adapters.vlm_adapter import ASSET_DIR_NAME
 
 
 DEFAULT_CANDIDATE_ITEMS = {
@@ -139,7 +140,7 @@ def main():
         run_check_balance(client)
         return
 
-    output_dir = PROJECT_ROOT / "objects"
+    output_dir = PROJECT_ROOT / ASSET_DIR_NAME
 
     if args.resume_uuid and args.resume_sub_key:
         print(f"[*] Resuming polling for task {args.resume_uuid}...", flush=True)
@@ -152,7 +153,7 @@ def main():
         print(f"[*] Task completed! Downloading asset to {output_dir / args.resume_name}...", flush=True)
         saved = client.download_assets(args.resume_uuid, output_dir, target_filename=args.resume_name)
         print(f"[+] Download complete: {saved}", flush=True)
-        update_detection_json("item_05", f"objects/{args.resume_name}")
+        update_detection_json("item_05", f"{ASSET_DIR_NAME}/{args.resume_name}")
         return
 
     if args.image:
@@ -193,7 +194,7 @@ def main():
             tier=args.tier,
             use_agentic=not args.gen25,
         )
-        rel_model_path = f"objects/{model_name}"
+        rel_model_path = f"{ASSET_DIR_NAME}/{model_name}"
         update_detection_json(item_key, rel_model_path)
 
 

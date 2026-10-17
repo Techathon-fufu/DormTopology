@@ -34,6 +34,14 @@ PREFAB_KEYWORDS: Dict[str, List[str]] = {
 # Standard parts managed by other teammates (completely excluded from recognition)
 EXCLUDED_STANDARD_PARTS = ["排插", "插排", "接线板"]
 
+# ── 模型资产目录 ────────────────────────────────────────────────────────────
+# 全部 GLB 资产统一放在仓库根的 Prefabmodel/ 下：低模 prefab 与 Rodin 生成的真实资产
+# 同处一个平面目录（后者在重名时带 _detail 后缀），objects/ 只保留 Blender/OBJ 源文件。
+# 仓库内其它模块（脚本、测试）引用的 model_url 也以该相对路径为基准。
+ASSET_DIR_NAME = "Prefabmodel"
+PREFAB_DIR_NAME = ASSET_DIR_NAME
+PREFAB_DIR = Path(__file__).resolve().parents[3] / ASSET_DIR_NAME
+
 # Keywords indicating books / textbooks
 BOOK_KEYWORDS = [
     "书", "课本", "教材", "书籍", "书本", "读物", "册子", "练习册", "作业本", 
@@ -135,7 +143,6 @@ class VLMClient:
     @classmethod
     def resolve_prefab_rel_path(cls, prefab_key: str) -> str:
         """Finds matching model file in Prefabmodel directory supporting naming variations."""
-        prefab_dir = Path(__file__).resolve().parents[3] / "Prefabmodel"
         candidates = [
             f"{prefab_key}.glb",
             f"{prefab_key.replace(' ', '_')}.glb",
@@ -144,9 +151,9 @@ class VLMClient:
             f"{prefab_key.replace('extend', 'expand')}.glb",
         ]
         for c in candidates:
-            if (prefab_dir / c).exists():
-                return f"Prefabmodel/{c}"
-        return f"Prefabmodel/{prefab_key}.glb"
+            if (PREFAB_DIR / c).exists():
+                return f"{PREFAB_DIR_NAME}/{c}"
+        return f"{PREFAB_DIR_NAME}/{prefab_key}.glb"
 
     @classmethod
     def bbox_to_desk_coords(
@@ -285,7 +292,8 @@ class VLMClient:
             else:
                 it["model_source"] = "rodin"
                 it["prefab_key"] = None
-                it["model_url"] = f"objects/{it['id']}.glb"
+                # Rodin 生成的真实资产同样落在 Prefabmodel/ 下（不再是 objects/）
+                it["model_url"] = f"{PREFAB_DIR_NAME}/{it['id']}.glb"
 
             bbox = it.get("bbox_2d", [0, 0, 0, 0])
             it["current_pos"] = self.bbox_to_desk_coords(bbox)
@@ -315,7 +323,7 @@ class VLMClient:
                 "estimated_size_m": [0.26, 0.19, 0.06],
                 "model_source": "prefab",
                 "prefab_key": "books_stack",
-                "model_url": "Prefabmodel/books_stack.glb",
+                "model_url": self.resolve_prefab_rel_path("books_stack"),
                 "current_pos": agg_pos,
                 "book_count": len(book_items),
             }

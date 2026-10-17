@@ -23,6 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.app.adapters.rodin_adapter import RodinClient, RodinAPIError
+from backend.app.adapters.vlm_adapter import ASSET_DIR_NAME
 
 
 def load_tasks_from_contract(contract_path: Path) -> List[Dict[str, Any]]:
@@ -118,7 +119,7 @@ def worker_task(item_info: Dict[str, Any], key_queue: Queue) -> Dict[str, Any]:
     # Acquire an API key from the pool
     api_key = key_queue.get()
     key_tag = f"{api_key[:4]}...{api_key[-4:]}"
-    output_dir = PROJECT_ROOT / "objects"
+    output_dir = PROJECT_ROOT / ASSET_DIR_NAME
 
     try:
         crop_path = find_crop_path(item_id)
@@ -139,7 +140,7 @@ def worker_task(item_info: Dict[str, Any], key_queue: Queue) -> Dict[str, Any]:
             on_progress=on_prog,
         )
 
-        rel_model_path = f"objects/{output_name}"
+        rel_model_path = f"{ASSET_DIR_NAME}/{output_name}"
         update_contract(item_id, rel_model_path)
         print(f"[{item_id} | {name}] SUCCESS! Generated {rel_model_path}", flush=True)
         return {"id": item_id, "status": "success", "file": rel_model_path}

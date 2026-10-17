@@ -20,7 +20,7 @@
       ],
       "model_source": "rodin",
       "prefab_key": null,
-      "model_url": "objects/item_01.glb",
+      "model_url": "Prefabmodel/item_01.glb",
       "current_pos": [
         1.294,
         0.585,
@@ -47,7 +47,7 @@
       ],
       "model_source": "rodin",
       "prefab_key": null,
-      "model_url": "objects/item_02.glb",
+      "model_url": "Prefabmodel/item_02.glb",
       "current_pos": [
         1.19,
         0.36,

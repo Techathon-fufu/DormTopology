@@ -15,13 +15,14 @@
 | 现有文件 | 状态与用途 |
 | --- | --- |
 | `frontend/` | 前端演示应用（成员 A）：空间配置、照片导入与物品确认、三维工作台、整理预览、走线规划（规则式演示）与方案交付（执行指南，含配件参数预览与导出）；提供「一键演示」6 步导览（三个重点画面——杂乱还原 / 归位动画 / 收拢对比——串为可重复流程）与验收说明（[demo-and-acceptance.md](frontend/docs/demo-and-acceptance.md)），运行方式与已知差异见 [frontend/README.md](frontend/README.md) |
+| `Prefabmodel/` | **模型资产统一目录**：全部 19 个 GLB 与 prefab 清单集中于此。低模 prefab（12 个，按 `PREFAB_KEYWORDS` 路由）与 Rodin 真实资产（`charger_detail.glb` / `mousepad_detail.glb` 高模，以及 `power_strip` / `tablet` / `tape_measure` / `tissue_pack` 回退资产）同处一个平面目录；同名不同保真度的资产以 `_detail` 后缀区分。布局与路由约定见 [tests/README.md](tests/README.md) 与 [tests/test_rodin_pipeline/test_prefab_routing.py](tests/test_rodin_pipeline/test_prefab_routing.py) |
 | `objects/dorm_desk.blend` | 桌体 Blender 源文件；尺寸、原点、轴向与网格仍需核验 |
 | `objects/tissue_box.obj` | 纸巾盒 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `objects/杯子.obj` | 杯子 OBJ 资产；运行时导入前需校正尺寸与轴向 |
 | `algorithm/cable_routing/` | 旧走线模块的兼容导出，不再承载业务实现 |
 | `backend/app/domain/` | C/D 的纯 Python 布局与走线算法、共享几何、输入校验及领域类型；调用与证据见[布局算法交接](docs/packing_algorithm.md)和[走线算法说明](docs/routing_algorithm_plan.md) |
 
-仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dorm_desk_assembled.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
+`objects/` 现仅保留 Blender 与 OBJ 源文件（`.blend` / `.obj`），**不再存放 GLB**；全部 GLB 资产已统一到 `Prefabmodel/` 下。仓库仍没有已导出的桌体 GLB 实际文件。前端桌体 GLB 加载管线已就绪（0.5.1：加载 / 归一化 / 命名锚点实测、失败自动回退参数化简化几何并可重试、`importModel(url, name, position)` 动态导入接口；细节见 [frontend/docs/desk-model.md](frontend/docs/desk-model.md)）：将 `dorm_desk_assembled.glb` 放入 `frontend/public/models/` 即自动启用；独立单品 GLB 仍待按数据契约导出接入。
 
 ## 首版目标
 
