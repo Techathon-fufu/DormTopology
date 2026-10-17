@@ -22,12 +22,15 @@ export function SceneObjectMesh({
   selected,
   issues,
   onSelect,
+  onContextMenu,
 }: {
   project: Project
   object: SceneObject
   selected: boolean
   issues?: SceneIssue[]
   onSelect: (id: string) => void
+  /** 右键（或长按上下文菜单）时上报物品与屏幕坐标，由工作台决定展示什么菜单 */
+  onContextMenu?: (objectId: string, clientX: number, clientY: number) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const drag = useObjectDrag(project, object)
@@ -69,12 +72,22 @@ export function SceneObjectMesh({
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation()
           onSelect(object.id)
+          if (e.button === 2) {
+            // 右键只上报菜单，不进入拖拽或描点
+            onContextMenu?.(object.id, e.nativeEvent.clientX, e.nativeEvent.clientY)
+            return
+          }
           const marking = useConnectionsStore.getState()
           if (marking.projectId === project.id && marking.pickingObjectId) {
             if (pick.active) pick.onPointerDown(e)
             return
           }
           drag.onPointerDown(e)
+        }}
+        onContextMenu={(e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation()
+          e.nativeEvent.preventDefault()
+          onContextMenu?.(object.id, e.nativeEvent.clientX, e.nativeEvent.clientY)
         }}
         onPointerOver={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation()

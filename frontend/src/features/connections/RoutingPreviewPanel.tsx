@@ -47,9 +47,13 @@ export function RoutingPreviewPanel({ project }: { project: Project }) {
     setError(null)
     setBusy(true)
     try {
-      await acceptRoutingPreview(project, matching.baselineId)
+      const summary = await acceptRoutingPreview(project, matching.baselineId)
       setAccepted(true)
-      setNotice(`已接受理线方案：${validation.validCount} 条路径写入本机（可撤销）。接受后保存到本机；当前接口尚不提供方案应用到服务端。`)
+      setNotice(
+        `已接受理线方案：应用 ${summary.applied} 条有效路径` +
+          `${summary.skipped > 0 ? `，${summary.skipped} 条失败线路保持原状（需重新规划）` : ''}` +
+          '（可撤销）。仅保存到本机；当前接口尚不提供方案应用到服务端。',
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : '接受理线方案失败。')
     } finally {
@@ -73,7 +77,7 @@ export function RoutingPreviewPanel({ project }: { project: Project }) {
       </div>
 
       <p className="text-[11px] leading-snug text-muted-foreground">
-        接受后保存到本机；当前接口尚不提供方案应用到服务端。
+        接受后只应用有效路径，失败线路保持原状；结果保存到本机，当前接口尚不提供方案应用到服务端。
       </p>
 
       {stale ? (

@@ -33,6 +33,8 @@ export interface ConnectionObjectReport {
 export interface ConnectionIssue {
   objectId?: string
   cableId?: string
+  /** 能确定具体接口时给出，界面据此直接定位并高亮该接口（不参与空间计算） */
+  portId?: string
   message: string
 }
 
@@ -130,12 +132,12 @@ export function auditConnections(project: Pick<Project, 'id' | 'objects' | 'cabl
       }
       itemIds.add(port.id)
       if (port.offset !== undefined && !isFiniteVec3(port.offset)) {
-        issues.push({ objectId: object.id, message: `接口 ${port.id} 的偏移不是有效三维向量` })
+        issues.push({ objectId: object.id, portId: port.id, message: `接口 ${port.id} 的偏移不是有效三维向量` })
       }
       if (port.localDirection !== undefined && !isFiniteVec3(port.localDirection)) {
-        issues.push({ objectId: object.id, message: `接口 ${port.id} 的局部方向不是有效三维向量` })
+        issues.push({ objectId: object.id, portId: port.id, message: `接口 ${port.id} 的局部方向不是有效三维向量` })
       } else if (port.localDirection !== undefined && port.localDirection.every((v) => v === 0)) {
-        issues.push({ objectId: object.id, message: `接口 ${port.id} 的局部方向为零向量` })
+        issues.push({ objectId: object.id, portId: port.id, message: `接口 ${port.id} 的局部方向为零向量` })
       }
     }
   }
@@ -156,14 +158,14 @@ export function auditConnections(project: Pick<Project, 'id' | 'objects' | 'cabl
     } else if (!fromPort) {
       issues.push({ cableId: cable.id, objectId: cable.from.objectId, message: `线缆 ${cableLabel(cable, i)} 的起点端口不存在（悬空端口）` })
     } else if (fromPort.confirmed !== true) {
-      issues.push({ cableId: cable.id, objectId: cable.from.objectId, message: `线缆 ${cableLabel(cable, i)} 的起点端口尚未确认` })
+      issues.push({ cableId: cable.id, objectId: cable.from.objectId, portId: fromPort.id, message: `线缆 ${cableLabel(cable, i)} 的起点端口尚未确认` })
     }
     if (!objectIds.has(cable.to.objectId)) {
       issues.push({ cableId: cable.id, message: `线缆 ${cableLabel(cable, i)} 的终点设备已删除（悬空端口）` })
     } else if (!toPort) {
       issues.push({ cableId: cable.id, objectId: cable.to.objectId, message: `线缆 ${cableLabel(cable, i)} 的终点端口不存在（悬空端口）` })
     } else if (toPort.confirmed !== true) {
-      issues.push({ cableId: cable.id, objectId: cable.to.objectId, message: `线缆 ${cableLabel(cable, i)} 的终点端口尚未确认` })
+      issues.push({ cableId: cable.id, objectId: cable.to.objectId, portId: toPort.id, message: `线缆 ${cableLabel(cable, i)} 的终点端口尚未确认` })
     }
 
     if (fromPort && toPort) {

@@ -60,6 +60,23 @@ async function bindCamera(page: Page) {
   },{r3fUrl,storeUrl,projectsUrl})
 }
 async function project(page:Page,world:[number,number,number]) {
+  // 相机预设是带动画的：等它稳定后再投影，否则算出的屏幕点会落到别处（历史 flake 来源）。
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    const canvas = document.querySelector('canvas')!
+    const cam = (window as any).__r3f._roots.get(canvas).store.getState().camera
+    let previous = cam.position.clone()
+    let stable = 0
+    let frames = 0
+    const tick = () => {
+      frames += 1
+      const moved = cam.position.distanceTo(previous)
+      previous = cam.position.clone()
+      stable = moved < 1e-5 ? stable + 1 : 0
+      if (stable >= 3 || frames > 120) { resolve(); return }
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }))
   return page.evaluate(world=> {
     const canvas=document.querySelector('canvas')!
     const cam=(window as any).__r3f._roots.get(canvas).store.getState().camera
@@ -106,6 +123,17 @@ async function setFrontView(page: Page) {
   )
 }
 
+/**
+ * 桌面主入口：右键目标物品 →「表面描点」，进入全屏描点页面。
+ * 页面是会话态覆盖层（不切路由），所以 canvas 仍是同一个实例。
+ */
+async function openMarkingPage(page: Page, world: [number, number, number]) {
+  const target = await project(page, world)
+  await page.mouse.click(target.x, target.y, { button: 'right' })
+  await page.getByRole('menuitem', { name: /表面描点/ }).click()
+  await expect(page.getByRole('region', { name: '表面描点页面' })).toBeVisible()
+}
+
 test.describe('surface port marking', () => {
   test.skip(({isMobile})=>isMobile,'Full surface editing is a desktop acceptance flow')
   test('marks a real surface point, persists metadata and cancels drafts', async ({ page }) => {
@@ -147,8 +175,8 @@ test.describe('surface port marking', () => {
     const object = await readProject(page, id)
     expect(object.objects).toHaveLength(1)
 
-    // Open the marking flow via the real UI.
-    await page.getByRole('button', { name: '规划走线', exact: true }).click()
+    // Open the marking page from the object's context menu.
+    await openMarkingPage(page, [0, 0.9, 0.45])
     const select = page.getByLabel('标记物品')
     await expect(select).toHaveValue(boxId)
     await page.getByRole('button', { name: '在表面标记接口' }).click()
@@ -181,8 +209,9 @@ test.describe('surface port marking', () => {
     const dir = port.localDirection
     const dirLen = Math.hypot(dir[0], dir[1], dir[2])
     expect(dirLen).toBeCloseTo(1, 2)
-    expect(port.offset[1]).toBeCloseTo(.15,3)
-    expect(port.offset[2]).toBeCloseTo(.15,3)
+    // 屏幕坐标量化到整像素：同一次真实点击的世界坐标存在约 1mm 误差，按 5mm 容差断言。
+    expect(port.offset[1]).toBeCloseTo(.15,2)
+    expect(port.offset[2]).toBeCloseTo(.15,2)
     await page.screenshot({path:'.work/surface-connections/surface-port-desktop.png'})
 
     // Reload -> label persists.
@@ -194,7 +223,9 @@ test.describe('surface port marking', () => {
     expect(reloadedBox.ports[0].label).toBe('USB-C Front')
 
     // Editing then cancelling via Escape must not mutate saved data.
-    await page.getByRole('button', { name: '规划走线', exact: true }).click()
+    await bindCamera(page)
+    await setFrontView(page)
+    await openMarkingPage(page, [0, 0.9, 0.45])
     await page.getByRole('button', { name: '编辑标记' }).click()
     const editDialog = page.getByRole('dialog', { name: '编辑接口标记' })
     await expect(editDialog).toBeVisible()
@@ -236,7 +267,7 @@ test.describe('surface port marking', () => {
     await relocating.getByRole('button',{name:'保存接口'}).click()
     const moved=(await readProject(page,id)).objects[0].ports[0]
     expect(moved.id).toBe(port.id)
-    expect(moved.offset[0]).toBeCloseTo(.05,3)
+    expect(moved.offset[0]).toBeCloseTo(.05,2)
     expect(moved.note).toBe('保留尚未保存的说明')
     // A concurrent dimension edit must invalidate the original draft snapshot.
     await page.getByRole('button',{name:'编辑标记'}).click()
@@ -284,6 +315,8 @@ test.describe('surface port marking', () => {
     await setFrontView(page)
 
     await page.getByRole('button', { name: '规划走线', exact: true }).click()
+    await page.getByRole('button', { name: '描点与连接检查' }).click()
+    await expect(page.getByRole('region', { name: '表面描点页面' })).toBeVisible()
     await page.getByRole('button', { name: '在表面标记接口' }).click()
     const target = await project(page, [0, 0.9, 0.45])
     await page.mouse.move(target.x,target.y)
@@ -351,6 +384,7 @@ test.describe('surface port marking', () => {
     await expect(page.locator('canvas')).toBeVisible()
 
     await page.getByRole('button', { name: '规划走线', exact: true }).click()
+    await page.getByRole('button', { name: '描点与连接检查' }).click()
     const select = page.getByLabel('标记物品')
     await select.selectOption(`${id}-a`)
     await page.getByRole('button', { name: '删除接口 a-port', exact: false }).click()
@@ -473,11 +507,14 @@ test('mobile can inspect saved endpoint annotations and scene connection review'
   await page.goto(`/projects/${id}/workspace`,{waitUntil:'domcontentloaded'})
   await expect(page.locator('canvas')).toBeVisible()
   await page.getByRole('button',{name:'规划走线',exact:true}).click()
-  if (!await page.getByLabel('标记物品').first().isVisible()) await page.getByRole('button',{name:'打开物品面板',exact:true}).click()
+  if (!await page.getByRole('button',{name:'描点与连接检查'}).first().isVisible()) await page.getByRole('button',{name:'打开物品面板',exact:true}).click()
   const drawer=page.getByRole('dialog',{name:'物品与线缆面板'})
-  await expect(drawer.getByText('背面的数据连接口',{exact:true})).toBeVisible()
-  await drawer.getByText(/全场检查 · 1 件物品/).click()
-  await expect(drawer.getByText(/存在可选物理接口|尚未建立连接/)).toBeVisible()
+  await drawer.getByRole('button',{name:'描点与连接检查'}).click()
+  const marking=page.getByRole('region',{name:'表面描点页面'})
+  await expect(marking).toBeVisible()
+  await expect(marking.getByText('背面的数据连接口',{exact:true})).toBeVisible()
+  await expect(marking.getByText(/全场检查 · 1 件物品/)).toBeVisible()
+  await expect(marking.getByText(/存在可选物理接口|尚未建立连接/)).toBeVisible()
   await page.screenshot({path:'.work/surface-connections/surface-mobile.png'})
 })
 
@@ -500,7 +537,7 @@ test('picks a loaded GLB with edited dimensions and rotation using its actual me
     return Boolean((window as any).__r3f._roots.get(canvas).store.getState().scene.getObjectByName('Monitor_27_Inch'))
   }),{timeout:15000}).toBe(true)
   const before=await readProject(page,id)
-  await page.getByRole('button',{name:'规划走线',exact:true}).click()
+  await openMarkingPage(page,[0,1.05,.45])
   await page.getByRole('button',{name:'在表面标记接口'}).click()
   const point=await project(page,[0,1.05,.45])
   await page.mouse.move(point.x,point.y)

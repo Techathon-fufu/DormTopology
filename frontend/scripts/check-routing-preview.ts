@@ -10,15 +10,28 @@ import type { CablePlanningResult } from '@/api/types'
 // Transport/state race fixtures only; these do not assert algorithm feasibility.
 const project = createDemoProject()
 project.id = 'preview-races'
-project.cables = [structuredClone(project.cables[0])]
+const baseCable = structuredClone(project.cables[0])
+// Second cable always fails verification: acceptance must leave it untouched.
+const failingCable = {
+  ...structuredClone(baseCable),
+  id: 'cable-failing',
+  status: 'conflict' as const,
+  planSource: 'algorithm' as const,
+  note: '算法未找到可用路径',
+  route: { channels: [] as string[], points: [] as number[][] },
+}
+project.cables = [baseCable, failingCable]
 project.objects = project.objects.map(o=>({...o,ports:o.ports.map(p=>({...p,confirmed:true}))}))
 useProjectsStore.setState({projects:{[project.id]:project}})
 usePlansStore.getState().captureBaseline(project)
 const baselineId = usePlansStore.getState().baselines[project.id].id
 const ref={sceneId:'scene-preview-race',sceneRevision:1,baselineId:'backend-baseline'}
 const result:CablePlanningResult={
-  algorithmVerified:true,plannedCount:1,conflictCount:0,notes:[],sceneRef:ref,
-  cables:project.cables.map(c=>({...c,status:'planned',planSource:'algorithm',route:{channels:[],points:[[0,1,.2],[.3,1,.2]],smooth:false,pathLengthM:.3,verification:{sceneId:ref.sceneId,sceneRevision:1,status:'valid'}}})),
+  algorithmVerified:true,plannedCount:1,conflictCount:1,notes:[],sceneRef:ref,
+  cables:[
+    {...baseCable,status:'planned',planSource:'algorithm',route:{channels:[],points:[[0,1,.2],[.3,1,.2]],smooth:false,pathLengthM:.3,verification:{sceneId:ref.sceneId,sceneRevision:1,status:'valid'}}},
+    failingCable,
+  ],
 }
 const preview=useRoutingPreviewStore.getState()
 const stage=()=>preview.stage(useProjectsStore.getState().projects[project.id],result,baselineId)
@@ -52,11 +65,14 @@ try {
   reset();stage()
   const scene=toRoutingScene({project,confirmed:true,ref})
   globalThis.fetch=async()=>new Response(JSON.stringify(scene),{headers:{'Content-Type':'application/json'}})
-  await acceptRoutingPreview(project,baselineId)
+  const summary=await acceptRoutingPreview(project,baselineId)
+  assert.deepEqual(summary,{applied:1,skipped:1},'acceptance applies verified routes only')
   assert.equal(useRoutingPreviewStore.getState().candidate,null)
-  assert.equal(useProjectsStore.getState().projects[project.id].cables[0].route.verification?.status,'valid')
+  const accepted=useProjectsStore.getState().projects[project.id].cables
+  assert.equal(accepted[0].route.verification?.status,'valid')
+  assert.deepEqual(accepted[1],structuredClone(project).cables[1],'failed routes must stay untouched')
   assert.equal(useWorkspaceStore.getState().past.length,1,'acceptance records one undo step')
   useWorkspaceStore.getState().undo(project.id)
   assert.equal(useProjectsStore.getState().projects[project.id].cables[0].route.verification,undefined)
 } finally {globalThis.fetch=originalFetch;preview.discard()}
-console.log('Routing preview: full coverage, no eager writes, cancel/replace/edit/version races and one-step acceptance passed.')
+console.log('Routing preview: full coverage, no eager writes, cancel/replace/edit/version races, verified-only acceptance and one-step undo passed.')

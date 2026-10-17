@@ -160,10 +160,16 @@ export function candidateFreshness(candidate: RoutingCandidate, project: Project
  * 2. 要求至少一条有效路径，且未处于整理预览 / 应用状态；
  * 3. 通过现有后端接口读取正式场景并核对版本（不新增端点）；
  * 4. 写入前重新读取项目 / 基线 / 候选身份与签名，避免迟到覆盖或取消；
- * 5. 通过 workspaceStore.replaceCables 写入本地（一次可撤销），随后丢弃候选。
+ * 5. 只把算法验证通过的有效路径写入本地项目（一次可撤销），
+ *    失败线路保持原状，避免把失败结果伪装成已规划连接；随后丢弃候选。
  * 接受后只保存在本机；服务端保存由接口能力决定。
+ *
+ * 返回值供界面如实说明写入范围：applied 条已应用，skipped 条失败未应用。
  */
-export async function acceptRoutingPreview(project: Project, baselineId: string): Promise<void> {
+export async function acceptRoutingPreview(
+  project: Project,
+  baselineId: string,
+): Promise<{ applied: number; skipped: number }> {
   const state = useRoutingPreviewStore.getState()
   const candidate = state.candidate
   if (!candidate) throw new Error('没有可接受的理线预览。')
@@ -217,9 +223,14 @@ export async function acceptRoutingPreview(project: Project, baselineId: string)
     throw new Error('整理方案正在应用，请稍后再接受理线方案。')
   }
 
-  // 接受前再深拷贝一份，避免把 store 中的候选直接交给 workspace。
-  const cables = clone(latestCandidate.result.cables)
-  useWorkspaceStore.getState().replaceCables(project.id, cables, true)
+  // 只应用算法验证通过的有效路径：失败线路保持原状，不把失败结果写进项目。
+  const appliedCables = latestCandidate.result.cables.filter(isValidRoute)
+  if (appliedCables.length === 0) throw new Error('理线预览没有可用的成功路径，不能接受。')
+  const appliedById = new Map(appliedCables.map((cable) => [cable.id, cable]))
+  // 深拷贝，避免把 store 中的候选直接交给 workspace；未通过的线缆沿用当前项目内容。
+  const merged = latestProject.cables.map((cable) => clone(appliedById.get(cable.id) ?? cable))
+  useWorkspaceStore.getState().replaceCables(project.id, merged, true)
   state.discard()
+  return { applied: appliedCables.length, skipped: latestCandidate.result.cables.length - appliedCables.length }
 }
 
