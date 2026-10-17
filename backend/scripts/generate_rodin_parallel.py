@@ -26,6 +26,14 @@ from backend.app.adapters.rodin_adapter import RodinClient, RodinAPIError
 from backend.app.adapters.vlm_adapter import ASSET_DIR_NAME
 
 
+def build_generic_prompt(item_name: str) -> str:
+    """
+    Universal generic prompt template for any item from VLM detection.
+    Ensures clean low-poly base geometry without per-item manual customization.
+    """
+    return f"A wholly white and simple 3D object of {item_name}, clean low poly geometry, single isolated game asset"
+
+
 def load_tasks_from_contract(contract_path: Path) -> List[Dict[str, Any]]:
     """
     Dynamically loads tasks from contract, strictly filtering out:
@@ -58,8 +66,9 @@ def load_tasks_from_contract(contract_path: Path) -> List[Dict[str, Any]]:
             "id": iid,
             "name": name,
             "output_name": f"{iid}.glb",
-            "prompt": f"A realistic 3D model of {name}, high fidelity, accurate desktop object proportions",
-            "tier": "basic",
+            "prompt": build_generic_prompt(name),
+            "tier": "Gen-2.5-Low",
+            "quality_override": 1500,
             "size_m": it.get("size_m") or it.get("estimated_size_m"),
         })
     return tasks
@@ -139,8 +148,9 @@ def worker_task(item_info: Dict[str, Any], key_queue: Queue) -> Dict[str, Any]:
             image_path=crop_path,
             output_dir=output_dir,
             prompt=prompt,
-            use_agentic=True,
+            fast_mode=True,
             tier=tier,
+            quality_override=item_info.get("quality_override", 1500),
             target_filename=output_name,
             on_progress=on_prog,
         )
