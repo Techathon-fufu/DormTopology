@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Info,
   RotateCcw,
-  Sparkles,
   XCircle,
 } from 'lucide-react'
 import { PageIntro } from '@/ui/layout/PageIntro'
@@ -14,7 +13,7 @@ import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { SpacePreview3D } from '@/ui/setup/SpacePreview3D'
 import { Button } from '@/ui/kit/button'
 import { EmptyState } from '@/ui/kit/empty-state'
-import { Label, Select } from '@/ui/kit/primitives'
+import { Label } from '@/ui/kit/primitives'
 import { MmInput } from '@/ui/kit/mm-input'
 import {
   defaultOutletForm,
@@ -87,7 +86,7 @@ function SectionCard({
   )
 }
 
-/** 空间配置页：床桌 / 房间 / 立柱为固定模型；编辑书架 / 出线孔 / 插座（仅左右），实时同步三维预览（正式模型） */
+/** 空间配置页：床桌 / 房间 / 立柱 / 书架为固定模型；仅后墙插座左右位置可调节，实时同步三维预览 */
 export function SpaceSetupPage() {
   const { id } = useParams<{ id: string }>()
   const project = useProject(id)
@@ -154,13 +153,10 @@ export function SpaceSetupPage() {
     )
   }
 
-  const patch = (p: Partial<SpaceForm>) => setForm((f) => ({ ...f, ...p }))
-
   /** 固定模型：墙面仅一块「双插孔 ×2」面板，仅左右位置（X）可调 */
   const updateOutletX = (x: number) =>
     setForm((f) => ({ ...f, outlets: [{ ...(f.outlets[0] ?? defaultOutletForm()), x }] }))
 
-  const useDemoSpace = () => setForm(demoSpaceForm())
   const revert = () => setForm(roomToForm(project.room))
 
   const save = () => {
@@ -194,7 +190,7 @@ export function SpaceSetupPage() {
         <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary-soft/60 px-3 py-2 text-[13px] leading-relaxed">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
-            当前是示例项目：保存会覆盖其空间配置，可随时点击「恢复标准空间」把书架 / 出线孔 / 插座恢复为默认值。
+            当前是示例项目：保存会覆盖其空间配置，可在此调节后墙插座的左右位置。
           </p>
         </div>
       ) : null}
@@ -202,74 +198,7 @@ export function SpaceSetupPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* ── 表单 ─────────────────────────────────────────────── */}
         <div className="space-y-4">
-          <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
-            <p>
-              {form.furnitureModel ? 'L 形床桌、四格书架和三层抽屉' : '标准床桌'}
-            </p>
-          </div>
-
-          <SectionCard
-            title="① 书架分层"
-            extra={
-              <label className="flex items-center gap-2 text-[13px]">
-                <input
-                  type="checkbox"
-                  className="accent-[#0F9D8A]"
-                  checked={form.shelfEnabled}
-                  disabled={!!form.furnitureModel}
-                  onChange={(e) => patch({ shelfEnabled: e.target.checked })}
-                />
-                书架
-              </label>
-            }
-          >
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1">
-                <Label className={cn(!form.shelfEnabled && 'opacity-50')}>层数</Label>
-                <Select
-                  value={String(form.shelfLevels)}
-                  disabled={!form.shelfEnabled || !!form.furnitureModel}
-                  onChange={(e) => patch({ shelfLevels: Number(e.target.value) })}
-                >
-                  <option value="1">1 层</option>
-                  <option value="2">2 层</option>
-                  <option value="3">3 层</option>
-                </Select>
-              </div>
-              <MmField
-                label="离桌高度（最下层）"
-                minMm={0}
-                disabled={!form.shelfEnabled || !!form.furnitureModel}
-                valueMm={form.shelfAbove}
-                onChangeMm={(v) => patch({ shelfAbove: v })}
-              />
-              <MmField
-                label="搁板深度"
-                minMm={0}
-                disabled={!form.shelfEnabled || !!form.furnitureModel}
-                valueMm={form.shelfDepth}
-                onChangeMm={(v) => patch({ shelfDepth: v })}
-              />
-            </div>
-            <p className="text-xs text-faint">
-              {form.furnitureModel ? '四格书架与三层抽屉按家具实际尺寸固定。' : '书架尺寸须留足床板下方取物空间。'}
-            </p>
-          </SectionCard>
-
-          <SectionCard title="② 出线孔与电源">
-            {form.furnitureModel ? <p className="text-xs text-muted-foreground">桌体固定使用正式模型；线缆经后沿长槽进入桌下，不翻越背板顶沿。</p> : <>
-            <div className="space-y-2">
-              <p className="text-[13px] text-muted-foreground">
-                出线孔
-              </p>
-              <div className="flex flex-wrap items-end gap-2">
-                <MmField className="w-28" label="孔 X（左右）" valueMm={form.hole.x} onChangeMm={(v) => patch({ hole: { ...form.hole, x: v } })} />
-                <MmField className="w-28" label="孔 Z（距后墙）" minMm={0} valueMm={form.hole.z} onChangeMm={(v) => patch({ hole: { ...form.hole, z: v } })} />
-                <MmField className="w-24" label="孔直径" minMm={0} valueMm={form.hole.diameter} onChangeMm={(v) => patch({ hole: { ...form.hole, diameter: v } })} />
-              </div>
-            </div>
-            </>}
+          <SectionCard title="后墙插座">
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
                 后墙插座为固定模型：一块面板 · 两个双插孔插座，仅可左右移动（x 以房间中心为 0），高度固定不可调；调整后保存会提示受影响的走线。
@@ -328,33 +257,10 @@ export function SpaceSetupPage() {
             <h2 className="mb-2 text-sm font-semibold">三维预览</h2>
             <SpacePreview3D room={previewRoom} />
             <p className="mt-2 text-xs leading-relaxed text-faint">
-              {form.furnitureModel ? 'L 形床桌' : '标准床桌'}
+              固定 L 形床桌；线缆经后沿长槽进入桌下，不翻越背板顶沿。
             </p>
           </div>
 
-          <div className="rounded-xl border border-border bg-surface p-5 shadow-xs">
-            <h2 className="mb-2 text-sm font-semibold">当前空间摘要</h2>
-            <dl className="space-y-1 text-[13px] text-muted-foreground">
-              <div className="flex justify-between gap-3">
-                <dt>床桌 / 房间 / 立柱</dt>
-                <dd className="tabular-nums">固定标准款</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>书架</dt>
-                <dd className="tabular-nums">
-                  {form.furnitureModel ? '四格 · 左格分层' : form.shelfEnabled ? `${form.shelfLevels} 层 · 离桌 ${form.shelfAbove} mm` : '未配置'}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>出线孔</dt>
-                <dd className="tabular-nums">{form.furnitureModel ? '后沿长槽（模型固定）' : `Ø ${form.hole.diameter} mm`}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>插座</dt>
-                <dd className="tabular-nums">1 块 · 双插孔 ×2 · 距地 {OUTLET_FIXED_Y_MM} mm</dd>
-              </div>
-            </dl>
-          </div>
 
           <div
             className={cn(
@@ -407,10 +313,6 @@ export function SpaceSetupPage() {
             <Button size="lg" onClick={save} disabled={errors.length > 0}>
               {dirty ? '保存空间并前往照片导入' : '前往照片导入'}
               <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" onClick={useDemoSpace}>
-              <Sparkles className="h-4 w-4" />
-              恢复标准空间（书架 / 出线孔 / 插座默认值）
             </Button>
             <Button variant="ghost" onClick={revert} disabled={!dirty}>
               <RotateCcw className="h-4 w-4" />
