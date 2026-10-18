@@ -4,6 +4,7 @@ import copy
 import json
 import logging
 from datetime import datetime, timezone
+from time import perf_counter
 from uuid import uuid4
 
 from ..domain.errors import SceneInputError
@@ -13,7 +14,13 @@ from ..domain.packing import measure_free_area, plan_packing, validate_layout
 from ..domain.packing.check import item_geometry_issues
 from ..domain.rules import validate_scene
 from .errors import Conflict, InvalidInput, NotFound
-from .ports import JobExecutor, OrganizationRepository, SceneRecord
+from .organization_strategy import build_summary, candidate_scenes, score_plan
+from .ports import (
+    JobExecutor,
+    OrganizationRepository,
+    OrganizationStrategyProvider,
+    SceneRecord,
+)
 
 ALGORITHM_VERSION = "packing-1.2"
 logger = logging.getLogger(__name__)
@@ -147,9 +154,16 @@ def _area_comparable(baseline: Scene, current: Scene) -> bool:
 
 
 class OrganizationService:
-    def __init__(self, repository: OrganizationRepository, executor: JobExecutor):
+    def __init__(
+        self,
+        repository: OrganizationRepository,
+        executor: JobExecutor,
+        *,
+        strategy_provider: OrganizationStrategyProvider | None = None,
+    ):
         self.repository = repository
         self.executor = executor
+        self.strategy_provider = strategy_provider
 
     def save_scene(
         self,
@@ -266,16 +280,113 @@ class OrganizationService:
             raise
         return {"job_id": envelope["job_id"], "status": "queued", "created_at": now}
 
+    def _job_active(self, job_id: str, scene: Scene) -> bool:
+        """Stop between stages; finish_job remains the atomic publication guard."""
+        job = self.repository.get_job(job_id)
+        if job is None or job["status"] != "running":
+            return False
+        current = self.repository.get_scene(scene["scene_id"])
+        if current is None or current.scene["scene_revision"] != scene["scene_revision"]:
+            self.repository.finish_job(
+                job_id,
+                error={"code": "stale_scene", "message": "Scene revision changed"},
+            )
+            return False
+        return True
+
+    def _try_strategies(
+        self, job_id: str, scene: Scene, baseline_result: dict, baseline_target: Scene
+    ) -> tuple[dict, Scene]:
+        """Optional work is isolated from the original solver's failure path."""
+        started = perf_counter()
+        best_result, best_target = baseline_result, baseline_target
+        selected = 0
+        try:
+            if not self._job_active(job_id, scene):
+                return best_result, best_target
+            # Infeasible baselines keep their historical reporting semantics, but
+            # are not eligible for comparison against geometry-valid candidates.
+            best_score = (
+                None if baseline_result["status"] == "infeasible"
+                else score_plan(scene, baseline_result, baseline_target)
+            )
+            logger.info("Organization strategy %s baseline_score=%s", job_id, best_score)
+            if not self._job_active(job_id, scene):
+                return best_result, best_target
+            summary = build_summary(scene, baseline_result, baseline_target)
+            if not self._job_active(job_id, scene):
+                return best_result, best_target
+            proposal = self.strategy_provider.propose(summary)
+            if not self._job_active(job_id, scene):
+                return best_result, best_target
+            candidates = candidate_scenes(scene, proposal)
+            if not candidates:
+                logger.info("Organization strategy %s fallback=no_valid_changes", job_id)
+            for index, candidate_scene in enumerate(candidates, 1):
+                if not self._job_active(job_id, scene):
+                    return best_result, best_target
+                candidate_started = perf_counter()
+                try:
+                    candidate_result = plan_packing(candidate_scene)
+                    if not self._job_active(job_id, scene):
+                        return best_result, best_target
+                    # Recheck against ORIGINAL permissions and geometry, never
+                    # persist the trial scene or its temporary soft policies.
+                    candidate_target = _apply_targets(scene, candidate_result)
+                    if not self._job_active(job_id, scene):
+                        return best_result, best_target
+                    candidate_score = score_plan(scene, candidate_result, candidate_target)
+                    if not self._job_active(job_id, scene):
+                        return best_result, best_target
+                    improved = best_score is None or candidate_score < best_score
+                    logger.info(
+                        "Organization strategy %s candidate=%d score=%s improved=%s elapsed_s=%.6f",
+                        job_id, index, candidate_score, improved,
+                        perf_counter() - candidate_started,
+                    )
+                    if improved:
+                        best_result, best_target = candidate_result, candidate_target
+                        best_score, selected = candidate_score, index
+                except Exception:  # noqa: BLE001 - optional trials must retain the baseline
+                    # No exception details: provider/solver payloads are untrusted.
+                    logger.info(
+                        "Organization strategy %s candidate=%d fallback=candidate_failed elapsed_s=%.6f",
+                        job_id, index, perf_counter() - candidate_started,
+                    )
+            if candidates and not selected:
+                logger.info("Organization strategy %s fallback=no_improvement", job_id)
+            return best_result, best_target
+        except Exception:  # noqa: BLE001 - untrusted provider failures are nonfatal
+            selected = 0
+            logger.info("Organization strategy %s fallback=proposal_failed", job_id)
+            return baseline_result, baseline_target
+        finally:
+            logger.info(
+                "Organization strategy %s selected=%d extra_elapsed_s=%.6f",
+                job_id, selected, perf_counter() - started,
+            )
+
     def _run_job(self, job_id: str, scene: Scene) -> None:
         if not self.repository.claim_job(job_id):
             return
         try:
+            if not self._job_active(job_id, scene):
+                return
             result = plan_packing(scene)
+            if not self._job_active(job_id, scene):
+                return
             target = (
                 scene
                 if result["status"] == "infeasible"
                 else _apply_targets(scene, result)
             )
+            if not self._job_active(job_id, scene):
+                return
+            if self.strategy_provider is not None:
+                result, target = self._try_strategies(job_id, scene, result, target)
+            if not self._job_active(job_id, scene):
+                return
+            result = copy.deepcopy(result)
             baseline = self.repository.get_baseline(scene["baseline_id"])
             comparable = baseline is not None and _area_comparable(baseline, scene)
             result["metrics"] = {
@@ -300,6 +411,8 @@ class OrganizationService:
                     "differ from the original baseline"
                 )
             result["algorithm_version"] = ALGORITHM_VERSION
+            if not self._job_active(job_id, scene):
+                return
             self.repository.finish_job(job_id, result=result)
         except (SceneInputError, InvalidInput, Conflict) as error:
             self.repository.finish_job(

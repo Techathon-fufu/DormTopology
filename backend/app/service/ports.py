@@ -70,6 +70,12 @@ class JobExecutor(Protocol):
     def submit(self, function: Callable[[], None]) -> Future: ...
 
 
+class OrganizationStrategyProvider(Protocol):
+    """Propose soft packing strategies once, without executing actions."""
+
+    def propose(self, summary: dict) -> dict: ...
+
+
 class StoreConflict(Exception):
     """The stored revision or document changed during a use case."""
 
