@@ -62,6 +62,9 @@ async function doFetch(
   try {
     return await fetch(url, {
       method: opts.method ?? 'GET',
+      // Local planning has no cookie authentication. Loopback cookies are
+      // shared across ports and may belong to unrelated local applications.
+      credentials: 'omit',
       headers,
       body: payload,
       signal: controller.signal,
