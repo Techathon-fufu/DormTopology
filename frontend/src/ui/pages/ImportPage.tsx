@@ -1,3 +1,4 @@
+import { placePowerStripOnBackboard } from '@/scene/backboardMount'
 import { laptopViewingAngle } from '@/scene/placementEditing'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -339,7 +340,7 @@ export function ImportPage() {
 
   const confirmItems = () => {
     if (!recognized || recognized.length === 0) return
-    const objects: SceneObject[] = recognized.map((item, index) => ({
+    const objects: SceneObject[] = recognized.map((item, index): SceneObject => ({
       id: uid('obj'),
       projectId,
       name: item.name,
@@ -365,7 +366,7 @@ export function ImportPage() {
         source: isMockMode ? 'mock' : 'ai',
         dimensionSource: item.dimensionSource,
       },
-    }))
+    })).map(object => placePowerStripOnBackboard(object, project.room))
     useProjectsStore.getState().update(projectId, (p) => ({
       ...p,
       objects,

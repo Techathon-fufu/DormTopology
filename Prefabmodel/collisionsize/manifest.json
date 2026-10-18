@@ -81,13 +81,16 @@
   "monitor.glb": {
    "file": "monitor.collision.json",
    "source_glb": "monitor.glb",
-   "strategy": "convex",
+   "source_glb_sha256": "6d2c8488875ee69e98876f1e751353ba98ce94360dd56664c88d84485f4db482",
+   "strategy": "monitor_components",
    "source_parts": 1,
-   "collider_parts": 1,
-   "vertices": 16,
-   "faces": 28,
+   "collider_parts": 8,
+   "vertices": 64,
+   "faces": 96,
    "notes": [
-    "1 source parts -> 1 convex parts (route A)"
+    "Split the welded source mesh into base, tilted stand, screen and rear housing; apply every node transform.",
+    "Screen is five convex prisms from the actual front triangles; the 3mm recessed panel remains empty in front.",
+    "Close stand/rear-housing attachment caps for solid collision; preserve all authored exterior surfaces."
    ]
   },
   "mouse.glb": {

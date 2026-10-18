@@ -7,7 +7,8 @@ import * as THREE from 'three'
 import type { Project, SceneObject, Vec3 } from '@/types/project'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { useDrawerStore } from '@/state/drawerStore'
+import { drawerDisplayPosition } from './drawerContents'
+import { currentDrawerOffsets, useDrawerStore } from '@/state/drawerStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useObjectResizeStore } from '@/state/objectResizeStore'
 import { resizeIssue } from './placementEditing'
@@ -192,7 +193,7 @@ export function ObjectResizeHandles({
       const controlsAny = controls as unknown as OrbitControlsImpl | null
       const controlsWasEnabled = controlsAny ? controlsAny.enabled : false
 
-      const center = object.transform.position
+      const center = drawerDisplayPosition(object, project.room, currentDrawerOffsets())
       const rotY = object.transform.rotationY
       const source = {
         width: liveDims.width,

@@ -224,7 +224,7 @@ def _choose(
 
 
 def _region_id(scene: Scene, item: dict, *, target: bool = False) -> str | None:
-    if item["category"] in WALL_CATEGORIES:
+    if item["category"] in WALL_CATEGORIES or "surface_mount" in item:
         return None
     regions = scene["regions"]
     if target:

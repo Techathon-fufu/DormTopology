@@ -1,5 +1,9 @@
 import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
-import { useCabinetStore } from '@/state/cabinetStore'
+import { useDrawerStore } from '@/state/drawerStore'
+import { drawerIdForSurface, DORM_DESK_DRAWERS } from '@/scene/dormDeskDrawers'
+import { objectDrawerId } from '@/scene/drawerContents'
+import { placePowerStripOnBackboard, orientPowerStrip } from '@/scene/backboardMount'
+import { placementAtSupport } from '@/scene/placementEditing'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -416,20 +420,39 @@ function ObjectInspector({
           disabled={locked || !support || supportDeltaMm === 0}
           title={support ? `吸附到「${support.label}」表面` : '当前位置在房间外，没有支撑面'}
           onClick={() => {
-            if (support) patch({ transform: { position: [pos[0], support.y, pos[2]] } })
+            if (support) {
+              const candidate = orientPowerStrip(object, false)
+              patch({ dimensions: candidate.dimensions, ports: candidate.ports, powerStrip: candidate.powerStrip,
+                transform: { ...candidate.transform, position: [pos[0], support.y, pos[2]] } })
+            }
           }}
         >
           <Magnet className="h-3.5 w-3.5" />
           {support ? `吸附到${support.label}` : '无可吸附的支撑面'}
           {support && supportDeltaMm !== 0 ? `（${supportDeltaMm! > 0 ? '+' : ''}${supportDeltaMm} mm）` : ''}
         </Button>
-        {hasFixedFurniture(project.room) && <div className="flex gap-2">
-          {furnitureSurfaces(project.room).filter((s) => s.id.startsWith('support-cabinet')).map((s) => <Button key={s.id} size="sm" variant="outline" className="flex-1" disabled={locked} onClick={() => {
-            patch({ transform: { position: [(s.rect.x0 + s.rect.x1) / 2, s.y, (s.rect.z0 + s.rect.z1) / 2] } })
-            if (!useCabinetStore.getState().open) useCabinetStore.getState().toggle()
+        {hasFixedFurniture(project.room) && <>
+          {isPowerStripObject(object) ? <Button className="w-full" variant="outline" size="sm" disabled={locked} onClick={() => {
+            const mounted = placePowerStripOnBackboard(object, project.room)
+            patch({ transform: mounted.transform, dimensions: mounted.dimensions, ports: mounted.ports, powerStrip: mounted.powerStrip })
+            useWorkspaceStore.getState().setViewPreset('front')
+          }}>吸附到桌下背板</Button> : <Select aria-label="放入抽屉或柜格" value="" disabled={locked} onChange={(e) => {
+            const s = furnitureSurfaces(project.room, false).find(s => s.id === e.target.value)
+            if (!s) return
+            const candidate = placementAtSupport(object, { ...s, surfaceId: s.id, x: (s.rect.x0 + s.rect.x1) / 2, z: (s.rect.z0 + s.rect.z1) / 2 }, project.room, project.objects)
+            patch({ transform: candidate.transform })
+            const drawer = drawerIdForSurface(s.id)
+            if (drawer) useDrawerStore.getState().open(drawer)
             useWorkspaceStore.getState().setViewPreset('left')
-          }}>{s.label}</Button>)}
-        </div>}
+          }}>
+            <option value="">放入抽屉或柜格…</option>
+            {furnitureSurfaces(project.room, false).filter(s => s.kind === 'drawer' || s.id.startsWith('support-cabinet')).map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </Select>}
+          {objectDrawerId(object, project.room) && <p className="text-xs text-muted-foreground">已放入{DORM_DESK_DRAWERS.find(s => s.id === objectDrawerId(object, project.room))?.label}，随抽屉移动；拖出即可取出。</p>}
+          <div className="flex gap-1" aria-label="抽屉开合">
+            {DORM_DESK_DRAWERS.map(s => <Button key={s.id} variant="outline" size="sm" aria-label={`${s.label}开/关`} className="min-w-0 flex-1 px-0 text-[11px]" disabled={useWorkspaceStore.getState().mode === 'cable'} onClick={() => useDrawerStore.getState().toggle(s.id)}>{s.label.replace('抽屉', '')}开/关</Button>)}
+          </div>
+        </>}
       </section>
 
       <section className="space-y-1.5">
@@ -440,7 +463,7 @@ function ObjectInspector({
               key={d}
               size="sm"
               variant={deg === d ? 'primary' : 'outline'}
-              disabled={locked}
+              disabled={locked || object.powerStrip?.mount === 'backboard'}
               className="h-8 flex-1 px-0 text-xs"
               onClick={() => patch({ transform: { rotationY: degToRad(d) } })}
             >
@@ -448,7 +471,7 @@ function ObjectInspector({
             </Button>
           ))}
         </div>
-        <DegInput value={deg} disabled={locked} onCommit={(d) => patch({ transform: { rotationY: degToRad(d) } })} />
+        <DegInput value={deg} disabled={locked || object.powerStrip?.mount === 'backboard'} onCommit={(d) => patch({ transform: { rotationY: degToRad(d) } })} />
       </section>
 
       <section className="space-y-1.5">

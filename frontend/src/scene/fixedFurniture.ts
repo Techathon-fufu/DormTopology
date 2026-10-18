@@ -1,5 +1,6 @@
 import type { RoomConfig, Vec3 } from '@/types/project'
 import asset from './furnitureAsset.generated.json'
+import { drawerIdForPart, drawerIdForSurface, type DrawerOffsets } from './dormDeskDrawers'
 
 export const FURNITURE_OFFSET: Vec3 = [-1, -0.02, 0.9]
 export const FIXED_MODEL_URLS = ['dormdesk_body', 'drawer_bottom', 'drawer_middle', 'drawer_top'].map((name) => `models/dormdesk_parts/${name}.glb`)
@@ -16,15 +17,15 @@ export interface FurnitureSurface {
 
 export function hasFixedFurniture(room: RoomConfig): boolean { return room.furnitureModel === 'dormdesk-v1' }
 const translate = (v: number[]): Vec3 => v.map((n, i) => +(n + FURNITURE_OFFSET[i]).toFixed(6)) as Vec3
-export const fixedFurnitureBoxes: FurnitureBox[] = [
-  ...asset.parts.map((p) => ({ name: p.name, min: translate(p.min), max: translate(p.max) })),
-  // Door stays a conservative closed obstacle for planning; opening is a viewing interaction.
-  { name: 'Cabinet_Door', min: [.601, .04, .138], max: [.619, .707, .481] },
-]
+export const fixedFurnitureBoxes: FurnitureBox[] = asset.parts.map((p) => ({ name: p.name, min: translate(p.min), max: translate(p.max) }))
 
 /** Cut an inscribed square tunnel: conservative clearance for the configured circular grommet. */
-export function furnitureBoxes(room: RoomConfig): FurnitureBox[] {
-  return fixedFurnitureBoxes.flatMap((box) => {
+export function furnitureBoxes(room: RoomConfig, offsets: DrawerOffsets = {}): FurnitureBox[] {
+  return fixedFurnitureBoxes.flatMap((original) => {
+    const id = drawerIdForPart(original.name)
+    const dx = id ? offsets[id] ?? 0 : 0
+    const box = dx ? { ...original, min: [original.min[0] + dx, original.min[1], original.min[2]] as Vec3,
+      max: [original.max[0] + dx, original.max[1], original.max[2]] as Vec3 } : original
     if (!box.name.startsWith('Desk_Top_')) return [box]
     let parts = [box]
     room.cableHoles.forEach((hole) => {
@@ -52,7 +53,7 @@ function surface(id: string, kind: FurnitureSurface['kind'], label: string, boun
 }
 
 /** Actual free interiors, excluding the divider boards and drawer shells. */
-export function furnitureSurfaces(room: RoomConfig, cutHoles = true): FurnitureSurface[] {
+export function furnitureSurfaces(room: RoomConfig, cutHoles = true, offsets: DrawerOffsets = {}): FurnitureSurface[] {
   const desks = (cutHoles ? furnitureBoxes(room) : fixedFurnitureBoxes).filter((p) => p.name.startsWith('Desk_Top_'))
     .map((p) => surface(`support-${p.name}`, 'desk', p.name.includes('Main') ? '主桌面' : '右侧回台', [p.min[0], p.max[0], p.min[2], p.max[2]], p.max[1], 1.88))
   const shelves = [
@@ -71,7 +72,10 @@ export function furnitureSurfaces(room: RoomConfig, cutHoles = true): FurnitureS
     surface('support-cabinet-lower', 'shelf', '柜内下层', [.635, .95, .14, .48], .058, .371),
     surface('support-cabinet-upper', 'shelf', '柜内上层', [.635, .95, .14, .48], .389, .707),
   ]
-  return [...desks, ...shelves, ...drawers, ...cabinet]
+  return [...desks, ...shelves, ...drawers, ...cabinet].map((s) => {
+    const id = drawerIdForSurface(s.id), dx = id ? offsets[id] ?? 0 : 0
+    return dx ? { ...s, rect: { ...s.rect, x0: s.rect.x0 + dx, x1: s.rect.x1 + dx } } : s
+  })
 }
 
 export function validFurnitureHole(room: RoomConfig, position: Vec3, diameter: number): boolean {

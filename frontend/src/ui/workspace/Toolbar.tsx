@@ -24,7 +24,8 @@ import { Select } from '@/ui/kit/primitives'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { HoldCompareButton } from './HoldCompareButton'
-import { useCabinetStore } from '@/state/cabinetStore'
+import { useDrawerStore } from '@/state/drawerStore'
+import { DORM_DESK_DRAWERS } from '@/scene/dormDeskDrawers'
 import { hasFixedFurniture } from '@/scene/fixedFurniture'
 import { useTourStore } from '@/state/tourStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
@@ -91,7 +92,8 @@ export function Toolbar({
   const applying = useOrganizeStore((s) => s.applying)
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const setShowDesk = useDeskModelStore((s) => s.setShowDesk)
-  const cabinetOpen = useCabinetStore((s) => s.open)
+  const mode = useWorkspaceStore(s => s.mode)
+  const drawers = useDrawerStore((s) => s.drawers)
 
   return (
     <header className="relative z-30 shrink-0 border-b border-border bg-surface">
@@ -129,7 +131,7 @@ export function Toolbar({
               <p className="px-2 py-1 text-xs text-muted-foreground">项目与视图</p>
               <Link to={`/projects/${project.id}/result`} className="rounded-lg px-3 py-2 text-sm hover:bg-muted">查看整理动画</Link>
               <Button variant="ghost" className="justify-start" size="sm" onClick={onOpenPlans} disabled={applying}>历史方案</Button>
-              {hasFixedFurniture(project.room) ? <Button variant="ghost" className="justify-start" size="sm" onClick={() => { useCabinetStore.getState().toggle(); setViewPreset('left') }}>{cabinetOpen ? '关闭柜门' : '打开柜门'}</Button> : null}
+              {hasFixedFurniture(project.room) && DORM_DESK_DRAWERS.map(s => <Button key={s.id} variant="ghost" className="justify-start" size="sm" disabled={previewBlocking || mode === 'cable'} onClick={() => { useDrawerStore.getState().toggle(s.id); setViewPreset('left') }}>{drawers[s.id].target ? '关闭' : '打开'}{s.label}</Button>)}
               <Button variant="ghost" className="justify-start" size="sm" disabled={previewBlocking} onClick={onSavePlan}><Save className="h-4 w-4" />保存当前方案</Button>
               {project.isDemo ? <Button variant="ghost" className="justify-start" size="sm" onClick={() => { const tour = useTourStore.getState(); if (!tour.active) tour.start(project.id) }}><Sparkles className="h-4 w-4" />演示导览</Button> : null}
               <Button variant="ghost" className="justify-start" size="sm" onClick={resetView}><RotateCcw className="h-4 w-4" />重置视角 · F</Button>

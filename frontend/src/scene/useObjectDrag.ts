@@ -8,7 +8,9 @@ import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { snapPlacement } from './placementEditing'
+import { placementAtSupport } from './placementEditing'
+import { currentDrawerOffsets } from '@/state/drawerStore'
+import { drawerDisplayObjects, drawerDisplayPosition } from './drawerContents'
 
 /** 拖拽判定阈值（像素）：小于该位移视为点击选中 */
 const DRAG_THRESHOLD_PX = 4
@@ -53,6 +55,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
     let moved = false
     let rafId = 0
     let pending: PointerEvent | null = null
+    let lastObject = object
     let lastPos: Vec3 = startPos
     /** 本次拖拽中最后一次「有效预览位置」（越界 / 相交的预览不更新它） */
     let lastValidPos: Vec3 = startPos
@@ -79,11 +82,15 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       raycaster.setFromCamera(ndc, camera)
       // 吸附面高度优先采用桌体 GLB 实测锚点（未加载 / 失败时回退 RoomConfig）
       const metrics = useDeskModelStore.getState().metrics
-      const hit = raycastSupports(raycaster.ray, project.room, metrics)
+      const offsets = currentDrawerOffsets()
+      const hit = raycastSupports(raycaster.ray, project.room, metrics, offsets, object)
       if (!hit) return // 指针未指向任何支撑面：保持上一次预览
       const others = useProjectsStore.getState().projects[project.id]?.objects ?? project.objects
-      const position = snapPlacement(object, hit, project.room, others)
-      const issues = placementIssues(object, position, others, project.room, metrics)
+      const candidate = placementAtSupport(object, hit, project.room, others, offsets)
+      const position = candidate.transform.position
+      const displayPosition = drawerDisplayPosition(candidate, project.room, offsets)
+      const issues = placementIssues(candidate, displayPosition, drawerDisplayObjects(others, project.room, offsets), project.room, metrics, offsets)
+      lastObject = candidate
       const valid = !issues.some((i) => i.type === 'outOfBounds' || i.type === 'overlap' || i.type === 'roomCollision' || i.type === 'floating')
       moved = true
       lastPos = position
@@ -93,6 +100,8 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
         objectId: object.id,
         position,
         support: hit.kind,
+        object: candidate,
+        displayPosition,
         valid,
         lastValid: lastValidPos,
       })
@@ -105,7 +114,9 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       if (!rafId) rafId = window.requestAnimationFrame(flush)
     }
 
-    const finish = () => {
+    const finish = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return
+      if (moved) pending = event // Include the release point even if a mesh consumed the last pointermove.
       cancelRaf()
       if (pending) flush()
       cleanup()
@@ -116,11 +127,11 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       // 干涉只提醒，保存最后落点；
       // 与起点一致时不提交，避免产生无变化的空历史记录。
       const commitPosition = resolveDropCommit(startPos, lastValidPos, lastPos, lastPreviewValid)
-      if (commitPosition) {
+      if (commitPosition || lastObject.powerStrip?.mount !== object.powerStrip?.mount) {
         useWorkspaceStore.getState().updateObject(
           project.id,
           object.id,
-          { transform: { position: commitPosition } },
+          { transform: lastObject.transform, ...(lastObject.powerStrip?.mount !== object.powerStrip?.mount ? { dimensions: lastObject.dimensions, ports: lastObject.ports, powerStrip: lastObject.powerStrip } : {}) },
           true,
         )
         if (!lastPreviewValid) {
@@ -130,16 +141,16 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
     }
 
     const cleanup = () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('pointerup', finish, true)
       window.removeEventListener('pointercancel', cancel)
       cleanupRef.current = null
     }
 
     const cancel = () => { cancelRaf(); cleanup(); useWorkspaceStore.getState().setDrag(null); document.body.style.cursor = 'auto' }
     cleanupRef.current?.() // 取消上一次未完成的拖拽
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointermove', onMove, true)
+    window.addEventListener('pointerup', finish, true)
     window.addEventListener('pointercancel', cancel)
     cleanupRef.current = cleanup
 
@@ -149,6 +160,7 @@ export function useObjectDrag(project: Project, object: SceneObject): ObjectDrag
       objectId: object.id,
       position: startPos,
       support: 'none',
+      displayPosition: drawerDisplayPosition(object, project.room, currentDrawerOffsets()),
       valid: true,
       lastValid: startPos,
     })

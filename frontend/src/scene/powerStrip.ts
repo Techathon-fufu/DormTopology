@@ -87,6 +87,7 @@ export function computePowerStripSpecChange(
 ): PowerStripSpecChange {
   const current = resolvePowerStripConfig(object)
   const config: PowerStripConfig = {
+    ...current,
     socketCount: next.socketCount ?? current.socketCount,
     socketSpacing: next.socketSpacing ?? current.socketSpacing,
     maxLoadW: next.maxLoadW ?? current.maxLoadW,
@@ -104,8 +105,11 @@ export function computePowerStripSpecChange(
       type: 'power-ac',
       label: `插孔 ${i + 1}`,
       powered: true,
-      direction: 'up',
-      offset: [stripSocketOffsetX(i, config.socketCount, width), portHeight, 0],
+      direction: config.mount === 'backboard' ? 'front' : 'up',
+      localDirection: undefined,
+      offset: config.mount === 'backboard'
+        ? [stripSocketOffsetX(i, config.socketCount, width), object.dimensions.height / 2, object.dimensions.depth / 2 + .001]
+        : [stripSocketOffsetX(i, config.socketCount, width), portHeight, 0],
       maxWatt: config.maxLoadW,
     })
   }

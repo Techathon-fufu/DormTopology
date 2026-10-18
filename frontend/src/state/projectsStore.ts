@@ -29,22 +29,23 @@ export function isDemoProjectStale(project: Project | undefined): boolean {
 export function migrateDefaultDemoPorts(project: Project): Project {
   if (project.id !== DEMO_PROJECT_ID || project.demoSeedVersion !== DEMO_SEED_VERSION
     || project.room.furnitureModel !== 'dormdesk-v1') return project
-  const oldOffsets: Record<string, [number, number, number]> = {
-    'port-laptop-usbc': [.172, .03, -.06], 'port-laptop-hdmi': [.172, .05, -.01],
-    'port-laptop-usba': [.172, .015, .06], 'port-monitor-pwr': [.12, .05, -.092],
-    'port-monitor-hdmi': [-.12, .05, -.092], 'port-lamp-pwr': [0, .06, -.092],
+  const oldOffsets: Record<string, Array<[number, number, number]>> = {
+    'port-laptop-usbc': [[.172, .03, -.06]], 'port-laptop-hdmi': [[.172, .05, -.01]],
+    'port-laptop-usba': [[.172, .015, .06]], 'port-monitor-pwr': [[.12, .05, -.092], [.12, .15, -.012]],
+    'port-monitor-hdmi': [[-.12, .05, -.092], [-.12, .15, -.012]], 'port-lamp-pwr': [[0, .06, -.092]],
   }
   const defaults = createDemoSceneObjects(project.id)
   let changed = false
   const objects = project.objects.map((object) => {
     const original = defaults.find((o) => o.id === object.id)
-    if (!original || original.model.shape !== object.model.shape
+    if (!original || original.model.shape !== object.model.shape || original.model.prefabId !== object.model.prefabId
       || (['width', 'height', 'depth'] as const).some((key) => original.dimensions[key] !== object.dimensions[key])) return object
     let updated = false
     const ports = object.ports.map((port) => {
       const old = oldOffsets[port.id], next = original.ports.find((p) => p.id === port.id)
-      if (!old || !next || port.confirmed === true || port.type !== next.type || port.direction !== next.direction
-        || !port.offset?.every((v, i) => v === old[i])) return port
+      if (!old || !next || port.confirmed === true || port.localDirection !== undefined
+        || port.type !== next.type || port.direction !== next.direction
+        || !old.some((offset) => port.offset?.every((v, i) => v === offset[i]))) return port
       changed = updated = true
       return { ...port, offset: next.offset, confirmed: false }
     })

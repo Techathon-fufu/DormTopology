@@ -73,6 +73,8 @@ Vite preview 继承 `vite.config.ts` 的代理；空 `VITE_API_BASE_URL` 使 `/a
 
 ### 4. 当前版本验证
 
+2026-10-18 显示器碰撞修复：当前 `5177` 构建已更新，`8003` 继续运行。实际 GLB 拆为八个凸体，工作台轮廓与计算实体一致；源资产未改动。后端 98 项、22 份碰撞资产、12 组显示器缩放/旋转与跨端导出、108 组模型变换、17 件整理及 7/7 走线验证通过。独立测试页验证底座旁空隙可用、实体穿透警告和尺寸修改拒绝，桌面/模拟手机场景正常。旧占位模型有一条修改前后都失败的历史断言，完整范围与复现命令见[显示器碰撞说明](../frontend/docs/monitor-collision.md)。
+
 2026-10-18 同步 main `7ebdec2`：后端 250 项、兼容 1 项通过；离线碰撞生成器 5 项通过、1 项因缺少历史 `tape_measure.glb` 跳过，另用现有 `mouse.glb` 验证目标尺寸生成分支。领域算法保持标准库隔离；GLB 读取依赖按需加载，生成器 Ruff 通过。家具 75 盒与 GLB/JSON 一致，12 件预制单品的非均匀缩放、底心和旋转检查共 108 例通过。生成器不再覆盖抽屉材质，同步前后的源文件保持不变。前端类型检查、生产构建、净距/接口/结果失效/走线预览转换专项、真实 17 件整理及整理后 7/7 路径验证通过；原始散乱场景仍如实返回部分走线失败。
 
 真实后端浏览器专项 7 项通过、1 项按原设置跳过：桌面完整整理与七线预览接受、桌面/模拟手机设备布局、配件与集线槽分析、抽屉推拉及取消。完整默认七线流程仍只在桌面执行。证据分别位于 `/private/tmp/dorm-merge-default-browser-results`、`/private/tmp/dorm-merge-cable-accessory-results`、`/private/tmp/dorm-merge-drawer-results`。更新后的 `5177` 构建预览在两种视口与三个视角均非空，无资产错误、脚本错误或横向溢出，截图位于 `.work/backend-only/preview-*.png`。已有项目需刷新并重新生成、预览和接受方案，不自动改变用户摆放。
@@ -288,3 +290,19 @@ tail -n 40 /private/tmp/dorm-monitor-placement/.work/local-demo-20261017/fronten
 截图：`project-home-mobile.png`（手机首页）、`project-workbench-desktop.png`（桌面工作台）、`project-result-desktop.png` 与 `project-result-mobile.png`（动画页）。构建仍有已有 Three.js 大包提示；未新增供应商接入或验证真实 Rodin。
 
 主分支合并复查：随后合入远端 `648d5a9`，保留拖动后干涉提示、历史重置时清除提示及其专项脚本，同时保留本轮吸附、取消拖动、缩放碰撞和按住对比。合并后 `npm run build`（含 TypeScript）、`check-drag-drop-interference.ts`、`check-placement-editing.ts`、`check-object-resize.ts` 与差异空白检查通过；新构建 `index-DAVW8YdI.js` 由原 `5177` 预览服务提供。`objects/dormdesk.blend`、`objects/dormdesk.glb` 的 SHA256 在合并前后保持一致，未纳入提交。
+
+## 2026-10-18 抽屉随动与插排背板安装
+
+原问题来自抽屉动画只移动外观：拖拽支撑面和碰撞盒仍停在关闭位置，物品也没有应用抽屉偏移。现在每只抽屉只有一个随动内腔目标，命中后统一落到底板；不再保留原位静止吸附目标。物品按关闭时的坐标保存，显示时跟随抽屉，拖出即解除；滑动射线经过开口也能命中底板目标。开放柜不再生成额外门板，两个柜格保留。
+
+插排新建默认位置为 `[0.07, 0.625, 0.075]` 米、竖装尺寸 `0.21 × 0.05 × 0.03` 米，背面贴住桌下背板，插孔朝座位。前后端验证实际接触、板面边界及其它实体碰撞；新增 `surface_mount` 协议见[数据契约](data_contract.md)。已有自建项目插排不自动搬动，可使用「吸附到桌下背板」。同期桌面分区更新将内置示例升级至 v9，旧示例由既有迁移逻辑先归档。
+
+验证记录：
+
+- `check-drawer-mounts.ts` 覆盖唯一随动吸附面、旧位置不命中、关闭抽屉不命中、实际斜视射线、半开/全开/关合、取出解除、内腔边界、真实墙体干涉、撤销重做，以及插排默认、接口旋转、拖拽、尺寸/规格与后端导出。
+- 后端 `test_packing`、`test_surface_mount`、`test_monitor_collision`、`test_organization_service`、`test_routing_service` 共 84 项通过；其中背板专项 5 项，包含引用/姿态/边界拒绝及不豁免碰撞。
+- 与最新桌面分区改动合并后，类型检查、抽屉专项、`check-placement-editing.ts`、`check-workstation-zones.ts`、`check-fixed-furniture.ts` 及真实 17 件默认场景整理后七线走线通过。已存入抽屉/柜格的预制物品不会被桌面分区强行拉回桌面。
+- 浏览器在独立 `5178` / `8004` 实测水杯从桌面拖入上层抽屉、关闭随动、重新打开、再拖出；插排沿背板拖动保持接触，切换平放后再吸附恢复朝外接口。手机 `390 × 844` 场景和属性面板无横向溢出，三个抽屉按钮完整显示。截图在 `.work/drawer-backboard/`：`drawer-open.png`、`backboard-pdu.png`、`mobile-controls.png`。
+- 生产构建 `index-BIbKwytw.js` 已由原 `5177` 提供；`8003` 后端重启后直连与代理健康检查正常，生产页面无错误日志。沿用原 SQLite，重启前 28 个任务均已完成，备份为 `/private/tmp/dorm-before-drawer-backboard.sqlite3`；未更改用户的 `objects/` 源资产。
+
+构建保留既有 Three.js 大包提示。开合做当前姿态的碰撞提醒，不实现刚体阻挡或连续运动路径求解；拖动仍按产品要求保留落点并提示干涉。

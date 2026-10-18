@@ -2,7 +2,11 @@ import * as THREE from 'three'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { DeskSurfaceMetrics } from '@/scene/deskModel'
 import { bottomContacts, containedInCavity, objectRoomHits, objectsCollide, worldCollision } from './collisionGeometry'
-import { cachedRoomSolids } from './roomCollision'
+import { drawerDisplayObjects } from './drawerContents'
+import { drawerIdForSurface, type DrawerOffsets } from './dormDeskDrawers'
+import { backboardSurface, validBackboardMount } from './backboardMount'
+import { isPowerStripObject } from './powerStrip'
+import { roomSolids, cachedRoomSolids } from './roomCollision'
 import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
 
 /**
@@ -14,13 +18,14 @@ import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
  * - 相交检测使用共享模型部件的三维凸体 SAT；碰撞与可见实体使用相同几何
  */
 
-export type SupportKind = 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'none'
+export type SupportKind = 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'backboard' | 'none'
 
 export interface SupportInfo {
   kind: SupportKind
   /** 支撑面上表面高度（米） */
   y: number
   label: string
+  surfaceId?: string
 }
 
 /** 书架搁板厚度（与 RoomShell 渲染一致） */
@@ -68,10 +73,11 @@ export function supportsContaining(
   x: number,
   z: number,
   metrics?: DeskSurfaceMetrics | null,
+  offsets: DrawerOffsets = {},
 ): SupportInfo[] {
   const list: SupportInfo[] = []
   if (hasFixedFurniture(room)) {
-    furnitureSurfaces(room).forEach((s) => {
+    furnitureSurfaces(room, true, offsets).forEach((s) => {
       if (x >= s.rect.x0 - 1e-7 && x <= s.rect.x1 + 1e-7 && z >= s.rect.z0 - 1e-7 && z <= s.rect.z1 + 1e-7) list.push({ kind: s.kind, y: s.y, label: s.label })
     })
     if (Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width) list.push({ kind: 'floor', y: 0, label: '地面' })
@@ -132,20 +138,42 @@ export function raycastSupports(
   ray: THREE.Ray,
   room: RoomConfig,
   metrics?: DeskSurfaceMetrics | null,
+  offsets: DrawerOffsets = {},
+  object?: SceneObject,
 ): SupportHit | null {
-  const hits: SupportHit[] = []
+  const hits: Array<SupportHit & { rayDistance: number }> = []
 
-  const tryPlane = (y: number, kind: SupportKind, label: string, contains: (x: number, z: number) => boolean) => {
+  const tryPlane = (y: number, kind: SupportKind, label: string, contains: (x: number, z: number) => boolean, surfaceId?: string) => {
     _plane.set(_normal, -y)
     if (!ray.intersectPlane(_plane, _hit)) return
     if (!contains(_hit.x, _hit.z)) return
-    hits.push({ kind, y, label, x: _hit.x, z: _hit.z })
+    hits.push({ kind, y, label, surfaceId, x: _hit.x, z: _hit.z, rayDistance: ray.origin.distanceToSquared(_hit) })
   }
 
   tryPlane(0, 'floor', '地面', (x, z) => Math.abs(x) <= room.length / 2 && z >= 0 && z <= room.width)
   if (hasFixedFurniture(room)) {
-    furnitureSurfaces(room).forEach((s) => tryPlane(s.y, s.kind, s.label, (x, z) => x >= s.rect.x0 && x <= s.rect.x1 && z >= s.rect.z0 && z <= s.rect.z1))
-    return hits.sort((a, b) => ray.origin.distanceToSquared(new THREE.Vector3(a.x, a.y, a.z)) - ray.origin.distanceToSquared(new THREE.Vector3(b.x, b.y, b.z)))[0] ?? null
+    furnitureSurfaces(room, true, offsets).forEach((s) => {
+      const drawer = drawerIdForSurface(s.id)
+      if (drawer && Math.abs(offsets[drawer] ?? 0) < .01) return
+      if (drawer) {
+        // One target per moving cavity, resolving to its bottom. A slanted ray can
+        // cross the opening and hit a wall before reaching the floor rectangle.
+        const cavity = new THREE.Box3(new THREE.Vector3(s.rect.x0, s.y, s.rect.z0),
+          new THREE.Vector3(s.rect.x1, s.y + s.clearance, s.rect.z1))
+        if (ray.intersectBox(cavity, _hit)) hits.push({ kind: s.kind, y: s.y, label: s.label,
+          surfaceId: s.id, x: _hit.x, z: _hit.z, rayDistance: ray.origin.distanceToSquared(_hit) })
+      } else {
+        tryPlane(s.y, s.kind, s.label, (x, z) => x >= s.rect.x0 && x <= s.rect.x1 && z >= s.rect.z0 && z <= s.rect.z1, s.id)
+      }
+    })
+    const board = object && isPowerStripObject(object) ? backboardSurface(room) : null
+    if (board) {
+      _plane.set(new THREE.Vector3(0, 0, 1), -board.z)
+      if (ray.intersectPlane(_plane, _hit) && _hit.x >= board.x0 && _hit.x <= board.x1 && _hit.y >= board.y0 && _hit.y <= board.y1) {
+        hits.push({ kind: 'backboard', label: '桌下背板', x: _hit.x, y: _hit.y, z: board.z, surfaceId: board.id, rayDistance: ray.origin.distanceToSquared(_hit) })
+      }
+    }
+    return hits.sort((a, b) => a.rayDistance - b.rayDistance)[0] ?? null
   }
   tryPlane(
     deskTopY(room, metrics),
@@ -213,6 +241,7 @@ export function placementIssues(
   others: SceneObject[],
   room: RoomConfig,
   metrics?: DeskSurfaceMetrics | null,
+  offsets: DrawerOffsets = {},
 ): SceneIssue[] {
   const issues: SceneIssue[] = []
   const bounds = worldCollision(object, position).bounds
@@ -229,6 +258,15 @@ export function placementIssues(
   if (bounds.max[1] > room.height + BOUNDS_EPSILON) outParts.push('超过层高')
   if (outParts.length > 0) {
     issues.push({ type: 'outOfBounds', message: `越界：${outParts.join('、')}` })
+  }
+
+  // Drawer contents must also fit the closed cavity, so the drawer can close again.
+  const cavity = hasFixedFurniture(room) ? furnitureSurfaces(room, false, offsets).find(s => s.kind === 'drawer'
+    && Math.abs(position[1] - s.y) <= FLOATING_TOLERANCE
+    && position[0] >= s.rect.x0 && position[0] <= s.rect.x1 && position[2] >= s.rect.z0 && position[2] <= s.rect.z1) : undefined
+  if (cavity && (bounds.min[0] < cavity.rect.x0 - BOUNDS_EPSILON || bounds.max[0] > cavity.rect.x1 + BOUNDS_EPSILON
+    || bounds.min[2] < cavity.rect.z0 - BOUNDS_EPSILON || bounds.max[2] > cavity.rect.z1 + BOUNDS_EPSILON || bounds.max[1] > cavity.y + cavity.clearance + BOUNDS_EPSILON)) {
+    issues.push({ type: 'outOfBounds', message: '超出抽屉内腔：关合所需的宽度、深度或高度不足' })
   }
 
   // 2) 与其它物品明显相交（SAT + 高度重叠；收纳进容器内部不算相交）
@@ -251,7 +289,7 @@ export function placementIssues(
   }
 
   // 3) 与场地固定实体（桌面 / 桌腿 / 横梁 / 书架搁板与侧板 / 立柱）穿模
-  const roomHits = objectRoomHits(object, position, cachedRoomSolids(room), ROOM_CLEARANCE)
+  const roomHits = objectRoomHits(object, position, Object.keys(offsets).length ? roomSolids(room, offsets) : cachedRoomSolids(room), ROOM_CLEARANCE)
   if (roomHits.length > 0) {
     const labels = [...new Set(roomHits.map((hit) => hit.label))]
     issues.push({
@@ -263,8 +301,9 @@ export function placementIssues(
 
   // Every bottom contact must rest on a declared room plane or a real horizontal solid face.
   const contacts = bottomContacts(object, position)
-  const supported = contacts.every(contact => {
-    if (supportsContaining(room, contact[0], contact[2], metrics).some(s => Math.abs(s.y-contact[1]) <= FLOATING_TOLERANCE)) return true
+  const mounted = object.powerStrip?.mount === 'backboard'
+  const supported = mounted ? validBackboardMount(object, position, room) : contacts.every(contact => {
+    if (supportsContaining(room, contact[0], contact[2], metrics, offsets).some(s => Math.abs(s.y-contact[1]) <= FLOATING_TOLERANCE)) return true
     for (const other of others) {
       if (other.id === object.id || !other.visible) continue
       for (const part of worldCollision(other).parts) {
@@ -281,7 +320,7 @@ export function placementIssues(
     }
     return false
   })
-  if (!supported) issues.push({type:'floating', message:'支撑不足：底部接触区域未完整落在支撑面上（容差 1mm）'})
+  if (!supported) issues.push({type:'floating', message: mounted ? '背板安装无效：请贴合桌下背板，并保持插排完整落在背板范围内' : '支撑不足：底部接触区域未完整落在支撑面上（容差 1mm）'})
 
   return issues
 }
@@ -291,11 +330,12 @@ export function validateScene(
   objects: SceneObject[],
   room: RoomConfig,
   metrics?: DeskSurfaceMetrics | null,
+  offsets: DrawerOffsets = {},
 ): Map<string, SceneIssue[]> {
   const map = new Map<string, SceneIssue[]>()
-  const visible = objects.filter((o) => o.visible)
+  const visible = drawerDisplayObjects(objects.filter((o) => o.visible), room, offsets)
   for (const object of visible) {
-    const issues = placementIssues(object, object.transform.position, visible, room, metrics)
+    const issues = placementIssues(object, object.transform.position, visible, room, metrics, offsets)
     if (issues.length > 0) map.set(object.id, issues)
   }
   return map

@@ -25,6 +25,11 @@ class PlugMount(TypedDict):
     plug_port_id: str
 
 
+class SurfaceMount(TypedDict):
+    obstacle_id: str
+    face: str
+
+
 class Item(TypedDict):
     id: str
     name: str
@@ -46,6 +51,7 @@ class Item(TypedDict):
     generation: dict
     socket_count: NotRequired[int]
     plug_mount: NotRequired[PlugMount]
+    surface_mount: NotRequired[SurfaceMount]
     placement_priority: NotRequired[int]
 
 

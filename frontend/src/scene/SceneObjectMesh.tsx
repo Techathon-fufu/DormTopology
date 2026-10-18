@@ -1,3 +1,5 @@
+import { useDrawerOffsets } from '@/state/drawerStore'
+import { drawerDisplayPosition } from './drawerContents'
 import { useEffect, useState } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Project, SceneObject } from '@/types/project'
@@ -8,7 +10,7 @@ import { useObjectResizeStore } from '@/state/objectResizeStore'
 import { CATEGORY_COLORS } from './models'
 import { ObjectModel } from './ObjectModel'
 import { ObjectResizeHandles } from './ObjectResizeHandles'
-import { basicMaterial, boxGeometry } from './resources'
+import { CollisionOutline } from './CollisionOutline'
 import { useObjectDrag } from './useObjectDrag'
 import { useSurfacePortPick } from '@/features/connections/useSurfacePortPick'
 import { useConnectionsStore } from '@/features/connections/store'
@@ -41,11 +43,14 @@ export function SceneObjectMesh({
     s.preview?.projectId === project.id && s.preview.objectId === object.id ? s.preview : null,
   )
   const { transform: t } = object
-  const dims = resizePreview?.dimensions ?? object.dimensions
 
   const dragPreview = useWorkspaceStore((s) =>
     s.drag && s.drag.objectId === object.id ? s.drag : null,
   )
+  const renderedObject = dragPreview?.object ?? object
+  const dims = resizePreview?.dimensions ?? renderedObject.dimensions
+  const displayObject = { ...renderedObject, dimensions: dims }
+  const offsets = useDrawerOffsets()
   const organizePose = useOrganizeStore((s) =>
     s.plan ? s.compare === 'before' ? s.originals[object.id] : s.overrides[object.id] ?? s.originals[object.id] : undefined,
   )
@@ -69,8 +74,10 @@ export function SceneObjectMesh({
 
   if (!object.visible) return null
 
-  const pos = dragPreview?.position ?? organizePose?.position ?? t.position
-  const rotationY = dragPreview ? t.rotationY : (organizePose?.rotationY ?? t.rotationY)
+  const basePos = dragPreview?.displayPosition ?? organizePose?.position ?? drawerDisplayPosition(object, project.room, offsets)
+  const pos = resizePreview && object.powerStrip?.mount === 'backboard'
+    ? [basePos[0], basePos[1], basePos[2] + (dims.depth - object.dimensions.depth) / 2] : basePos
+  const rotationY = dragPreview ? renderedObject.transform.rotationY : (organizePose?.rotationY ?? t.rotationY)
 
   return (
     <group position={[pos[0], pos[1] + dims.height / 2, pos[2]]} rotation={[0, rotationY, 0]}>
@@ -107,27 +114,19 @@ export function SceneObjectMesh({
         onPointerOut={() => { setHovered(false); pick.onPointerOut() }}
       >
         <ObjectModel
-          object={resizePreview ? { ...object, dimensions: dims } : object}
+          object={displayObject}
           shape={modelDone ? object.model.shape : 'genericBox'}
           color={CATEGORY_COLORS[object.category]}
           sockets={object.powerStrip?.socketCount}
         />
       </group>
       {selected || hovered || dragging || activeOperation ? (
-        <mesh
-          geometry={boxGeometry(dims.width, dims.height, dims.depth)}
-          material={basicMaterial('#0F9D8A', {
-            wireframe: true,
-            opacity: selected || dragging || activeOperation ? 0.85 : 0.4,
-          })}
-        />
+        <CollisionOutline object={displayObject} color="#0F9D8A"
+          opacity={selected || dragging || activeOperation ? 0.85 : 0.4} />
       ) : null}
       <ObjectResizeHandles project={project} object={object} selected={selected} />
       {hasIssues || dragInvalid ? (
-        <mesh
-          geometry={boxGeometry(dims.width * 1.1, dims.height * 1.1, dims.depth * 1.1)}
-          material={basicMaterial('#D64545', { wireframe: true, opacity: dragInvalid ? 0.9 : 0.5 })}
-        />
+        <CollisionOutline object={displayObject} color="#D64545" opacity={dragInvalid ? 0.9 : 0.65} />
       ) : null}
     </group>
   )

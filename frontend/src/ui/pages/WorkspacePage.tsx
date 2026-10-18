@@ -1,3 +1,4 @@
+import { useDrawerOffsets, useDrawerStore } from '@/state/drawerStore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ROTATION_STEP } from '@/scene/placementEditing'
@@ -87,6 +88,7 @@ export function WorkspacePage() {
   const captureBaseline = usePlansStore((s) => s.captureBaseline)
   const saveCandidate = usePlansStore((s) => s.saveCandidate)
   const resetHistory = useWorkspaceStore((s) => s.resetHistory)
+  const drawerOffsets = useDrawerOffsets()
   const mode = useWorkspaceStore((s) => s.mode)
   const selectedId = useWorkspaceStore((s) => s.selectedId)
   const selectedCableId = useCableStore((s) => s.selectedCableId)
@@ -169,13 +171,15 @@ export function WorkspacePage() {
     setLeftOpen(true)
   }, [selectedId, selectedCableId])
 
+  useEffect(() => { useDrawerStore.getState().closeAll() }, [id, mode, organizeOpen, showBefore, marking !== null])
+
   // 场景摆放校验（越界 / 相交 / 悬空）：随项目数据变化实时重算
   const issuesById = useMemo(
     () =>
       project
-        ? validateScene(project.objects, project.room, deskMetrics)
+        ? validateScene(project.objects, project.room, deskMetrics, drawerOffsets)
         : new Map<string, SceneIssue[]>(),
-    [project, deskMetrics],
+    [project, deskMetrics, drawerOffsets],
   )
 
   const showFlash = (msg: string) => {

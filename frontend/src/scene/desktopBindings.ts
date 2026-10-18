@@ -1,3 +1,4 @@
+import { isFurnitureStoragePosition } from './drawerContents'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import { worldCollision } from './collisionGeometry'
 import { hasFixedFurniture } from './fixedFurniture'
@@ -54,6 +55,7 @@ export function desktopMovementRange(object: SceneObject, room: RoomConfig, othe
 
 /** Used by both drag previews and all property/keyboard edits; never shrinks an item to fit. */
 export function constrainDesktopPose(object: SceneObject, room: RoomConfig, others: SceneObject[]): SceneObject['transform'] {
+  if (isFurnitureStoragePosition(object, room)) return object.transform
   const range = desktopMovementRange(object, room, others)
   if (!range) return object.transform
   if (range.x0 > range.x1 + 1e-6 || range.z0 > range.z1 + 1e-6) throw new Error(`${object.name}尺寸超出${range.label}，请核对尺寸；不会自动缩小物品`)
@@ -80,7 +82,7 @@ export function initialDesktopPose(object: SceneObject, room: RoomConfig, others
 export function followMousepad(previous: SceneObject[], next: SceneObject[], room: RoomConfig): SceneObject[] {
   if (!hasFixedFurniture(room)) return next
   return next.map((mouse) => {
-    if (mouse.model.prefabId !== 'mouse') return mouse
+    if (mouse.model.prefabId !== 'mouse' || isFurnitureStoragePosition(mouse, room)) return mouse
     const oldMouse = previous.find((o) => o.id === mouse.id)
     if (!oldMouse) return mouse
     const oldPad = mouseSupportPad(oldMouse, previous), newPad = mouseSupportPad(mouse, next)

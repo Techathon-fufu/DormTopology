@@ -253,6 +253,8 @@ export const POWER_STRIP_MARGIN = 0.03
  */
 export interface PowerStripConfig {
   socketCount: PowerStripSocketCount
+  /** 背板安装：插孔朝前，height/depth 为安装后的轴向尺寸；缺省为水平摆放。 */
+  mount?: 'backboard'
   /** 相邻插孔中心间距（米） */
   socketSpacing: number
   /** 最大建议负载（瓦）：已连接设备的额定功率合计超过该值时给出警告（估算值） */

@@ -42,6 +42,7 @@ export interface PackingItem {
   image_url: string | null
   model_url: string | null
   generation: { task_id: null; status: 'not_requested'; source: 'placeholder' | 'live' | 'cache'; error: null }
+  surface_mount?: { obstacle_id: string; face: 'z_max' }
   socket_count?: number
 }
 
@@ -166,18 +167,16 @@ export function toPackingScene(input: {
     if (view) addRegion(`monitor-view-${object.id}`, view.rect, view.y, ceiling - view.y)
   }
   if (workstation) {
-    // A pad is retained by this planning request, so its support face cannot go stale.
     for (const pad of input.objects.filter((o) => o.visible && o.model.prefabId === 'mousepad')) {
       const issue = desktopPlacementIssue(pad, room, input.objects)
       if (issue) throw new ApiError(issue, { kind: 'input' })
     }
-    for (const mouse of input.objects.filter((o) => o.model.prefabId === 'mouse')) {
+    for (const mouse of input.objects.filter((o) => o.visible && o.model.prefabId === 'mouse')) {
       const pad = mouseSupportPad(mouse, input.objects)
       if (!pad) continue
       const b = worldCollision(pad).bounds
       addRegion(`mouse-on-${pad.id}`, { x0: b.min[0], x1: b.max[0], z0: b.min[2], z1: b.max[2] }, b.max[1], ceiling - b.max[1])
     }
-    // Keyboard candidates share the same exact centreline as the screen.
     const keyboard = input.objects.find((o) => o.model.prefabId === 'keyboard')
     if (keyboard) {
       const range = desktopMovementRange(keyboard, room, input.objects)!
@@ -233,8 +232,10 @@ export function toPackingScene(input: {
       preferred = object.frequent || preferences.preferredStorageZone === 'desk' ? clearIds
         : preferences.preferredStorageZone === 'underDesk' && allowsFloorPlacement(object, preferences) ? ['under-desk'] : storageIds
     } else allowed = [...clearIds, ...(!object.frequent ? storageIds : [])]
+    const mounted = object.powerStrip?.mount === 'backboard'
     const pad = workstation ? mouseSupportPad(object, input.objects) : undefined
     if (pad) allowed = [`mouse-on-${pad.id}`]
+    if (mounted) { allowed = []; preferred = [] }
     const allowedRegions = allowed.filter((id) => regions.some((r) => r.id === id))
     const source = object.recognition?.dimensionSource === 'user' || object.source === 'manual'
       ? 'user' : object.source === 'demo' ? 'template' : 'estimated'
@@ -248,20 +249,21 @@ export function toPackingScene(input: {
     if (object.powerStrip) {
       ports.forEach((p) => { p.type = /bus|input|inlet/.test(p.id) ? 'power_sink' : 'power_source' })
       // The product has socket ports only. This unconfirmed inlet is never used for routing.
-      if (!ports.some((p) => p.type === 'power_sink')) ports.push({ id: `${object.id}:bus-input`, type: 'power_sink', local_position: [0, object.dimensions.height / 2, -object.dimensions.depth / 2], local_direction: [0, 0, -1], capacity: 1, confirmed: false })
+      if (!ports.some((p) => p.type === 'power_sink')) ports.push({ id: `${object.id}:bus-input`, type: 'power_sink', local_position: mounted ? [object.dimensions.width / 2, object.dimensions.height / 2, 0] : [0, object.dimensions.height / 2, -object.dimensions.depth / 2], local_direction: mounted ? [1, 0, 0] : [0, 0, -1], capacity: 1, confirmed: false })
     }
     return {
       id: object.id, name: object.name, category: category(object),
       size_m: [object.dimensions.width, object.dimensions.height, object.dimensions.depth],
       position: toPackingPosition(object.transform.position, room), rotation_y_rad: object.transform.rotationY,
       dimensions_source: source, dimensions_confirmed: input.confirmed,
-      fixed: object.fixed || object.locked || !!(workstation && object.model.prefabId === 'mousepad'), usage_frequency: object.frequent ? 'high' : 'medium',
+      fixed: mounted || object.fixed || object.locked || !!(workstation && object.model.prefabId === 'mousepad'), usage_frequency: object.frequent ? 'high' : 'medium',
       placement_priority: shape === 'monitor' ? 100 : workstation && shape === 'laptop' ? 95 : shape === 'printer' ? 90 : workstation && shape === 'lamp' ? 80 : object.frequent ? 60 : 20,
       allowed_region_ids: allowedRegions, preferred_region_ids: preferred.filter((id) => allowedRegions.includes(id)),
       allowed_rotations_y_rad: workstation && shape === 'laptop' ? [workstation.laptop.rotationY]
         : shape === 'monitor' || shape === 'printer' || desktopBinding(object, room) || (workstation && (shape === 'keyboard' || shape === 'mouse')) ? [0] : [0, Math.PI / 2],
       collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ?? null,
       generation: { task_id: null, status: 'not_requested', source: object.model.assetUrl ? object.model.source === 'generated' ? 'live' : 'cache' : 'placeholder', error: null },
+      ...(mounted ? { surface_mount: { obstacle_id: 'furniture:Desk_Back_Baffle', face: 'z_max' as const } } : {}),
       ...(object.powerStrip ? { socket_count: object.powerStrip.socketCount } : {}),
     }
   })
@@ -318,7 +320,7 @@ export function canonicalScene(raw: unknown, expected?: PackingScene, expectedRe
       if (typeof item.id !== 'string' || !expectedIds.delete(item.id) || !vector(item.position) || typeof item.rotation_y_rad !== 'number' || !Number.isFinite(item.rotation_y_rad)) fail('后端正式场景物品引用或位姿错误')
       const original = expected.items.find((i) => i.id === item.id)!
       if (!vector(item.size_m) || !item.size_m.every((v, i) => Math.abs(v - original.size_m[i]) < 1e-7) || !item.position.every((v, i) => Math.abs(v - original.position[i]) < 1e-7) || Math.abs(item.rotation_y_rad - original.rotation_y_rad) > 1e-7) fail('后端正式场景意外修改了提交的物品尺寸或位姿')
-      for (const key of ['name', 'category', 'fixed', 'dimensions_source', 'dimensions_confirmed', 'collision', 'ports', 'allowed_region_ids', 'preferred_region_ids', 'allowed_rotations_y_rad', 'placement_priority', 'socket_count', 'usage_frequency', 'image_url'] as const) {
+      for (const key of ['name', 'category', 'fixed', 'dimensions_source', 'dimensions_confirmed', 'collision', 'ports', 'allowed_region_ids', 'preferred_region_ids', 'allowed_rotations_y_rad', 'placement_priority', 'socket_count', 'surface_mount', 'usage_frequency', 'image_url'] as const) {
         if (!sameStructure(item[key], original[key])) fail('后端正式场景意外修改了提交的物品约束')
       }
     }
