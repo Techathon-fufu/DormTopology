@@ -306,3 +306,13 @@ tail -n 40 /private/tmp/dorm-monitor-placement/.work/local-demo-20261017/fronten
 - 生产构建 `index-BIbKwytw.js` 已由原 `5177` 提供；`8003` 后端重启后直连与代理健康检查正常，生产页面无错误日志。沿用原 SQLite，重启前 28 个任务均已完成，备份为 `/private/tmp/dorm-before-drawer-backboard.sqlite3`；未更改用户的 `objects/` 源资产。
 
 构建保留既有 Three.js 大包提示。开合做当前姿态的碰撞提醒，不实现刚体阻挡或连续运动路径求解；拖动仍按产品要求保留落点并提示干涉。
+
+## 2026-10-18 同步 main 与取消线间避让
+
+合入远程 `df99a91` 的正交走线与开放柜格，保留本地桌面分区、显示器八凸体碰撞、抽屉随动和背板插排。按用户要求不再累积其它线缆的占用体积，不按线间距侧移或重复规划整组；集线槽和前端检查同步取消线间间距条件。单根线自身的线径、实体/通道净空、接口容量、长度及已启用的支撑仍执行。正交接口候选上限从 48 调整为 96，防止 L 形多层通道截掉手机到穿线孔的可行连接。
+
+验证结果：后端 `unittest discover -s backend/tests -q` 共 275 项通过；新 `check-cable-overlap.ts` 验证不同线径可共线且实体碰撞仍拒绝；`check-demo-routing.ts` 的实际 17 件整理和整理后 7/7 走线通过，原始未整理场景仍如实返回部分失败。显示器、抽屉背板、固定家具、桌面分区、编辑与持久化专项通过。TypeScript 与生产构建通过，保留已有 Three.js 大包提示。
+
+浏览器使用隔离 `8018` 后端（`/private/tmp/dorm-sync-main-20261018/organization.sqlite3`）与临时 `4174` 前端，7 项通过、1 项按原设置跳过：桌面完整生成/接受整理与七线，桌面和模拟手机场景、抽屉及配件/集线槽交互；手机未执行完整七线流程。证据在 `/private/tmp/dorm-sync-main-final-browser-results`。未替换原 `8003` 后端。
+
+额外执行旧 `check-cable-validation.ts` 时，状态失效夹具在 `planned` / `stale` 断言失败，此项未计入通过；本轮独立线缆重叠专项和真实浏览器流程分别验证新增规则与正式版本状态。`objects/dormdesk.blend` 与 `objects/dormdesk.glb` 按用户确认保留本地，文件内容未改变。

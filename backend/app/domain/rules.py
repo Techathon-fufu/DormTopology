@@ -306,6 +306,8 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                 _fail(path, problems[0]["message"])
 
     graph = _object(scene["routing_graph"], "nodes edges", "routing_graph")
+    if "path_style" in graph:
+        _enum(graph["path_style"], {"smooth", "orthogonal"}, "routing_graph.path_style")
     nodes = {}
     for i, value in enumerate(_array(graph["nodes"], "routing_graph.nodes")):
         path = f"routing_graph.nodes[{i}]"
@@ -338,6 +340,10 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _enum(mode, {"slot", "backboard"}, path + ".modes")
         _number(edge["clearance_radius_m"], path + ".clearance_radius_m", positive=True)
         _boolean(edge["exposed"], path + ".exposed")
+        if graph.get("path_style") == "orthogonal":
+            a, b = (nodes[edge[key]]["position"] for key in ("from_node_id", "to_node_id"))
+            if sum(abs(x - y) > 1e-8 for x, y in zip(a, b)) != 1:
+                _fail(path, "orthogonal channels must be axis aligned")
     if "supports" in graph and "support_policy" not in graph:
         _fail("routing_graph.support_policy", "supports require an explicit policy")
     if "support_policy" in graph:
@@ -438,6 +444,8 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
         _number(cable["diameter_m"], path + ".diameter_m", positive=True)
         if _number(cable["min_bend_radius_m"], path + ".min_bend_radius_m") < 0:
             _fail(path + ".min_bend_radius_m", "must be nonnegative")
+        if graph.get("path_style") == "orthogonal" and cable["min_bend_radius_m"] != 0:
+            _fail(path + ".min_bend_radius_m", "orthogonal layout requires zero physical bend-radius constraint")
         if _number(cable["slack_m"], path + ".slack_m") < 0:
             _fail(path + ".slack_m", "must be nonnegative")
         if "baseline_path_points" in cable:

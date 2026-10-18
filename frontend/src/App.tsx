@@ -12,6 +12,7 @@ import { AlgorithmLabPage } from '@/algorithm-lab/AlgorithmLabPage'
 import { usePlansStore } from '@/state/plansStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { WorkflowPage } from '@/workflow/WorkflowPage'
+import { RoutingDemoPage } from '@/routing-demo/RoutingDemoPage'
 
 export default function App() {
   const ensureDemo = useProjectsStore((s) => s.ensureDemo)
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/projects/:id/workspace" element={<WorkspacePage />} />
         <Route path="/projects/:id/compare" element={<ResultPage />} />
         <Route path="/algorithm-lab" element={<AlgorithmLabPage />} />
+        <Route path="/routing-demo" element={<RoutingDemoPage />} />
         <Route path="/workflow" element={<WorkflowPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

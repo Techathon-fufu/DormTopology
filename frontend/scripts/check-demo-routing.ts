@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { createDemoProject } from '../src/data/demoProject'
 import { fromPackingPosition, mapPackingOrganizationResult, toPackingScene } from '../src/api/core/packingWire'
 import { mapRoutingResult, toRoutingScene } from '../src/api/core/routingWire'
@@ -92,6 +93,21 @@ for (const cable of organized.cables) for (const endpoint of [cable.from, cable.
   }
 }
 const run = (scene: unknown) => domain('from backend.app.domain.routing import plan_routing; print(json.dumps(plan_routing(json.load(sys.stdin))))', scene)
+if (process.argv.includes('--write-demo')) {
+  const result = run(organizedScene)
+  const mapped = mapRoutingResult(result, { scene: organizedScene, project: organized })
+  assert.equal(result.status, 'success', JSON.stringify(result.issues))
+  assert.equal(mapped.plannedCount, 7)
+  assert.equal(organizedScene.routing_graph.path_style, 'orthogonal')
+  for (const cable of organized.cables.filter(c => ['power', 'video', 'network'].includes(c.kind))) {
+    assert.equal(result.cables.find((c: any) => c.id === cable.id).mode, 'backboard')
+  }
+  const output = resolve('public/routing-demo/fixed-desk.json')
+  mkdirSync(resolve('public/routing-demo'), { recursive: true })
+  writeFileSync(output, JSON.stringify({ project: organized, scene: organizedScene, result }, null, 2) + '\n')
+  console.log(`Generated ${output}: ${mapped.plannedCount}/7 verified routes on the main desk model.`)
+  process.exit(0)
+}
 const original = run(originalScene)
 const routed = run(organizedScene)
 const details = (result: any) => ({ status: result.status, cables: result.cables.map((c: any) => ({ id: c.id,

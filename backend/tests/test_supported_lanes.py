@@ -1,12 +1,7 @@
 import copy
-import itertools
 import unittest
 
 from backend.app.domain.routing import plan_routing
-from backend.app.domain.routing.geometry import (
-    BEZIER_SAMPLE_ERROR,
-    segment_segment_distance,
-)
 from backend.examples.algorithm_fixtures import (
     composite_underdesk_scene,
     underdesk_scene,
@@ -68,7 +63,7 @@ class SupportedLaneTests(unittest.TestCase):
         )
 
         # The individual paths share a long, parallel desktop-underbody
-        # interval, while the cable-volume checks keep their lanes separate.
+        # interval; other cables do not displace their individual routes.
         intervals = [
             (
                 min(point[0] for point in route["path_points"]),
@@ -79,23 +74,14 @@ class SupportedLaneTests(unittest.TestCase):
         shared_start = max(interval[0] for interval in intervals)
         shared_end = min(interval[1] for interval in intervals)
         self.assertGreater(shared_end - shared_start, 0.5)
-        for first, second in itertools.combinations(baseline_routes, 2):
-            separation = min(
-                segment_segment_distance(
-                    tuple(start), tuple(end), tuple(other_start), tuple(other_end)
-                )
-                for start, end in zip(first["path_points"], first["path_points"][1:])
-                for other_start, other_end in zip(
-                    second["path_points"], second["path_points"][1:]
-                )
-            )
-            self.assertGreaterEqual(
-                separation, baseline_scene["cables"][0]["diameter_m"] + 1e-6
-            )
+        for route in baseline_routes:
+            single_scene = copy.deepcopy(individual_scene)
+            single_scene["cables"] = [c for c in single_scene["cables"] if c["id"] == route["id"]]
+            self.assertEqual(route, plan_routing(single_scene)["cables"][0])
 
         # Applying the candidate is a separate optimization pass.  It changes
         # the installed support evidence, while preserving every individual
-        # cable result and its no-collision lane assignment.
+        # cable result and its individual geometry.
         optimized_scene = copy.deepcopy(baseline_scene)
         candidate = optimized_scene["routing_graph"].pop("tray_candidates")[0]
         candidate.pop("cable_ids")
@@ -120,43 +106,24 @@ class SupportedLaneTests(unittest.TestCase):
                 route["path_points"], baseline_by_id[route["id"]]["path_points"]
             )
 
-    def test_collision_avoiding_lane_must_still_fit_the_installed_tray(self):
-        broad_scene = two_cable_tray_scene(0.025)
-        broad = plan_routing(broad_scene)
-        self.assertEqual(broad["status"], "success")
-        self.assertTrue(
-            all(
-                route["support_check"]["status"] == "verified"
-                for route in broad["cables"]
-            )
-        )
+    def test_overlapping_cables_share_tray_but_each_must_fit_its_width(self):
+        scene = two_cable_tray_scene(0.004)
+        result = plan_routing(scene)
+        self.assertEqual(result["status"], "success")
+        for route in result["cables"]:
+            individual = copy.deepcopy(scene)
+            individual["cables"] = [c for c in scene["cables"] if c["id"] == route["id"]]
+            self.assertEqual(route, plan_routing(individual)["cables"][0])
+            self.assertEqual(route["support_check"]["status"], "verified")
 
-        narrow_scene = two_cable_tray_scene(0.004)
-        radius = narrow_scene["cables"][1]["diameter_m"] / 2.0
-        narrow_centerline_limit = 0.004 - radius - BEZIER_SAMPLE_ERROR
-        offset_route = broad["cables"][1]
-        self.assertGreater(
-            max(abs(point[2] - 0.15) for point in offset_route["path_points"]),
-            narrow_centerline_limit,
-        )
-
-        # The second cable alone fits: occupied cable volume forces the offset.
-        single_scene = copy.deepcopy(narrow_scene)
-        single_scene["cables"] = [single_scene["cables"][1]]
-        single = plan_routing(single_scene)["cables"][0]
-        self.assertEqual(single["status"], "valid")
-        self.assertEqual(single["support_check"]["status"], "verified")
-
-        narrow = plan_routing(narrow_scene)
-        self.assertEqual(narrow["status"], "partial")
-        first, second = narrow["cables"]
-        self.assertEqual(first["status"], "valid")
-        self.assertEqual(first["support_check"]["status"], "verified")
-        self.assertEqual(second["status"], "failed")
-        self.assertNotEqual(second["support_check"]["status"], "verified")
-        self.assertEqual(second["curve_segments"], [])
-        self.assertEqual(second["path_points"], [])
-        self.assertIsNone(second["path_length_m"])
+        too_narrow = two_cable_tray_scene(0.001)
+        failed = plan_routing(too_narrow)
+        self.assertEqual(failed["status"], "infeasible")
+        for route in failed["cables"]:
+            self.assertEqual(route["reason_code"], "unsupported_span")
+            self.assertEqual(route["path_points"], [])
+            self.assertEqual(route["curve_segments"], [])
+            self.assertIsNone(route["path_length_m"])
 
 
 if __name__ == "__main__":

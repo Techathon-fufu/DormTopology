@@ -862,14 +862,23 @@ def _validate_curve(
     required_tolerance: float = EPSILON,
     corridors: Sequence[tuple[Point, Point, float | None]] = (),
     support_context: SupportContext | None = None,
+    orthogonal: bool = False,
 ) -> tuple[str | None, float]:
+    if orthogonal:
+        from .orthogonal import axis_aligned
+        for index, segment in enumerate(segments):
+            if any(distance(actual, expected) > 1e-9 for actual, expected in zip(segment, _line_control_points(segment[0], segment[3]))):
+                return "no_path", 0.0
+            if 0 < index < len(segments) - 1 and not axis_aligned(segment[0], segment[3]):
+                return "no_path", 0.0
     for previous, following in pairwise(segments):
         if distance(previous[3], following[0]) > 1e-9:
             return "no_path", 0.0
         incoming, outgoing = sub(previous[3], previous[2]), sub(following[1], following[0])
         if length(incoming) <= 1e-12 or length(outgoing) <= 1e-12:
             return "no_path", 0.0
-        if dot(normalize(incoming), normalize(outgoing)) < 1.0 - 1e-9:
+        alignment = dot(normalize(incoming), normalize(outgoing))
+        if (not orthogonal and alignment < 1.0 - 1e-9) or (orthogonal and alignment < -1.0 + 1e-9):
             return "no_path", 0.0
     if len(samples) < 2:
         return "no_path", 0.0
@@ -951,6 +960,10 @@ def _plan_one(
     support_context: SupportContext | None = None,
     leadout_extension_m: float | None = None,
 ) -> tuple[dict, tuple[Sequence[Point], float] | None]:
+    if scene.get("routing_graph", {}).get("path_style") == "orthogonal":
+        from .orthogonal import plan_orthogonal
+        return plan_orthogonal(scene, cable, endpoints, nodes, edges, obstacle_boxes,
+                               reserved_boxes, item_boxes, occupied, use_dijkstra, support_context)
     if cable["min_bend_radius_m"] == 0 and leadout_extension_m is None:
         for extension in (0.04, 0.02, 0.0):
             result, tube = _plan_one(
@@ -1185,51 +1198,6 @@ def _validate_port_capacity(scene: dict) -> set[str]:
     }
 
 
-def _candidate_count(
-    cable: dict,
-    endpoints: dict[str, ResolvedEndpoint],
-    nodes: dict[str, tuple[Point, str]],
-    edges: Sequence[dict],
-    obstacle_boxes: Sequence[AABB],
-    reserved_boxes: Sequence[AABB],
-    item_boxes: dict[str, CollisionBody],
-) -> int:
-    """Estimate usable endpoint-to-channel connections for stable ordering."""
-    mode_edges = [edge for edge in edges if cable["mode"] in edge["modes"]]
-    candidate_node_ids = {
-        node_id
-        for edge in mode_edges
-        for node_id in (edge["from_node_id"], edge["to_node_id"])
-    }
-    if not candidate_node_ids:
-        return 0
-    start, end = endpoints[cable["start_port_id"]], endpoints[cable["end_port_id"]]
-    radius = cable["diameter_m"] / 2.0
-    start_exit, end_exit = _endpoint_exit(start, radius), _endpoint_exit(end, radius)
-    all_boxes = list(obstacle_boxes) + list(reserved_boxes) + list(item_boxes.values())
-    start_boxes = list(obstacle_boxes) + list(reserved_boxes) + [
-        box for item_id, box in item_boxes.items() if item_id != start.item_id
-    ]
-    end_boxes = list(obstacle_boxes) + list(reserved_boxes) + [
-        box for item_id, box in item_boxes.items() if item_id != end.item_id
-    ]
-    for endpoint, connection_boxes in ((start, start_boxes), (end, end_boxes)):
-        remainder = _leadout_remainder(endpoint, radius)
-        if remainder is not None:
-            connection_boxes.append(remainder)
-    start_leadout_clear = _arc_clearance(start.position, start_exit, radius, start_boxes)
-    end_leadout_clear = _arc_clearance(end_exit, end.position, radius, end_boxes)
-    start_count = 0
-    end_count = 0
-    for node_id in candidate_node_ids:
-        node_position = nodes[node_id][0]
-        if start_leadout_clear and _arc_clearance(start_exit, node_position, radius, all_boxes):
-            start_count += 1
-        if end_leadout_clear and _arc_clearance(node_position, end_exit, radius, all_boxes):
-            end_count += 1
-    return min(start_count, end_count)
-
-
 def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
     """Validate and route every cable in a scene.
 
@@ -1246,49 +1214,18 @@ def plan_routes(scene: Scene, *, use_dijkstra: bool = False) -> RoutingResult:
     exposure_boxes = [aabb_from_zone(zone) for zone in scene["exposure_zones"]]
     item_boxes = {item["id"]: collision_from_item(item) for item in scene["items"]}
     occupied_ports = _validate_port_capacity(scene)
-    ordered_cables = sorted(
-        scene["cables"],
-        key=lambda cable: (
-            _candidate_count(
-                cable,
-                endpoints,
-                nodes,
-                edges,
-                obstacle_boxes,
-                reserved_boxes,
-                item_boxes,
-            ),
-            -cable["diameter_m"],
-            cable["id"],
-        ),
-    )
-    def route_in_order(cables: Sequence[dict]) -> dict[str, dict]:
-        results_by_id: dict[str, dict] = {}
-        occupied: list[tuple[Sequence[Point], float]] = []
-        for cable in cables:
-            if cable["start_port_id"] in occupied_ports or cable["end_port_id"] in occupied_ports:
-                results_by_id[cable["id"]] = _issue(cable, "port_occupied")
-                continue
-            result, tube = _plan_one(
-                scene, cable, endpoints, nodes, edges, obstacle_boxes,
-                reserved_boxes, item_boxes, occupied, use_dijkstra, support_context,
-            )
-            results_by_id[cable["id"]] = result
-            if tube is not None:
-                occupied.append(tube)
-        return results_by_id
-
-    results_by_id = route_in_order(ordered_cables)
-    blocked = {identifier for identifier, result in results_by_id.items() if result["reason_code"] == "no_path"}
-    if blocked and len(blocked) < len(ordered_cables) and all(cable["min_bend_radius_m"] == 0 for cable in ordered_cables):
-        # One earlier route can consume a shared channel's useful lane. Retry
-        # the complete set once, promoting failures and retaining one verified
-        # set; never combine individual paths from different attempts.
-        promoted = [cable for cable in ordered_cables if cable["id"] in blocked]
-        promoted.extend(cable for cable in ordered_cables if cable["id"] not in blocked)
-        retry = route_in_order(promoted)
-        if sum(result["status"] == "valid" for result in retry.values()) > sum(result["status"] == "valid" for result in results_by_id.values()):
-            results_by_id = retry
+    results_by_id: dict[str, dict] = {}
+    for cable in sorted(scene["cables"], key=lambda value: value["id"]):
+        if cable["start_port_id"] in occupied_ports or cable["end_port_id"] in occupied_ports:
+            results_by_id[cable["id"]] = _issue(cable, "port_occupied")
+            continue
+        # Each route retains its own diameter for solid/channel clearance.
+        # Other cables are not obstacles, so route order cannot consume lanes.
+        result, _ = _plan_one(
+            scene, cable, endpoints, nodes, edges, obstacle_boxes,
+            reserved_boxes, item_boxes, (), use_dijkstra, support_context,
+        )
+        results_by_id[cable["id"]] = result
 
     results = [results_by_id[cable["id"]] for cable in scene["cables"]]
     issues = [

@@ -120,6 +120,7 @@ export interface Scene {
   reserved_zones: BoxZone[];
   exposure_zones: BoxZone[];
   routing_graph: {
+    path_style?: 'smooth' | 'orthogonal';
     nodes: GraphNode[];
     edges: GraphEdge[];
     support_policy?: { max_unsupported_span_m: number };
@@ -495,6 +496,7 @@ function parseScene(value: unknown, path: string): Scene {
     }
   });
   const graph = object(scene.routing_graph, `${path}.routing_graph`);
+  if (graph.path_style !== undefined) choice(graph.path_style, ['smooth', 'orthogonal'], `${path}.routing_graph.path_style`);
   const nodeIds = new Set<string>();
   array(graph.nodes, `${path}.routing_graph.nodes`, VISUALIZATION_LIMITS.graph_nodes).forEach((entry, index) => {
     const entryPath = `${path}.routing_graph.nodes[${index}]`;

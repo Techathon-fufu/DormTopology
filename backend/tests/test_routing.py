@@ -526,7 +526,7 @@ class CableRoutingTests(unittest.TestCase):
         with self.assertRaises(RoutingInputError):
             plan_routes(scene)
 
-    def test_multi_cable_channel_assigns_distinct_lanes(self):
+    def test_multi_cable_routes_match_independent_routes_without_spacing(self):
         scene = scene_for()
         second_source = copy.deepcopy(scene["items"][0]["ports"][0])
         second_source.update({"id": "source_port_2", "local_position": [0.0, 0.02, 0.05]})
@@ -554,14 +554,16 @@ class CableRoutingTests(unittest.TestCase):
             # Finite endpoint lead-outs remain on the confirmed port normal.
             for segment in (segments[0], segments[-1]):
                 self.assertTrue(all(abs(p[2] - 0.1) < 1e-12 for p in segment))
-        self.assertGreater(
-            min(
-                math.dist(first, second)
-                for first in map(tuple, result["cables"][0]["path_points"])
-                for second in map(tuple, result["cables"][1]["path_points"])
-            ),
-            0.005,
+        for route in result["cables"]:
+            individual = copy.deepcopy(scene)
+            individual["cables"] = [c for c in scene["cables"] if c["id"] == route["id"]]
+            self.assertEqual(route, plan_routes(individual)["cables"][0])
+        self.assertLess(
+            min(math.dist(a, b) for a in result["cables"][0]["path_points"]
+                for b in result["cables"][1]["path_points"]),
+            scene["cables"][0]["diameter_m"],
         )
+
 
 
 if __name__ == "__main__":

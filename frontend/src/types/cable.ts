@@ -79,10 +79,7 @@ export interface CableCheckResult {
   lengthM: number
   /** 硬性问题（阻断「无碰撞路径」判定）：避让区 / 物品 / 桌板 / 越界 / 端点 */
   issues: CableCheckIssue[]
-  /**
-   * 咨询级提示（不阻断通过）：如与其它线缆的间距过近（受线径影响）。
-   * 仅用于界面提示，规划器的通过判定只看 issues。
-   */
+  /** 保留旧结果字段；当前版本不生成线缆之间的线径 / 间距提示。 */
   advisories: CableCheckIssue[]
   ok: boolean
 }

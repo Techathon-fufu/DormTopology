@@ -9,11 +9,8 @@ from itertools import combinations, pairwise
 
 from .geometry import (
     BEZIER_SAMPLE_ERROR,
-    EPSILON,
     Point,
     _split_bezier,
-    sample_beziers,
-    segment_segment_distance,
 )
 
 _MIN_SHARED_LENGTH_M = 0.15
@@ -24,8 +21,6 @@ _MAX_MEMBERSHIP_SETS = 2048
 _MAX_RUNS = 1024
 _MAX_ROUTES = 256
 _MAX_SEGMENTS = 4096
-_MAX_SAMPLE_CHORDS = 32768
-_MAX_DISTANCE_CHECKS = 100000
 _RESOLUTION_M = 0.00001
 
 
@@ -217,48 +212,6 @@ def _cross_bounds(
     return minimum, maximum
 
 
-def _samples(route: _RouteIntervals, run: int, lower: float, upper: float):
-    chords = []
-    for part in route.fragments:
-        if part.run == run and part.lower < upper and part.upper > lower:
-            samples = sample_beziers([part.controls], 0.015)
-            if not samples:
-                return None
-            chords.extend(pairwise(samples))
-            if len(chords) > _MAX_SAMPLE_CHORDS:
-                return None
-    return chords
-
-
-def _separated(first, second, clearance: float, longitudinal: int, budget: list[int]):
-    def indexed(chords):
-        return sorted(
-            (
-                min(a[longitudinal], b[longitudinal]),
-                max(a[longitudinal], b[longitudinal]),
-                a,
-                b,
-            )
-            for a, b in chords
-        )
-
-    other = indexed(second)
-    begin = 0
-    for a_lower, a_upper, a, b in indexed(first):
-        while begin < len(other) and other[begin][1] < a_lower - clearance:
-            begin += 1
-        for index in range(begin, len(other)):
-            c_lower, _, c, d = other[index]
-            if c_lower > a_upper + clearance:
-                break
-            if budget[0] <= 0:
-                return None
-            budget[0] -= 1
-            if segment_segment_distance(a, b, c, d) < clearance:
-                return False
-    return True
-
-
 def _optimize_mount(
     scene: dict, mount: dict, routes: list[dict], installed: bool
 ) -> dict:
@@ -310,7 +263,6 @@ def _optimize_mount(
     if groups is None:
         output["reason_code"] = "not_evaluated"
         return output
-    distance_budget = [_MAX_DISTANCE_CHECKS]
     for member_runs, start, end in groups:
         members = tuple(identifier for identifier, _ in member_runs)
         bounds = {
@@ -328,31 +280,8 @@ def _optimize_mount(
         if width_min < lower[transverse] or width_max > upper[transverse]:
             output["reason_code"] = "insufficient_width"
             continue
-        sampled = {
-            identifier: _samples(reports[identifier], run, start, end)
-            for identifier, run in member_runs
-        }
-        if any(values is None for values in sampled.values()):
-            output["reason_code"] = "not_evaluated"
-            return output
-        separation = [
-            _separated(
-                sampled[first],
-                sampled[second],
-                reports[first].radius
-                + reports[second].radius
-                + EPSILON
-                + 2.0 * BEZIER_SAMPLE_ERROR,
-                longitudinal,
-                distance_budget,
-            )
-            for first, second in combinations(members, 2)
-        ]
-        if None in separation:
-            output["reason_code"] = "not_evaluated"
-            return output
-        if any(not values for values in sampled.values()) or not all(separation):
-            continue
+        # Coincident routes remain eligible; each cable still has to fit
+        # within the tray bounds above using its own radius and error margin.
         output.update(
             status="verified" if installed else "recommended",
             cable_ids=list(members),

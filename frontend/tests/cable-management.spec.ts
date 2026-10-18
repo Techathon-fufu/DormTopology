@@ -97,7 +97,7 @@ async function closeDrawer(page: Page) {
 
 async function openRoutingGuide(page: Page) {
   await closeDrawer(page)
-  const guide = page.getByRole('complementary', { name: '引导与生成', exact: true }).filter({ visible: true })
+  const guide = page.getByRole('complementary', { name: '整理与理线', exact: true }).filter({ visible: true })
   if (!await guide.isVisible()) {
     await page.getByRole('button', { name: '打开引导与方案', exact: true }).click()
   }
@@ -226,7 +226,7 @@ test('edits installed accessories, persists history, and renders real tray analy
   await guide.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).check()
   const planned = page.waitForResponse(response => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/v1/cables/plan')
-  await guide.getByRole('button', { name: '规划全部走线（真实后端）', exact: true }).click()
+  await guide.getByRole('button', { name: '生成走线', exact: true }).click()
   const response = await planned
   expect(response.status()).toBe(202)
   await acceptRoutingCandidate(page, id, 2, 30_000)
@@ -287,7 +287,7 @@ test('organizes the default 17 items and verifies all seven cables on the applie
     const { useOrganizeStore } = await import(url)
     return useOrganizeStore.getState().plan
   }, organizeUrl)
-  await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
+  await page.getByRole('banner').getByRole('button', { name: '整理桌面', exact: true }).click()
   await page.getByRole('checkbox', { name: '我已核对物品尺寸及整理前位置' }).check()
   const initialSave = page.waitForResponse(response => response.request().method() === 'PUT'
     && new URL(response.url()).pathname === `/api/v1/projects/${id}/scene`)
@@ -323,7 +323,7 @@ test('organizes the default 17 items and verifies all seven cables on the applie
     && new URL(response.url()).pathname === `/api/v1/projects/${id}/scene`)
   const routingJob = page.waitForResponse(response => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/v1/cables/plan')
-  await guide.getByRole('button', { name: '规划全部走线（真实后端）', exact: true }).click()
+  await guide.getByRole('button', { name: '生成走线', exact: true }).click()
   const synchronized = await routingSave
   expect(synchronized.status()).toBe(200)
   expect(synchronized.request().postDataJSON().expected_revision).toBe(appliedScene.scene_revision)
