@@ -5,6 +5,7 @@ import type { Project } from '@/types/project'
 import { LogoMark } from '@/ui/brand/LogoMark'
 import { Button } from '@/ui/kit/button'
 import { Select } from '@/ui/kit/primitives'
+import { ThemeToggle } from '@/ui/theme/ThemeToggle'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
@@ -51,6 +52,7 @@ export function Toolbar({ project, onSavePlan, onOpenPlans, plansOpen }: Toolbar
     <Select aria-label="场景视角" value={viewPreset} onChange={(e) => setViewPreset(e.target.value as ViewPreset)} className="h-9 w-28 bg-background/60">
       <option value="persp">透视</option><option value="top">俯视</option><option value="front">正面</option><option value="desk">桌面</option>
     </Select>
+    <ThemeToggle />
     <Dropdown className="group relative">
       <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted [&::-webkit-details-marker]:hidden" aria-label="更多操作" title="更多操作"><MoreHorizontal className="h-5 w-5" /></summary>
       <div className="absolute right-0 top-11 z-50 flex w-52 flex-col gap-1 rounded-xl border border-border bg-surface p-2 shadow-overlay">

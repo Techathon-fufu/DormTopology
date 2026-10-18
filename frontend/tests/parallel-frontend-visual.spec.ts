@@ -16,7 +16,7 @@ test('keeps one theme across the homepage and public project pages', async ({ pa
   expect(await page.evaluate((key) => localStorage.getItem(key), THEME_KEY)).toBe('dark')
 
   await page.getByRole('link', { name: '创建项目' }).first().click()
-  await expect(page).toHaveURL(/\/projects\/new$/)
+  await expect(page).toHaveURL(/\/projects\/[^/]+\/setup$/)
   await expect(page.locator('.app-shell')).toHaveAttribute('data-theme', 'dark')
   await expect(page.locator('html')).toHaveAttribute('data-app-theme', 'dark')
   await expect(page.getByRole('button', { name: '深夜模式' })).toHaveAttribute('aria-pressed', 'true')
@@ -43,7 +43,7 @@ test('shows a concise public flow and hides internal or retired entries', async 
   await expect(homeHelp.locator('a[href="/algorithm-lab"], a[href="/workflow"]')).toHaveCount(0)
 
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: '全部空间' }).click()
+  await page.locator('[aria-controls="all-spaces"]').click()
   await expect(page.locator('a[href="/algorithm-lab"], a[href="/workflow"]')).toHaveCount(0)
 
   const demoRow = page.locator('#all-spaces .home-space-row').filter({ hasText: '示例' }).first()

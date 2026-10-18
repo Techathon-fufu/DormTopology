@@ -522,7 +522,7 @@ export function WorkspacePage() {
             <DragHintChip />
           </div>
 
-          <p className="pointer-events-none absolute bottom-3 left-4 right-4 block truncate text-center text-xs text-muted-foreground">
+          <p className="pointer-events-none absolute bottom-3 left-4 right-4 block truncate rounded-lg bg-surface/90 px-3 py-1 text-center text-xs text-muted-foreground">
             {mode === 'cable'
               ? '右键物品进入描点页面 · 点击线缆查看 / 编辑属性 · 点击两个接口建立连接 · Esc 取消'
               : '拖拽物品移动 · 空白处拖动旋转视角 · 滚轮缩放 · Q/E 旋转 10° · 右键物品描点'}
