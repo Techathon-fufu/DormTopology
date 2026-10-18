@@ -273,7 +273,7 @@ export function ImportPage() {
         projectId,
         photoIds: photos.map((p) => p.id),
         simulateFailure: isMockMode ? forceFail : undefined,
-        onProgress: (_p, stageLabel) => updateJob(job.id, { status: 'running', stageLabel }),
+        onProgress: (p, stageLabel) => updateJob(job.id, { status: 'running', stageLabel, progress: p }),
       })
       setRecognized(result.items)
       setRecogLow(result.lowConfidence)
@@ -341,7 +341,7 @@ export function ImportPage() {
   const confirmItems = () => {
     if (!recognized || recognized.length === 0) return
     const objects: SceneObject[] = recognized.map((item, index): SceneObject => ({
-      id: uid('obj'),
+      id: item.tempId || uid('obj'),
       projectId,
       name: item.name,
       category: item.category,
@@ -413,60 +413,71 @@ export function ImportPage() {
     const job = createJob({
       projectId,
       type: 'model',
-      title: `生成 3D 资产（${targets.length} 件，${isMockMode ? '模拟' : '真实后端'}）`,
+      title: `生成 3D 资产（${targets.length} 件，${isMockMode ? '模拟' : '真实后端并发'}）`,
       itemIds: targets.map((o) => o.id),
       mock: isMockMode,
     })
     setGenerating(true)
     setLastBatch(null)
-    updateJob(job.id, { status: 'running', stageLabel: '准备任务队列' })
+    updateJob(job.id, { status: 'running', stageLabel: `并发生成中（共 ${targets.length} 件）` })
+
+    // 1. 先将全部目标标记为生成中，使界面立即呈现并发加载状态
+    targets.forEach((object) => {
+      setModel(object.id, { status: 'generating', stage: '准备参考照片' })
+    })
 
     let ok = 0
     let failed = 0
-    for (let i = 0; i < targets.length; i += 1) {
-      const object = targets[i]
-      const attempt = object.model.status === 'failed' ? 1 : 0
-      updateJob(job.id, {
-        status: 'running',
-        stageLabel: `生成中：${object.name}（${i + 1}/${targets.length}）`,
-      })
-      setModel(object.id, { status: 'generating', stage: '准备参考照片' })
-      try {
-        const res = await services.modelGeneration.generateObject({
-          projectId,
-          object,
-          attempt,
-          // 后端未提供精确百分比时只更新阶段文字，界面不显示伪造进度
-          onProgress: (_p, stageLabel) => setModel(object.id, { stage: stageLabel }),
-        })
-        setModel(object.id, {
-          status: res.assetUrl ? 'ready' : 'placeholder',
-          source: 'generated',
-          format: res.format ?? (res.assetUrl ? 'glb' : 'placeholder-box'),
-          assetUrl: res.assetUrl,
-          shape: object.model.shape ?? 'genericBox',
-          stage: undefined,
-          note: res.note,
-        })
-        ok += 1
-      } catch (err) {
-        failed += 1
-        setModel(object.id, {
-          status: 'failed',
-          stage: undefined,
-          note: err instanceof Error ? err.message : String(err),
-        })
-      }
-    }
+
+    // 2. 并发执行所有目标的建模任务
+    await Promise.allSettled(
+      targets.map(async (object) => {
+        const attempt = object.model.status === 'failed' ? 1 : 0
+        try {
+          const res = await services.modelGeneration.generateObject({
+            projectId,
+            object,
+            attempt,
+            // 后端未提供精确百分比时只更新阶段文字，界面不显示伪造进度
+            onProgress: (_p, stageLabel) => setModel(object.id, { stage: stageLabel }),
+          })
+          setModel(object.id, {
+            status: res.assetUrl ? 'ready' : 'placeholder',
+            source: 'generated',
+            format: res.format ?? (res.assetUrl ? 'glb' : 'placeholder-box'),
+            assetUrl: res.assetUrl,
+            shape: object.model.shape ?? 'genericBox',
+            stage: undefined,
+            note: res.note,
+          })
+          ok += 1
+          updateJob(job.id, {
+            progress: (ok + failed) / targets.length,
+            stageLabel: `正在并发生成：已完成 ${ok + failed}/${targets.length} 件`,
+          })
+        } catch (err) {
+          failed += 1
+          setModel(object.id, {
+            status: 'failed',
+            stage: undefined,
+            note: err instanceof Error ? err.message : String(err),
+          })
+          updateJob(job.id, {
+            progress: (ok + failed) / targets.length,
+            stageLabel: `正在并发生成：已完成 ${ok + failed}/${targets.length} 件（${failed} 失败）`,
+          })
+        }
+      }),
+    )
 
     updateJob(job.id, {
-      status: failed > 0 ? 'partial' : 'success',
+      status: failed > 0 ? (ok > 0 ? 'partial' : 'failed') : 'success',
       stageLabel: undefined,
       progress: 1,
       resultNote:
         failed > 0
           ? `${ok} 件成功，${failed} 件失败（可重试失败项，或使用占位盒后继续）`
-          : `全部 ${ok} 件生成完成（${isMockMode ? '模拟占位模型' : '真实后端任务'}）`,
+          : `全部 ${ok} 件并发生成完成（${isMockMode ? '模拟占位模型' : '真实后端并发任务'}）`,
     })
     setLastBatch({ ok, failed, total: targets.length })
     setGenerating(false)

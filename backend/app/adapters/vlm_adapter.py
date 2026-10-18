@@ -104,7 +104,7 @@ class VLMClient:
         raise ValueError("SiliconFlow API key not found. Please provide api_key or set in 'vlm/key.txt'.")
 
     @staticmethod
-    def encode_image_base64(image_path: str | Path, max_dim: int = 1536) -> Tuple[str, Tuple[int, int]]:
+    def encode_image_base64(image_path: str | Path, max_dim: int = 1024) -> Tuple[str, Tuple[int, int]]:
         img = Image.open(image_path)
         orig_w, orig_h = img.size
         if max(orig_w, orig_h) > max_dim:
@@ -243,13 +243,26 @@ class VLMClient:
             "max_tokens": 4096,
         }
 
-        resp = requests.post(
-            f"{self.base_url}/chat/completions",
-            json=payload,
-            headers=headers,
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
+        # api.siliconflow.cn is domestic in China; bypass local proxy by default to avoid RemoteDisconnected
+        try:
+            direct_session = requests.Session()
+            direct_session.trust_env = False
+            resp = direct_session.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+        except Exception:
+            # Fallback to system env if direct connection failed
+            resp = requests.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
         res_json = resp.json()
 
         content = res_json["choices"][0]["message"]["content"]

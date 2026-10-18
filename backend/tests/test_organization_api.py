@@ -153,10 +153,7 @@ class OrganizationAPITests(unittest.TestCase):
             404,
         )
         self.assertEqual(self.client.get("/api/v1/jobs/missing").status_code, 404)
-        for path in ("recognition", "models/generate", "layout/plan"):
-            self.assertEqual(
-                self.client.post(f"/api/v1/{path}", json={}).status_code, 501
-            )
+        self.assertEqual(self.client.post("/api/v1/layout/plan", json={}).status_code, 501)
 
     def test_infeasible_result_is_completed_job_but_cannot_apply(self):
         saved = self.save(cases()["infeasible"])

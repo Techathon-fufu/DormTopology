@@ -10,7 +10,9 @@ Key endpoints supported:
 - GET  /api/v2/check_balance: Check remaining account credits
 """
 
+import logging
 import os
+import threading
 import time
 import mimetypes
 from dataclasses import dataclass
@@ -18,6 +20,8 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Callable, Optional, Dict, Any, List
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,6 +42,78 @@ class RodinAPIError(Exception):
         self.status_code = status_code
 
 
+class RodinKeyPool:
+    """Thread-safe pool managing multiple Rodin API keys (from different accounts) for concurrent round-robin dispatch."""
+
+    def __init__(self, keys: Optional[List[str]] = None):
+        self._lock = threading.Lock()
+        self._index = 0
+        if keys:
+            self._keys = [k.strip() for k in keys if k and k.strip()]
+        else:
+            self._keys = self._discover_keys()
+
+    def _discover_keys(self) -> List[str]:
+        keys: List[str] = []
+
+        # 1. Environment variable (comma-separated or single)
+        env_val = os.environ.get("RODIN_API_KEYS") or os.environ.get("RODIN_API_KEY", "")
+        if env_val.strip():
+            for k in env_val.replace(";", ",").split(","):
+                k = k.strip()
+                if k and k not in keys:
+                    keys.append(k)
+
+        # 2. File locations
+        candidate_paths = [
+            Path("vlm/rodin_key.txt"),
+            Path("rodin_key.txt"),
+            Path(".env"),
+            Path(__file__).resolve().parents[3] / "vlm" / "rodin_key.txt",
+            Path(__file__).resolve().parents[3] / "rodin_key.txt",
+            Path(__file__).resolve().parents[3] / ".env",
+        ]
+        for p in candidate_paths:
+            if p.exists():
+                try:
+                    content = p.read_text(encoding="utf-8").strip()
+                    for line in content.splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#") and line not in keys:
+                            keys.append(line)
+                except Exception:
+                    pass
+
+        return keys
+
+    def get_next_key(self) -> str:
+        with self._lock:
+            if not self._keys:
+                self._keys = self._discover_keys()
+                if not self._keys:
+                    raise ValueError(
+                        "Rodin API Key is missing or empty. Please set RODIN_API_KEY environment variable "
+                        "or write your key(s) into 'vlm/rodin_key.txt'."
+                    )
+            key = self._keys[self._index % len(self._keys)]
+            self._index = (self._index + 1) % len(self._keys)
+            logger.info(
+                "RodinKeyPool: Dispatched key ...%s (index %d/%d)",
+                key[-4:] if len(key) >= 4 else "...",
+                (self._index - 1) % len(self._keys),
+                len(self._keys),
+            )
+            return key
+
+    @property
+    def key_count(self) -> int:
+        with self._lock:
+            return len(self._keys)
+
+
+DEFAULT_RODIN_KEY_POOL = RodinKeyPool()
+
+
 class RodinClient:
     """Client for interacting with DeemosTech Rodin 3D Generation API."""
 
@@ -55,38 +131,10 @@ class RodinClient:
         self.session.headers["Authorization"] = f"Bearer {self.api_key}"
 
     def _resolve_api_key(self, api_key: Optional[str]) -> str:
-        """Resolve API key from arg, env, or key file."""
+        """Resolve API key from arg or round-robin key pool."""
         if api_key and api_key.strip():
             return api_key.strip()
-        
-        env_key = os.environ.get("RODIN_API_KEY", "").strip()
-        if env_key:
-            return env_key
-            
-        # Search candidate key file locations
-        candidate_paths = [
-            Path("vlm/rodin_key.txt"),
-            Path("rodin_key.txt"),
-            Path("tests/rodin_key.txt"),
-            Path(".env"),
-            Path(__file__).resolve().parents[3] / "vlm" / "rodin_key.txt",
-            Path(__file__).resolve().parents[3] / "rodin_key.txt",
-            Path(__file__).resolve().parents[3] / "tests" / "rodin_key.txt",
-            Path(__file__).resolve().parents[3] / ".env",
-        ]
-        for p in candidate_paths:
-            if p.exists():
-                content = p.read_text(encoding="utf-8").strip()
-                if content:
-                    for line in content.splitlines():
-                        line = line.strip()
-                        if line and not line.startswith("#"):
-                            return line
-                    
-        raise ValueError(
-            "Rodin API Key is missing or empty. Please set RODIN_API_KEY environment variable "
-            "or write your key into 'vlm/rodin_key.txt'."
-        )
+        return DEFAULT_RODIN_KEY_POOL.get_next_key()
 
     def _request_with_rate_limit(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
         """Send HTTP request with automatic 429 rate limit backoff and error validation."""
@@ -198,7 +246,7 @@ class RodinClient:
         self,
         subscription_key: str,
         deadline_seconds: int = 1200,
-        initial_delay: int = 5,
+        initial_delay: int = 3,
         on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -225,7 +273,7 @@ class RodinClient:
             if states and all(s == "Done" for s in states):
                 return jobs
 
-            delay = min(delay + 5, 30)
+            delay = min(delay + 2, 8)
 
     def download_assets(
         self,
