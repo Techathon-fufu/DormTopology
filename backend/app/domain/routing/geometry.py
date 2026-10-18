@@ -392,7 +392,7 @@ def _adaptive_sample_segment(
 
 
 def sample_beziers(segments: Sequence[Sequence[Point]], min_bend_radius: float) -> list[Point]:
-    max_chord = min(0.01, min_bend_radius / 8.0)
+    max_chord = min(0.01, min_bend_radius / 8.0) if min_bend_radius > 0 else 0.01
     result: list[Point] = []
     for index, segment in enumerate(segments):
         sampled = _adaptive_sample_segment(segment, max_chord, BEZIER_SAMPLE_ERROR)

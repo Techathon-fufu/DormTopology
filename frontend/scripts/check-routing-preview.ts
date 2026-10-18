@@ -28,6 +28,7 @@ const baselineId = usePlansStore.getState().baselines[project.id].id
 const ref={sceneId:'scene-preview-race',sceneRevision:1,baselineId:'backend-baseline'}
 const result:CablePlanningResult={
   algorithmVerified:true,plannedCount:1,conflictCount:1,notes:[],sceneRef:ref,
+  trayAnalysis:{sceneId:ref.sceneId,sceneRevision:ref.sceneRevision,optimizations:[]},
   cables:[
     {...baseCable,status:'planned',planSource:'algorithm',route:{channels:[],points:[[0,1,.2],[.3,1,.2]],smooth:false,pathLengthM:.3,verification:{sceneId:ref.sceneId,sceneRevision:1,status:'valid'}}},
     failingCable,
@@ -39,6 +40,7 @@ const reset=()=>{useProjectsStore.setState({projects:{[project.id]:structuredClo
 const before=JSON.stringify(project.cables)
 stage()
 assert.equal(JSON.stringify(useProjectsStore.getState().projects[project.id].cables),before,'staging cannot save routes')
+assert.equal(useProjectsStore.getState().projects[project.id].cableTrayAnalysis,undefined,'staging cannot save tray analysis')
 assert.notEqual(useRoutingPreviewStore.getState().candidate?.result,result,'candidate owns a cloned result')
 assert.throws(()=>preview.stage(project,{...result,cables:[]},baselineId),/覆盖全部/)
 assert.throws(()=>preview.stage(project,{...result,cables:[result.cables[0],result.cables[0]]},baselineId),/重复/)
@@ -56,11 +58,18 @@ async function heldAcceptance(change:()=>void, badRevision=false) {
   await requested;change();const editedCables=JSON.stringify(useProjectsStore.getState().projects[project.id].cables);release()
   await assert.rejects(accepting)
   assert.equal(JSON.stringify(useProjectsStore.getState().projects[project.id].cables),editedCables,'rejected responses must not overwrite cables')
+  assert.equal(useProjectsStore.getState().projects[project.id].cableTrayAnalysis,undefined,'rejected responses cannot save tray analysis')
 }
 try {
   await heldAcceptance(()=>preview.discard())
   await heldAcceptance(()=>stage()) // same inputs, different candidate identity
   await heldAcceptance(()=>useWorkspaceStore.getState().updateObject(project.id,project.objects[0].id,{name:'changed'}))
+  await heldAcceptance(()=>useProjectsStore.getState().update(project.id,current=>({
+    ...current,
+    objects:current.objects.map((object,index)=>index===0
+      ? {...object,model:{...object.model,prefabId:object.model.prefabId==='cup'?'phone':'cup'}}
+      : object),
+  })))
   await heldAcceptance(()=>{},true)
   reset();stage()
   const scene=toRoutingScene({project,confirmed:true,ref})
@@ -71,6 +80,7 @@ try {
   const accepted=useProjectsStore.getState().projects[project.id].cables
   assert.equal(accepted[0].route.verification?.status,'valid')
   assert.deepEqual(accepted[1],structuredClone(project).cables[1],'failed routes must stay untouched')
+  assert.deepEqual(useProjectsStore.getState().projects[project.id].cableTrayAnalysis,result.trayAnalysis,'tray analysis is saved only with accepted routes')
   assert.equal(useWorkspaceStore.getState().past.length,1,'acceptance records one undo step')
   useWorkspaceStore.getState().undo(project.id)
   assert.equal(useProjectsStore.getState().projects[project.id].cables[0].route.verification,undefined)

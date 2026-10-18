@@ -11,6 +11,7 @@ import { computeCableAvoidZones, computeRouteNodes } from '@/scene/routeNodes'
 import { useCableStore, cableAnimEase } from '@/state/cableStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { basicMaterial, sphereGeometry } from './resources'
+import { CableManagementLayer } from './CableManagementLayer'
 
 /**
  * 线缆层（走线模式）：
@@ -358,6 +359,7 @@ function CableNodeHandles({
 export function CablesLayer({ project }: { project: Project }) {
   return (
     <group>
+      <CableManagementLayer project={project} />
       {project.cables.map((cable) => (
         <CableMesh key={cable.id} cable={cable} project={project} />
       ))}

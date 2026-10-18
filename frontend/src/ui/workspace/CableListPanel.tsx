@@ -36,6 +36,7 @@ import { DataBadge } from '@/ui/kit/data-badge'
 import { Badge } from '@/ui/kit/badge'
 import { Segmented } from '@/ui/kit/segmented'
 import { cn } from '@/lib/utils'
+import { CableManagementPanel } from './CableManagementPanel'
 
 /**
  * 走线模式·左侧面板：线缆列表（状态 / 长度不足提示）+ 设备与接口浏览（点击两个接口建立连接）。
@@ -78,8 +79,6 @@ export function CableListPanel({
   const setShowPorts = useCableStore((s) => s.setShowPorts)
   const showRouteNodes = useCableStore((s) => s.showRouteNodes)
   const setShowRouteNodes = useCableStore((s) => s.setShowRouteNodes)
-  const showAvoidZones = useCableStore((s) => s.showAvoidZones)
-  const setShowAvoidZones = useCableStore((s) => s.setShowAvoidZones)
   const animStatus = useCableStore((s) => s.animStatus)
   const workspaceSelect = useWorkspaceStore((s) => s.select)
   const onPortClick = useCableLink()
@@ -251,7 +250,6 @@ export function CableListPanel({
           <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
             <Toggle checked={showPorts} onChange={setShowPorts} label="显示接口" />
             <Toggle checked={showRouteNodes} onChange={setShowRouteNodes} label="路径节点" />
-            <Toggle checked={showAvoidZones} onChange={setShowAvoidZones} label="避让区" />
           </div>
           {/* 收拢动画（全部线缆）：路演三幕「原始 → 建议」对比入口，无需先选中某条线缆 */}
           <div className="flex items-center gap-1.5">
@@ -301,6 +299,8 @@ export function CableListPanel({
             ) : null}
           </div>
         </div>
+
+        <CableManagementPanel project={project} busy={busy} onFlash={onFlash} />
 
         {/* 线缆列表 */}
         <div className="space-y-1.5">

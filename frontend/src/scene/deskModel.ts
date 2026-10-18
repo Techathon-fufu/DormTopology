@@ -4,7 +4,7 @@ import { DESK_GAP, SHELF_THICKNESS } from '@/scene/sceneValidation'
 import { FURNITURE_OFFSET, hasFixedFurniture } from './fixedFurniture'
 
 /**
- * 桌体 GLB 模型（frontend/public/models/dorm_desk_body.glb + 三只抽屉分离件，源资产
+ * 桌体 GLB 模型（frontend/public/models/dormdesk_parts/dormdesk_body.glb + 三只抽屉分离件，源资产
  * Prefabmodel/dormdesk_parts/）接入：配置、归一化与实测锚点。
  *
  * 固定家具（hasFixedFurniture）使用 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
@@ -54,7 +54,7 @@ export interface DeskModelConfig {
 /**
  * 默认配置：仓库内置的整组「上床下桌」固定家具（无抽屉桌体；抽屉为独立分离件，
  * 清单与运动学见 scene/dormDeskDrawers.ts）。运行时副本
- * frontend/public/models/dorm_desk_body.glb（由 scripts/sync-desk-parts.ts 从
+ * frontend/public/models/dormdesk_parts/dormdesk_body.glb（由 scripts/sync-desk-parts.ts 从
  * Prefabmodel/dormdesk_parts/dormdesk_body.glb 同步）。
  *
  * 摆放口径（固定模型，实测见 frontend/docs/desk-model.md）：

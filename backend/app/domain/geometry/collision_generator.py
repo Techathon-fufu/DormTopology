@@ -10,13 +10,12 @@ Follows the DormTopology data contract (v1):
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
+from math import isfinite
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
-import numpy as np
-import trimesh
-
-from backend.app.domain.geometry.convex import validate_compound
+from .convex import validate_compound
 
 
 def generate_compound_box(width: float, height: float, depth: float) -> dict[str, Any]:
@@ -80,6 +79,9 @@ def extract_glb_bounds(glb_path: str | Path) -> tuple[tuple[float, float, float]
     if not path.exists():
         raise FileNotFoundError(f"GLB model not found: {path}")
 
+    # Runtime layout/routing imports do not need the offline GLB toolchain.
+    import trimesh
+
     scene_or_mesh = trimesh.load(str(path))
     if isinstance(scene_or_mesh, trimesh.Scene):
         bounds = scene_or_mesh.bounds
@@ -92,7 +94,7 @@ def extract_glb_bounds(glb_path: str | Path) -> tuple[tuple[float, float, float]
     lo = tuple(float(x) for x in bounds[0])
     hi = tuple(float(x) for x in bounds[1])
 
-    if any(not np.isfinite(x) for x in (*lo, *hi)):
+    if any(not isfinite(x) for x in (*lo, *hi)):
         raise ValueError(f"GLB {path.name} contains non-finite bounds: {lo}, {hi}")
 
     if any(hi[i] - lo[i] <= 1e-9 for i in range(3)):

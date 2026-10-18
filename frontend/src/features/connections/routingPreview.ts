@@ -230,7 +230,10 @@ export async function acceptRoutingPreview(
   // 深拷贝，避免把 store 中的候选直接交给 workspace；未通过的线缆沿用当前项目内容。
   const merged = latestProject.cables.map((cable) => clone(appliedById.get(cable.id) ?? cable))
   useWorkspaceStore.getState().replaceCables(project.id, merged, true)
+  useProjectsStore.getState().update(project.id, (current) => ({
+    ...current,
+    cableTrayAnalysis: latestCandidate.result.trayAnalysis ? clone(latestCandidate.result.trayAnalysis) : undefined,
+  }))
   state.discard()
   return { applied: appliedCables.length, skipped: latestCandidate.result.cables.length - appliedCables.length }
 }
-

@@ -9,8 +9,13 @@ assert.equal(fresh.demoSeedVersion, DEMO_SEED_VERSION, '新种入的示例项目
 assert.equal(fresh.room.desk.width, 1.45, 'L 形桌面包络宽 1450mm')
 assert.equal(fresh.room.desk.depth, 0.86, 'L 形桌面包络深 860mm')
 assert.equal(fresh.room.furnitureModel, 'dormdesk-v1')
-assert.equal(fresh.objects.length, 14, '示例场景 14 件物品')
-assert.equal(fresh.organization?.typingOffsetX, -.06, '真实笔记本需要主桌面的侧部净宽')
+assert.equal(fresh.objects.length, 14, '示例场景 14 件物品（v7 移除三本演示书本）')
+assert.equal(fresh.cables.length, 7, '六根设备连接与独立适配器交流输入，不含插排总线')
+assert.equal(fresh.cables.find((cable) => cable.id === 'demo-cable-adapter-ac')?.visibility, 'hidden',
+  '适配器交流电源线默认沿桌后隐藏走线')
+assert.equal(fresh.objects.find((o) => o.id === 'demo-power-adapter')?.ports.filter((p) => p.type === 'usb-c').length, 2,
+  '笔记本与手机分别使用适配器的独立输出接口')
+assert.equal(fresh.organization?.typingOffsetX, -.10, '真实笔记本需要主桌面的侧部净宽及 20mm 物品净距')
 assert.equal(fresh.organization?.typingWidth, .55, '键鼠区保持原宽度')
 assert.equal(fresh.room.outlets.length, 1, '示例房间仅一块插座面板（固定模型口径）')
 assert.equal(fresh.room.outlets[0].id, 'outlet-1', '插座面板 id 稳定')
@@ -72,7 +77,7 @@ try {
   assert.equal(archives[0].isDemo, false)
   assert.deepEqual(projects[userProject.id], userProject)
   assert.equal(projects[DEMO_PROJECT_ID].demoSeedVersion, DEMO_SEED_VERSION)
-  assert.equal(projects[DEMO_PROJECT_ID].organization?.typingOffsetX, -.06)
+  assert.equal(projects[DEMO_PROJECT_ID].organization?.typingOffsetX, -.10)
 } finally {
   useProjectsStore.setState({ projects: initialProjects })
 }

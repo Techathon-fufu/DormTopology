@@ -6,7 +6,7 @@ import { requestJson } from '../core/client'
 import { canonicalScene, organizationInputSignature, packingBaseline, sceneRef, toPackingScene, type PackingScene } from '../core/packingWire'
 import { knownOrganizationScene, rememberOrganizationScene, withOrganizationSceneLock } from '../core/organizationScenes'
 import { synchronizeScene } from '../core/sceneSync'
-import { placementIssues } from '@/scene/sceneValidation'
+import { assertRecommendedScenePlacement } from '@/lib/organizationValidation'
 import { invalidateCableRoutes } from '@/scene/cables'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useCableStore } from '@/state/cableStore'
@@ -198,7 +198,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
             if (!target) throw new ApiError('整理结果引用错误', { kind: 'input' })
             return { ...object, visible: true, transform: { position: target.position, rotationY: target.rotationY } }
           })
-          if (targets.some((object) => placementIssues(object, object.transform.position, targets, room).length > 0)) throw new ApiError('当前目标布局复查未通过，不能应用', { kind: 'input' })
+          assertRecommendedScenePlacement(targets, room, objects)
           const expected = toPackingScene({ projectId, objects: targets, room, preferences, confirmed: true, ref: known })
           const nextRef = { ...known, sceneRevision: known.sceneRevision + 1 }
           let canonical: PackingScene

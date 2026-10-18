@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { Box3 } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
-// Offline asset build: runtime geometry never depends on asynchronous GLB loading.
+// Verify source assets and generate geometry; sync-desk-parts owns runtime GLBs.
 const names = ['dormdesk_body', 'drawer_bottom', 'drawer_middle', 'drawer_top']
 const parts: Array<{ name: string; min: number[]; max: number[] }> = []
 const sources: Record<string, string> = {}
-mkdirSync('public/models/dormdesk_parts', { recursive: true })
 for (const name of names) {
   const path = `../Prefabmodel/dormdesk_parts/${name}`
   const bytes = readFileSync(`${path}.glb`)
@@ -28,7 +27,6 @@ for (const name of names) {
     const [mesh] = meshes.splice(index, 1)
     parts.push({ name: name === 'dormdesk_body' ? mesh.name : `${name}:${mesh.name}`, min: min.map((v) => +v.toFixed(6)), max: max.map((v) => +v.toFixed(6)) })
   })
-  copyFileSync(`${path}.glb`, `public/models/dormdesk_parts/${name}.glb`)
 }
 writeFileSync('src/scene/furnitureAsset.generated.json', JSON.stringify({ sources, parts }, null, 2) + '\n')
 console.log(`Generated ${parts.length} conservative furniture boxes from verified collision assets.`)

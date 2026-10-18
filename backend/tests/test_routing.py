@@ -11,9 +11,11 @@ from backend.app.domain.routing import (
 from backend.app.domain.routing.geometry import (
     AABB,
     BEZIER_SAMPLE_ERROR,
+    EPSILON,
     bezier_point,
     beziers_arc_length,
     dot,
+    minimum_curve_radius,
     normalize,
     obb_from_item,
     polyline_length,
@@ -263,7 +265,9 @@ class CableRoutingTests(unittest.TestCase):
         position, direction = resolve_port_world(item, port)
         endpoint = ResolvedEndpoint(port["id"], item["id"], position, direction, obb_from_item(item))
         exit_position = _endpoint_exit(endpoint, 0.002)
-        self.assertAlmostEqual(math.dist(position, exit_position), 0.004)
+        self.assertAlmostEqual(
+            math.dist(position, exit_position), 0.002 + 2 * EPSILON + BEZIER_SAMPLE_ERROR
+        )
         self.assertAlmostEqual(dot(normalize(sub(exit_position, position)), direction), 1.0)
 
         # A rigid scene rotation preserves the known valid route, including
@@ -362,11 +366,11 @@ class CableRoutingTests(unittest.TestCase):
         with self.assertRaises(RoutingInputError):
             plan_routes(scene)
 
-    def test_only_unknown_length_accepts_null_and_known_specs_stay_positive(self):
+    def test_only_unknown_length_accepts_null_and_bend_limit_stays_nonnegative(self):
         for key, values in (
             ("length_m", (0, -1, True, "2", math.nan, math.inf)),
             ("diameter_m", (None, 0)),
-            ("min_bend_radius_m", (None, 0)),
+            ("min_bend_radius_m", (None, -0.001, True, "0", math.nan, math.inf)),
         ):
             for value in values:
                 with self.subTest(key=key, value=value):
@@ -374,6 +378,38 @@ class CableRoutingTests(unittest.TestCase):
                     scene["cables"][0][key] = value
                     with self.assertRaises(RoutingInputError):
                         plan_routes(scene)
+
+    def test_zero_bend_limit_allows_tight_smooth_turns_for_both_searches(self):
+        for dijkstra in (False, True):
+            with self.subTest(dijkstra=dijkstra):
+                scene = scene_for("backboard")
+                scene["cables"][0]["min_bend_radius_m"] = 0.5
+                self.assertEqual(plan_routes(scene, use_dijkstra=dijkstra)["cables"][0]["reason_code"], "no_path")
+                scene["cables"][0]["min_bend_radius_m"] = 0
+                route = plan_routes(scene, use_dijkstra=dijkstra)["cables"][0]
+                self.assertEqual(route["status"], "valid")
+                segments = [segment["control_points"] for segment in route["curve_segments"]]
+                self.assertGreater(minimum_curve_radius(segments), 0)
+                self.assertLess(minimum_curve_radius(segments), 0.02)
+                for previous, following in pairwise(segments):
+                    incoming = normalize(sub(previous[3], previous[2]))
+                    outgoing = normalize(sub(following[1], following[0]))
+                    self.assertGreater(dot(incoming, outgoing), 1 - 1e-9)
+
+    def test_zero_bend_limit_preserves_obstacles_zones_and_length_checks(self):
+        for forbidden in ("obstacles", "reserved_zones"):
+            with self.subTest(forbidden=forbidden):
+                scene = scene_for()
+                scene["cables"][0]["min_bend_radius_m"] = 0
+                scene[forbidden] = [{"id": "blocked", "min": [0, 0.05, 0.05], "max": [0.2, 0.15, 0.15]}]
+                route = plan_routes(scene)["cables"][0]
+                self.assertEqual(route["reason_code"], "endpoint_blocked")
+                self.assertEqual(route["path_points"], [])
+        scene = scene_for()
+        scene["cables"][0].update(min_bend_radius_m=0, length_m=0.1)
+        route = plan_routes(scene)["cables"][0]
+        self.assertEqual(route["reason_code"], "length_exceeded")
+        self.assertEqual(route["path_points"], [])
 
     def test_empty_request_has_zero_current_exposure(self):
         scene = scene_for()

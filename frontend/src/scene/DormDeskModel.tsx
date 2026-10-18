@@ -22,8 +22,8 @@ import { useDrawerStore } from '@/state/drawerStore'
 import { hasFixedFurniture } from './fixedFurniture'
 
 /**
- * 桌体渲染：加载 dorm_desk_body.glb（无抽屉桌体）与三只抽屉分离件
- * （dorm_desk_drawer_{bottom,middle,top}.glb，清单见 scene/dormDeskDrawers.ts），
+ * 桌体渲染：加载 models/dormdesk_parts/dormdesk_body.glb（无抽屉桌体）与三只抽屉分离件
+ * （同目录 drawer_{bottom,middle,top}.glb，清单见 scene/dormDeskDrawers.ts），
  * 加载完成前 / 加载失败 / 用户选择简化几何时回退参数化桌体（ParametricDesk，与逻辑尺寸一致）。
  *
  * 固定家具（hasFixedFurniture）走 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移

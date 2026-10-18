@@ -6,9 +6,9 @@
 
 ## 当前工作区启动
 
-当前代码源为 `/Users/qdd09/Projects/DormTopology`，分支为 `fix/cable-workspace-integration`。以下命令使用当前工作区中的前后端代码，不从旧提交启动服务。Python 虚拟环境和数据库复用前次独立实例的运行目录 `/private/tmp/dorm-monitor-placement/.work/local-demo-20261017`；保留原 `organization.sqlite3`，不删库、不清除用户项目。
+当前代码源为 `/Users/qdd09/Projects/DormTopology`。以下命令使用当前工作区中的前后端代码，部署前以 `git status` 核对分支和修改。Python 虚拟环境和数据库复用前次独立实例的运行目录 `/private/tmp/dorm-monitor-placement/.work/local-demo-20261017`；保留原 `organization.sqlite3`，不删库、不清除用户项目。
 
-当前工作区已保存前序修复为 `24dc7f2`，并通过 `678f78f` 合并远端 main 的家具更新。固定示例采用拆分家具 `dormdesk-v1`，桌面包络 1.45×0.86m，实际支撑为 L 形；布局与走线适配提交真实桌板、书架、抽屉和碰撞体。设备策略由前端场景适配提交给后端，不能仅凭 `packing-1.1` 版本判定部署正确。部署前运行下述专项，并在真实浏览器检查完整 17 件场景的显示器居中、朝向和打印机侧置。
+当前工作区已保存净距与理线修复为 `82f562e`，并整合远端 main `7ebdec2` 的预制单品、抽屉和工作流更新。固定示例采用拆分家具 `dormdesk-v1`，桌面包络 1.45×0.86m，实际支撑为 L 形；布局与走线适配提交 `Prefabmodel/` 配套 JSON 的桌板、书架、抽屉和单品碰撞体，不读取 `objects/`。示例 v7 的键鼠区保留 55cm 宽度，中线左移 10cm，兼容真实展开笔记本和 20mm 物品净距；旧示例归档。设备策略由前端场景适配提交给后端，不能仅凭 `packing-1.1` 版本判定部署正确。部署前运行下述专项，并在真实浏览器检查完整 17 件场景的显示器居中、朝向和打印机侧置。
 
 ### 1. 准备与构建
 
@@ -25,12 +25,26 @@ cd frontend
 npm ci
 ./node_modules/.bin/esbuild scripts/generate-furniture-geometry.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-furniture.mjs
 node /tmp/dorm-deploy-furniture.mjs
+./node_modules/.bin/esbuild scripts/sync-desk-parts.ts --bundle --platform=node --format=esm --outfile=scripts/sync-desk-parts.generated.mjs
+node scripts/sync-desk-parts.generated.mjs
+rm scripts/sync-desk-parts.generated.mjs
+./node_modules/.bin/esbuild scripts/sync-prefab-items.ts --bundle --platform=node --format=esm --outfile=scripts/sync-prefab-items.generated.mjs
+node scripts/sync-prefab-items.generated.mjs
+rm scripts/sync-prefab-items.generated.mjs
 VITE_API_MODE=mock VITE_API_BASE_URL='' VITE_DEV_API_TARGET=http://127.0.0.1:8003 npm run build
 ./node_modules/.bin/esbuild scripts/check-fixed-furniture.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-fixed.mjs '--define:import.meta.env={}'
 node /tmp/dorm-deploy-fixed.mjs
 ./node_modules/.bin/esbuild scripts/check-monitor-backend.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-monitor.mjs '--define:import.meta.env={}'
 node /tmp/dorm-deploy-monitor.mjs
+./node_modules/.bin/esbuild scripts/check-demo-routing.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-routing.mjs '--define:import.meta.env={}'
+node /tmp/dorm-deploy-routing.mjs
+./node_modules/.bin/esbuild scripts/check-cable-management.ts --bundle --platform=node --format=esm --outfile=/tmp/dorm-deploy-management.mjs '--define:import.meta.env={}'
+node /tmp/dorm-deploy-management.mjs
 ```
+
+家具几何生成器只核验 `Prefabmodel/` 源 GLB 与碰撞 JSON，并生成算法几何；随后由 `sync-desk-parts.ts` 复制桌体及为抽屉注入源材质，统一写入运行时 GLB。同步脚本依赖相对脚本位置定位资产，临时编译文件须放在 `scripts/` 中，执行后移除。资产与检查命令见[桌体模型说明](../frontend/docs/desk-model.md#资产与生成)。
+
+`sync-prefab-items.ts` 同步 12 件单品 GLB，并从 `Prefabmodel/collisionsize/` 生成前端及算法共用的碰撞数据。后端新增的 `/workflow` 上传 API 需要 `python-multipart`，已列入 `backend/requirements.txt`；更新代码后须同步安装依赖。独立工作流默认数据为同目录的 `workflow.sqlite3` 和 `workflow-data/`，可分别用 `DORMTOPOLOGY_WORKFLOW_DB_PATH`、`DORMTOPOLOGY_WORKFLOW_DATA_DIR` 指定；它与产品整理数据库分开保存。
 
 本机已建立上述虚拟环境；若该临时目录被系统清理，应先以 `python3 -m venv "$DORM_DEPLOY_DATA/venv"` 重建环境，再安装依赖，并从备份恢复所需数据库。`VITE_API_MODE=mock` 仅为识别和模型生成保留明确标记的模拟数据；整理、理线和遗留布局始终走 HTTP。真实识别、Rodin 及遗留布局应用端点尚未实现，选择或调用时返回 HTTP 501。
 
@@ -59,9 +73,27 @@ Vite preview 继承 `vite.config.ts` 的代理；空 `VITE_API_BASE_URL` 使 `/a
 
 ### 4. 当前版本验证
 
-2026-10-17 合并新家具后的验证：后端 192 项、真实 17 件布局与前端结果复查、四份 GLB 的 75 个部件边界、抽屉内腔/柜壳/开孔、基础真实走线与 HTTP 通过；类型检查、生产构建和 Ruff 通过。完整桌面/模拟手机浏览器 104 项通过，初始机位避开梯子后补测工作台 8 项通过，包含部分资产失败回退、重试恢复和 L 形空区孔位拒绝。实际 Zustand v1/v2/v3 恢复覆盖旧示例归档、无旧线缆字段、自建项目几何保留与重复升级。
+2026-10-18 同步 main `7ebdec2`：后端 250 项、兼容 1 项通过；离线碰撞生成器 5 项通过、1 项因缺少历史 `tape_measure.glb` 跳过，另用现有 `mouse.glb` 验证目标尺寸生成分支。领域算法保持标准库隔离；GLB 读取依赖按需加载，生成器 Ruff 通过。家具 75 盒与 GLB/JSON 一致，12 件预制单品的非均匀缩放、底心和旋转检查共 108 例通过。生成器不再覆盖抽屉材质，同步前后的源文件保持不变。前端类型检查、生产构建、净距/接口/结果失效/走线预览转换专项、真实 17 件整理及整理后 7/7 路径验证通过；原始散乱场景仍如实返回部分走线失败。
 
-当前 `5177` 生产预览与 `8003` 后端已刷新。桌面/模拟手机三个视角的 Canvas 像素、资源加载、脚本错误和横向溢出通过，已复核截图；用户数据库重启前后 4 份原始基线 SHA256 均为 `4c55c1cb829cf2ddc86a90a193523a2994c034358e1a702f47198a4067fee3e7`。浏览器完整回归位于 `/private/tmp/furniture-browser-final`，机位专项位于 `/private/tmp/furniture-camera-final`，生产预览证据仍在 `.work/backend-only/preview-*.png` 与 `preview-results.json`。以下同日较早记录保留为历史；没有将基础走线成功计为新家具完整双策略三线或实体安装验收。
+真实后端浏览器专项 7 项通过、1 项按原设置跳过：桌面完整整理与七线预览接受、桌面/模拟手机设备布局、配件与集线槽分析、抽屉推拉及取消。完整默认七线流程仍只在桌面执行。证据分别位于 `/private/tmp/dorm-merge-default-browser-results`、`/private/tmp/dorm-merge-cable-accessory-results`、`/private/tmp/dorm-merge-drawer-results`。更新后的 `5177` 构建预览在两种视口与三个视角均非空，无资产错误、脚本错误或横向溢出，截图位于 `.work/backend-only/preview-*.png`。已有项目需刷新并重新生成、预览和接受方案，不自动改变用户摆放。
+
+本轮写入测试使用独立 QA 数据库。生产重启前后均有 7 份基线、SHA256 为 `1b585b83f3cbc1e2d7867740819046350e86139e49ace15c2804b9647d75be88`、未完成任务为 0；前轮记录的 6 份基线内容也逐项保留。当前 `5177` / `8003` 保持运行，临时 QA `5178` / `8004` 在验证后停止。新增独立 `/workflow` 按导入契约运行，未自动套用产品 20mm、未知线长或零弯曲半径的默认参数。
+
+以下为同步本轮 main 之前的净距版本记录：
+
+2026-10-18 物品最小净距版本：产品整理默认 `constraints.min_item_gap_m: 0.02`，按真实部件水平距离检查，并保护穿线孔上方空间。后端 225 项及兼容 1 项通过，包含 20 项净距边界与延长接口引出避开已有线缆的回归；真实默认 17 件布局与 7/7 走线脚本、前端转换/间距/候选恢复/播放/同步检查、类型检查和生产构建通过。本轮修改文件的 Ruff 通过；全仓 Ruff 尚有 79 项既有问题，位于未改动的供应商适配器、几何模块和离线脚本。生产构建保留 Three.js 大产物提示。
+
+`5177` 最终构建的桌面/模拟手机三视角检查通过：Canvas 非空，资产加载正常，无脚本错误或横向溢出，截图位于 `.work/backend-only/preview-*.png`。已有项目须刷新后重新生成并接受整理，原始位置及基线不自动改变；低间距旧候选不能恢复为有效新布局。
+
+最终单套精确锚点版本在本机独立测量时，17 件整理约 29.94 秒，物品 ID 完整、几何有效。桌面浏览器完成真实整理、接受及七线规划，核对实际净距至少 20mm、7/7 有效、正式版本 `1→2→3`，应用后场景与后端保存一致；截图与报告位于 `/private/tmp/dorm-item-spacing-final-efficient-seven-results`。所有写入回归使用独立 QA 数据库；用户数据库 6 份原始基线重启前后 SHA256 均为 `256e42bb2493511f7c42686c7c1e81b6f8a192bcad1a48c63cd3ef30f42bc862`，未完成任务数为 0。耗时属于本机测量，不是服务时限或性能承诺。
+
+最终浏览器共 3 项通过，保持原测试超时：上述桌面完整流程，以及桌面/模拟手机的真实设备布局两例，确认显示器居中、打印机侧置、普通物品不落地。两种视口的应用截图位于 `/private/tmp/dorm-item-spacing-final-efficient-organization-results`，已复核场景非空及控件无重叠；近景相机仍可能裁切右侧设备。临时 QA `5178` / `8004` 已停止，交付实例 `5177` / `8003` 保持运行。此轮仍不计为实体手机、实物安装、含插排总线的首版三线或真实供应商验收。
+
+以下为前一轮的验证与数据库记录，不能替代上述最小净距版本的复测：
+
+2026-10-17 桌后缘与配件版本：后端 204 项、类型检查、生产构建、真实 HTTP 及转换/几何/指南/持久化回归通过。上方 `check-demo-routing.ts` 使用真实默认 17 件物品及 7 根兼容线，原始碰撞布局如实返回部分失败；整理后全部物品几何有效、接口引出无遮挡、7/7 走线有效。浏览器共 107 项通过、1 项跳过：桌面完成整理、原子应用、接口确认及七线规划，正式版本按 `1→2→3` 递增并与后端保存一致；配件添加、安装确认、删除、撤销/重做、持久化、实际三维显示、真实集线槽分析与编辑失效覆盖桌面和模拟手机。完整默认七线流程仅在桌面运行，手机同例跳过；实体安装、含插排总线的首版三线及真实供应商验收仍待完成。
+
+当前 `5177` 生产预览与 `8003` 后端已刷新，临时 QA `5178` / `8004` 已停止。桌面/模拟手机三个视角的 Canvas 像素、资源加载、脚本错误和横向溢出通过，截图已复核。所有写入回归均使用独立 QA 数据库；用户数据库重启前后 5 份原始基线内容 SHA256 均为 `c771108ba0fbcf9ecff1c045460d2058d16bc112b7cfc3aa0553144442244d39`，未完成任务数为 0。默认七线与配件截图位于 `/private/tmp/dorm-cable-management-final-results`，生产预览证据位于 `.work/backend-only/preview-*.png` 与 `preview-results.json`。这些证据是本机生成文件，不随代码提交。
 
 ```bash
 curl --fail --silent --show-error http://127.0.0.1:8003/api/v1/health
@@ -71,9 +103,13 @@ curl --fail --silent --show-error --output /dev/null http://127.0.0.1:5177/proje
 
 健康检查应返回 `status: "ok"`，能力包含 `organization` 和 `cable`；缺少 `cable` 表示仍在使用旧后端。浏览器状态应标记「后端整理 / 理线」以及默认启用的「识别 / 模型模拟」，不出现规划模式切换入口。核对尺寸与原始位置后生成整理方案并接受，再确认接口后提交理线，无需输入实际线长；成功后检查所需线长包含路径与预留，未知现有线长按 `null` 保存。规划失败应显示后端原因，不能返回规则演示结果。既有示例不保证所有线缆都能成功。
 
+以下为合并家具时的较早验证记录：后端 192 项、真实 17 件布局与前端结果复查、四份 GLB 的 75 个部件边界、抽屉内腔/柜壳/开孔、基础真实走线与 HTTP 通过；类型检查、生产构建和 Ruff 通过。完整桌面/模拟手机浏览器 104 项通过，初始机位避开梯子后补测工作台 8 项通过。旧存储恢复覆盖示例归档和用户几何保留；当次重启前后 4 份基线 SHA256 为 `4c55c1cb829cf2ddc86a90a193523a2994c034358e1a702f47198a4067fee3e7`。证据位于 `/private/tmp/furniture-browser-final` 与 `/private/tmp/furniture-camera-final`，不替代本轮七线和配件结果。
+
 数据库复用不代表浏览器状态清空。`5177` 上已有用户项目、后端引用、照片和模型仍按原存储规则保留；升级第 4 版示例时将旧示例归档为「旧家具保留」项目，旧基线与历史快照不重写。干净验证使用全新浏览器上下文及独立测试项目。建立另一个完全独立实例时选择新数据目录和端口，不删除当前数据库或旧 `5174` 数据。
 
 更新设备策略后，刷新页面并重新生成整理方案，接受后才改变物品位置；已有项目不会被自动搬动。旧规则场景携正确版本同步时保留原始基线，更新当前约束并递增版本；引用缺失且内容不同仍显示冲突及创建独立副本入口，不跳过版本检查。
+
+桌后缘与配件版本不要求重置用户项目。未确认且未修改的旧默认接口会迁移到真实实体表面；已确认接口保留，位置不贴合实体时需重新取点并确认。默认笔记本和手机连接适配器的独立 USB 输出，新增适配器 AC 线走桌后策略；既有用户 AC 策略不覆盖。理线配件位于走线列表，可添加、确认安装或删除；支撑跨距检查默认关闭，待安装集线槽只是规划后的汇聚候选。修改布局、接口或配件后须重新确认并规划，旧结果失效。
 
 2026-10-17 本轮验证：`npm run typecheck` 和生产构建通过；后端整理、理线 service/API 共 35 项通过，真实理线 HTTP 回归通过；服务装配的 11 组配置及旧规则路径无效化回归通过。`5178` 独立测试实例的桌面/模拟手机 Chromium 共 16 项通过，覆盖确认门槛、旧模式偏好、503 保留原场景与恢复、真实整理应用、过期拒绝及场景同步；历史规则路径显示待重算、不计入已规划数量且保留原数据。并行测试曾发生输出目录清理冲突，使用各自输出目录重跑全部通过。
 

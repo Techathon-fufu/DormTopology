@@ -13,6 +13,7 @@ import { checkCableRoute } from '@/scene/cableRoute'
 import { cablePathLength, cablePathSamples, totalCablePathLength } from '@/scene/cableGeometry'
 import { computeCableAvoidZones, deskUnderY } from '@/scene/routeNodes'
 import { DESK_GAP, nearestSupport, validateScene } from '@/scene/sceneValidation'
+import { validCableMounts } from '@/scene/cableManagement'
 import { formatMeters, radToDeg } from '@/lib/units'
 
 /**
@@ -48,7 +49,7 @@ export interface GuideAccessory {
   label: string
   /** 建议总数 */
   count: number
-  /** 其中来自走线规划标注（CableConnection.accessories）的数量 */
+  /** 其中来自已配置配件或走线规划标注的数量 */
   fromPlan: number
   /** 其中本地规则估算的数量 */
   estimated: number
@@ -363,7 +364,8 @@ function routeRuns(samples: Vec3[], room: RoomConfig): RouteRuns {
 export function buildAccessories(project: Project): GuideAccessory[] {
   const cables = project.cables.filter(hasUsableCableRoute)
   const { objects } = project
-  if (cables.length === 0) return []
+  const mounts = validCableMounts(project.room)
+  if (cables.length === 0 && mounts.length === 0) return []
 
   let clipPlan = 0
   let clipEst = 0
@@ -486,13 +488,28 @@ export function buildAccessories(project: Project): GuideAccessory[] {
     })
   }
 
+  // Shared hardware is counted by mount ID, independently of the number of member cables.
+  for (const kind of ['clip', 'velcro', 'tray'] as const) {
+    const configured = mounts.filter((mount) => kind === 'clip' ? mount.preset === 'rear-clips' || mount.kind === 'surface'
+      : kind === 'velcro' ? mount.kind === 'cable_tie' && mount.preset !== 'rear-clips' : mount.kind === 'cable_tray')
+    if (!configured.length) continue
+    const installed = configured.filter((mount) => mount.installed).length
+    const configuredReason = `已配置 ${configured.length} 处：已确认安装 ${installed} 处，待安装建议 ${configured.length - installed} 处。${configured.map((mount) => mount.label).join('、')}。`
+    const existing = rows.find((row) => row.id === kind)
+    const row: GuideAccessory = {
+      id: kind, label: ACCESSORY_GUIDE_LABELS[kind], count: configured.length,
+      fromPlan: configured.length, estimated: 0, reason: configuredReason,
+    }
+    if (existing) Object.assign(existing, row)
+    else rows.push(row)
+  }
   return rows
 }
 
 // ───────────────────────────── 未解决的问题 ─────────────────────────────
 
 /**
- * 问题清单：摆放校验（越界 / 相交 / 悬空）+ 走线检查（边界 / 避让区 / 相交 / 端点）
+ * 问题清单：摆放校验（越界 / 相交 / 悬空）+ 走线检查（边界 / 相交 / 端点）
  * + 线长核对 + 供电未接线。全部来自本地几何检查，接入真实算法后以服务端复查为准。
  */
 export function collectGuideIssues(project: Project): GuideIssue[] {

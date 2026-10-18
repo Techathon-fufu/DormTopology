@@ -4,22 +4,31 @@ import math
 from itertools import product
 
 from ..geometry import (
+    AABB,
     EPSILON,
     aabb_from_item,
     aabb_from_zone,
+    add,
+    direction_to_world,
     fits_region,
-    items_overlap,
+    local_to_world,
+    normalize,
     pose_extent,
+    scale,
     support_region,
     validate_item_geometry,
 )
+from ..geometry.convex import bounds, segment_hits, world_parts
 from ..models import PackingResult, Scene
 from ..rules import validate_scene
 from .area import DesktopGrid
 from .check import WALL_CATEGORIES, check_layout, issue, item_geometry_issues
+from .spacing import item_conflicts
 
 MAX_CANDIDATES_PER_REGION_ROTATION = 128
 FREQUENCY_WEIGHT = {"high": 3.0, "medium": 1.0, "low": 0.2}
+PORT_LEADOUT_M = 0.025
+PORT_CLEARANCE_M = 0.005
 
 
 def _pose(item: dict, position, angle: float) -> dict:
@@ -44,13 +53,46 @@ def _access_cost(scene: Scene, item: dict) -> float:
     ) * FREQUENCY_WEIGHT[item["usage_frequency"]]
 
 
+def _port_leadouts(item: dict):
+    for port in item.get("ports", []):
+        start = local_to_world(item, port["local_position"])
+        direction = normalize(direction_to_world(item, port["local_direction"]))
+        yield start, add(start, scale(direction, PORT_LEADOUT_M))
+
+
+def _port_geometry(item: dict):
+    parts = world_parts(item)
+    low, high = bounds(tuple(vertex for part in parts for vertex in part[0]))
+    return AABB(low, high), parts
+
+
+def _leadout_hits(start, end, geometry):
+    box, parts = geometry
+    if any(max(start[i], end[i]) + PORT_CLEARANCE_M < box.minimum[i]
+           or min(start[i], end[i]) - PORT_CLEARANCE_M > box.maximum[i]
+           for i in range(3)):
+        return False
+    return segment_hits(start, end, parts, PORT_CLEARANCE_M)
+
+
+def _port_access_cost(candidate: dict, placed_geometry, placed_leadouts) -> int:
+    # A soft preference preserves real connector access without inventing solid volumes.
+    candidate_geometry = _port_geometry(candidate)
+    own_blocked = sum(any(_leadout_hits(start, end, geometry) for geometry in placed_geometry)
+                      for start, end in _port_leadouts(candidate))
+    other_blocked = sum(_leadout_hits(start, end, candidate_geometry)
+                        for start, end in placed_leadouts)
+    return own_blocked + other_blocked
+
+
 def _candidates(scene: Scene, original: dict, region: dict, placed: list[dict]):
     x0, x1, z0, z1 = region["bounds_xz_m"]
     y = region["surface_y_m"]
-    blockers = [aabb_from_item(p) for p in placed]
+    gap = scene.get("constraints", {}).get("min_item_gap_m", 0)
+    blockers = [(aabb_from_item(p), gap) for p in placed]
     # Zone projections add useful edge anchors but never replace OBB collision checks.
     blockers.extend(
-        aabb_from_zone(z) for key in ("obstacles", "reserved_zones") for z in scene[key]
+        (aabb_from_zone(z), 0) for key in ("obstacles", "reserved_zones") for z in scene[key]
     )
     height = pose_extent(original)[2]
     for angle in sorted(set(original["allowed_rotations_y_rad"])):
@@ -74,19 +116,20 @@ def _candidates(scene: Scene, original: dict, region: dict, placed: list[dict]):
             (zmin + zmax) / 2,
             min(zmax, max(zmin, original["position"][2])),
         }
-        for box in blockers:
+        for box, padding in blockers:
             if (
                 min(bounds.maximum[1], box.maximum[1])
                 <= max(bounds.minimum[1], box.minimum[1]) + 1e-10
             ):
                 continue
+            clearance = padding if padding > 0 else EPSILON
             xs.update((
-                box.minimum[0] - bounds.maximum[0] - EPSILON,
-                box.maximum[0] - bounds.minimum[0] + EPSILON,
+                box.minimum[0] - bounds.maximum[0] - clearance,
+                box.maximum[0] - bounds.minimum[0] + clearance,
             ))
             zs.update((
-                box.minimum[2] - bounds.maximum[2] - EPSILON,
-                box.maximum[2] - bounds.minimum[2] + EPSILON,
+                box.minimum[2] - bounds.maximum[2] - clearance,
+                box.maximum[2] - bounds.minimum[2] + clearance,
             ))
         candidates = []
         for x, z in product(sorted(xs), sorted(zs)):
@@ -102,7 +145,7 @@ def _candidates(scene: Scene, original: dict, region: dict, placed: list[dict]):
             if (
                 fits_region(candidate, region)
                 and not item_geometry_issues(scene, candidate)
-                and not any(items_overlap(candidate, p) for p in placed)
+                and not any(item_conflicts(scene, candidate, p) for p in placed)
             ):
                 candidates.append(candidate)
         # Bound expensive area scoring; retain edge-first, stable candidates.
@@ -129,13 +172,15 @@ def _choose(
     if (
         any(r["id"] in allowed and fits_region(original, r) for r in scene["regions"])
         and not item_geometry_issues(scene, original)
-        and not any(items_overlap(original, p) for p in placed)
+        and not any(item_conflicts(scene, original, p) for p in placed)
     ):
         choices.append(original)
     for region in sorted(scene["regions"], key=lambda r: r["id"]):
         if region["id"] in allowed:
             choices.extend(_candidates(scene, original, region, placed))
     occupied = grid.occupied(placed)
+    placed_geometry = [_port_geometry(item) for item in placed]
+    placed_leadouts = [leadout for item in placed for leadout in _port_leadouts(item)]
     scored = []
     seen = set()
     for candidate in choices:
@@ -156,6 +201,7 @@ def _choose(
                     int(bool(preferred_regions) and not any(
                         fits_region(candidate, region) for region in preferred_regions
                     )),
+                    _port_access_cost(candidate, placed_geometry, placed_leadouts),
                     -free_cells,
                     cost,
                     move,
@@ -203,7 +249,7 @@ def plan_packing(scene: Scene) -> PackingResult:
         if chosen is None:
             chosen = original
             failures[original["id"]] = (
-                "No tested target satisfies region, clearance, obstacle and item constraints"
+                "No tested target satisfies region, clearance, obstacle and item spacing constraints"
             )
         poses[original["id"]] = chosen
 
@@ -214,7 +260,7 @@ def plan_packing(scene: Scene) -> PackingResult:
         for key, candidate in list(poses.items()):
             if _same_pose(candidate, originals[key]):
                 continue
-            if any(p["id"] != key and items_overlap(candidate, p) for p in retained):
+            if any(p["id"] != key and item_conflicts(scene, candidate, p) for p in retained):
                 poses[key] = originals[key]
                 failures[key] = (
                     "Move rolled back because an item retained at its input pose occupies the target"
@@ -242,7 +288,7 @@ def plan_packing(scene: Scene) -> PackingResult:
             _region_id(scene, candidate, target=True) is not None
             and not item_geometry_issues(scene, candidate)
             and not any(
-                key != other and items_overlap(candidate, p)
+                key != other and item_conflicts(scene, candidate, p)
                 for other, p in poses.items()
             )
         ):

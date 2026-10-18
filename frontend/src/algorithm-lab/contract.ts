@@ -2,7 +2,7 @@ export type Vec3 = [number, number, number];
 export type PlanStatus = 'success' | 'partial' | 'infeasible';
 export type RoutingMode = 'slot' | 'backboard';
 export type ReasonCode =
-  | 'invalid_input' | 'no_space' | 'collision' | 'incompatible_ports'
+  | 'invalid_input' | 'no_space' | 'collision' | 'item_spacing' | 'incompatible_ports'
   | 'port_occupied' | 'length_exceeded' | 'endpoint_blocked' | 'no_path' | 'unsupported_mode'
   | 'unsupported_span';
 
@@ -127,6 +127,7 @@ export interface Scene {
     tray_candidates?: TrayCandidate[];
   };
   cables: Cable[];
+  constraints?: { min_item_gap_m: number };
 }
 
 export interface PackingItem {
@@ -199,6 +200,11 @@ export interface RoutingResult {
   issues: Issue[];
 }
 
+/** Result validation uses source identities and ports, independently of collision representation. */
+export type RoutingResultScene = Omit<Scene, 'items'> & {
+  items: Array<Pick<Item, 'id' | 'position' | 'rotation_y_rad' | 'dimensions_confirmed'> & { ports: Array<Pick<Port, 'id' | 'local_position' | 'confirmed'>> }>;
+};
+
 export interface Bundle {
   scene: Scene;
   packingResult?: PackingResult;
@@ -244,7 +250,7 @@ export const VISUALIZATION_LIMITS = {
 } as const;
 
 type JsonObject = Record<string, unknown>;
-const REASONS = ['invalid_input', 'no_space', 'collision', 'incompatible_ports', 'port_occupied',
+const REASONS = ['invalid_input', 'no_space', 'collision', 'item_spacing', 'incompatible_ports', 'port_occupied',
   'length_exceeded', 'endpoint_blocked', 'no_path', 'unsupported_mode', 'unsupported_span'] as const;
 const STATUSES = ['success', 'partial', 'infeasible'] as const;
 const MODES = ['slot', 'backboard'] as const;
@@ -329,7 +335,7 @@ function header(value: JsonObject, path: string): void {
   integer(value.scene_revision, `${path}.scene_revision`);
 }
 
-function matchRevision(value: JsonObject, scene: Scene, path: string): void {
+function matchRevision(value: JsonObject, scene: RoutingResultScene, path: string): void {
   header(value, path);
   if (value.scene_id !== scene.scene_id || value.scene_revision !== scene.scene_revision) {
     invalid(path, `scene_id and scene_revision must match ${scene.scene_id} @ ${scene.scene_revision}`);
@@ -349,7 +355,7 @@ function validateIssues(value: unknown, ids: Set<string>, path: string): void {
   });
 }
 
-function sceneIds(scene: Scene): Set<string> {
+function sceneIds(scene: RoutingResultScene): Set<string> {
   return new Set([
     ...scene.items.flatMap((item) => [item.id, ...item.ports.map((port) => port.id)]),
     ...[scene.regions, scene.obstacles, scene.reserved_zones, scene.exposure_zones,
@@ -363,6 +369,10 @@ function parseScene(value: unknown, path: string): Scene {
   header(scene, path);
   nullableString(scene.baseline_id, `${path}.baseline_id`);
   string(scene.template_id, `${path}.template_id`);
+  if (scene.constraints !== undefined) {
+    const constraints = object(scene.constraints, `${path}.constraints`);
+    number(constraints.min_item_gap_m, `${path}.constraints.min_item_gap_m`, 0);
+  }
   const desk = object(scene.desk, `${path}.desk`);
   ['width_m', 'depth_m', 'top_height_m'].forEach((key) => geometryNumber(desk[key], `${path}.desk.${key}`, 0, true));
   const wall = object(scene.wall, `${path}.wall`);
@@ -547,7 +557,8 @@ function parseScene(value: unknown, path: string): Scene {
     choice(cable.thickness, ['thick', 'thin'], `${entryPath}.thickness`);
     choice(cable.mode, MODES, `${entryPath}.mode`);
     if (cable.length_m !== null) number(cable.length_m, `${entryPath}.length_m`, 0, true);
-    ['diameter_m', 'min_bend_radius_m'].forEach((key) => number(cable[key], `${entryPath}.${key}`, 0, true));
+    number(cable.diameter_m, `${entryPath}.diameter_m`, 0, true);
+    number(cable.min_bend_radius_m, `${entryPath}.min_bend_radius_m`, 0);
     number(cable.slack_m, `${entryPath}.slack_m`, 0);
     if (cable.baseline_path_points !== undefined) {
       const points = array(cable.baseline_path_points, `${entryPath}.baseline_path_points`);
@@ -632,7 +643,7 @@ function parsePacking(value: unknown, scene: Scene): PackingResult {
   return result as unknown as PackingResult;
 }
 
-function worldPortPositions(scene: Scene): Map<string, Vec3> {
+function worldPortPositions(scene: RoutingResultScene): Map<string, Vec3> {
   const positions = new Map<string, Vec3>();
   scene.items.forEach((item) => item.ports.forEach((port) => {
     const [x, y, z] = port.local_position;
@@ -644,7 +655,7 @@ function worldPortPositions(scene: Scene): Map<string, Vec3> {
   return positions;
 }
 
-function parseRouting(value: unknown, scene: Scene): RoutingResult {
+export function parseRouting(value: unknown, scene: RoutingResultScene): RoutingResult {
   const result = object(value, 'cable_routing');
   matchRevision(result, scene, 'cable_routing');
   const status = choice(result.status, STATUSES, 'cable_routing.status');

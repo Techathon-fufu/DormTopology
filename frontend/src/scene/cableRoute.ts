@@ -100,29 +100,16 @@ export interface CableCheckInput {
   cable?: CableConnection
 }
 
-function pointInZoneXZ(p: Vec3, zone: CableAvoidZone, margin: number): boolean {
-  return (
-    p[0] >= zone.rect.x0 - margin &&
-    p[0] <= zone.rect.x1 + margin &&
-    p[2] >= zone.rect.z0 - margin &&
-    p[2] <= zone.rect.z1 + margin
-  )
-}
-
-function pointHitsZone(p: Vec3, zone: CableAvoidZone): boolean {
-  return pointInZoneXZ(p, zone, 0.012) && p[1] >= zone.y0 - 0.01 && p[1] <= zone.y1
-}
-
 function dist3(a: Vec3, b: Vec3): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 }
 
 /**
- * 对展示路径做本地连接、长度及几何检查（避让区 / 物品 / 桌板 / 房间边界），
+ * 对展示路径做本地连接、长度及几何检查（物品 / 桌板 / 房间边界），
  * 返回采样点、长度与问题清单（去重：同类问题仅保留第一条位置）。
  */
 export function checkCableRoute(input: CableCheckInput): CableCheckResult {
-  const { points, from, to, objects, room, avoidZones } = input
+  const { points, from, to, objects, room } = input
   const samples = input.smooth === false ? points : sampleCurve(points)
   const lengthM = polylineLength(samples)
   const issues: CableCheckIssue[] = []
@@ -164,10 +151,6 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
     }
   }
 
-  // 端点位于避让区内时豁免该区（如键盘本身就放在打字活动区里）
-  const activeZones = avoidZones.filter(
-    (z) => !pointInZoneXZ(fromPos, z, 0.06) && !pointInZoneXZ(toPos, z, 0.06),
-  )
   const testObjects = objects.filter((o) => o.visible)
 
   for (let index = 0; index < samples.length; index += 1) {
@@ -178,14 +161,6 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
     if (p[1] > room.height - 0.005) addIssue('bounds', p, '路径超过层高（越界）')
     if (Math.abs(p[0]) > room.length / 2 - 0.004) addIssue('bounds', p, '路径超出房间左右边界')
     if (p[2] < -0.004 || p[2] > room.width - 0.004) addIssue('bounds', p, '路径超出房间前后边界')
-
-    // 2) 避让区（立体区间）
-    for (const z of activeZones) {
-      if (pointHitsZone(p, z)) {
-        addIssue('zone', p, `与「${z.label}」相交（避让区）`)
-        break
-      }
-    }
 
     // 3) 桌板（允许从出线孔穿过）
     if (
@@ -208,25 +183,6 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
       if (o.id === to.objectId && dist3(p, toPos) < 0.055 && dist3(previous, toPos) < 0.055) continue
       if (segmentHitsObject(previous, p, o, radius + 0.001)) {
         addIssue('object', p, `与「${o.name}」相交（含线径净空）`)
-        break
-      }
-    }
-  }
-
-  // Sampled curvature is a local estimate; continuous validation belongs to Python.
-  // Backend samples carry their own continuous-curve validation and need no second approximation.
-  if (input.smooth !== false) {
-    for (let i = 1; i + 1 < samples.length; i += 1) {
-      const a = samples[i - 1]
-      const b = samples[i]
-      const c = samples[i + 1]
-      const ab = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2])
-      const bc = new THREE.Vector3(c[0] - b[0], c[1] - b[1], c[2] - b[2])
-      const cross = ab.clone().cross(bc).length()
-      if (cross < 1e-12) continue
-      const bendRadius = ab.length() * bc.length() * dist3(a, c) / (2 * cross)
-      if (bendRadius + 0.0005 < physical.minBendRadiusM) {
-        addIssue('cable', b, `局部弯曲半径约 ${Math.round(bendRadius * 1000)} mm，小于参考要求 ${Math.round(physical.minBendRadiusM * 1000)} mm（本地采样检查）`)
         break
       }
     }

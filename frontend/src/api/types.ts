@@ -9,6 +9,7 @@ import type {
   SceneObject,
 } from '@/types/project'
 import type { OrganizationPlan, OrganizationPreferences, OrganizationSceneRef } from '@/types/organization'
+import type { CableTrayAnalysis } from '@/types/cableManagement'
 
 /**
  * 服务接口层：识别 / 模型生成 / 布局规划 / 走线规划 / 空间整理。
@@ -130,6 +131,7 @@ export interface CablePlanningResult {
   /** 本地校验提示（不合格路径被丢弃的原因） */
   warnings?: string[]
   sceneRef?: OrganizationSceneRef
+  trayAnalysis?: CableTrayAnalysis
 }
 
 /**

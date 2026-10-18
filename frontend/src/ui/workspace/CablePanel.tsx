@@ -458,7 +458,7 @@ export function CablePanel({
           <div className="flex items-center justify-between gap-2">
             <Label>线径</Label>
             <span className="text-[11px] text-faint">
-              参考直径 ≈ {Math.round(thicknessMeta.diameterM * 10000) / 10} mm · 最小弯曲半径 ≈ {Math.round(thicknessMeta.minBendRadiusM * 1000)} mm
+              参考直径 ≈ {Math.round(thicknessMeta.diameterM * 10000) / 10} mm
             </span>
           </div>
           <Segmented
