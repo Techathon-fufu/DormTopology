@@ -263,6 +263,7 @@ export function toPackingScene(input: {
       placement_priority: shape === 'monitor' ? 100 : workstation && shape === 'laptop' ? 95 : shape === 'printer' ? 90 : workstation && shape === 'lamp' ? 80 : object.frequent ? 60 : 20,
       allowed_region_ids: allowedRegions, preferred_region_ids: preferred.filter((id) => allowedRegions.includes(id)),
       allowed_rotations_y_rad: workstation && shape === 'laptop' ? [workstation.laptop.rotationY]
+        : shape === 'computerTower' ? [...new Set([Math.atan2(Math.sin(object.transform.rotationY), Math.cos(object.transform.rotationY)), 0, Math.PI / 2])]
         : shape === 'monitor' || shape === 'printer' || desktopBinding(object, room) || (workstation && (shape === 'keyboard' || shape === 'mouse')) ? [0] : [0, Math.PI / 2],
       collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ? assertAssetUrl(object.model.assetUrl) : null,
       generation: { task_id: null, status: 'not_requested', source: object.model.assetUrl ? object.model.source === 'generated' ? 'live' : 'cache' : 'placeholder', error: null },

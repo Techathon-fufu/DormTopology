@@ -4,8 +4,8 @@
     "name": "示例：上床下桌·四人间",
     "isDemo": true,
     "source": "demo",
-    "createdAt": 1792289527504,
-    "updatedAt": 1792289527504,
+    "createdAt": 1792294078776,
+    "updatedAt": 1792294078776,
     "room": {
       "template": "loft-standard",
       "furnitureModel": "dormdesk-v1",
@@ -546,11 +546,11 @@
         },
         "transform": {
           "position": [
-            0.3800000023841858,
+            0.4000000000000001,
             0,
-            0.4899999985098838
+            0.4000000023841857
           ],
-          "rotationY": 1.5707963267948966
+          "rotationY": 0
         },
         "model": {
           "status": "placeholder",
@@ -6298,11 +6298,11 @@
           0.38
         ],
         "position": [
-          0.8300000023841858,
+          0.8500000000000001,
           0,
-          0.4479999985098838
+          0.3580000023841857
         ],
-        "rotation_y_rad": 1.5707963267948966,
+        "rotation_y_rad": 0,
         "dimensions_source": "template",
         "dimensions_confirmed": true,
         "fixed": false,

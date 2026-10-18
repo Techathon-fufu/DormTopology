@@ -64,6 +64,8 @@ assert.ok(printer.transform.position[0] < -.04, 'printer stays on the left, leav
 assert.equal(organized.objects.find((o) => o.id === 'demo-power-adapter')!.transform.position[1], organized.room.desk.height,
   'the active power adapter stays accessible on the desk rather than in a closed drawer')
 assert.ok(organized.objects.filter((o) => o.transform.position[1] === 0).every((o) => o.id === 'demo-computer-tower'))
+const tower = organized.objects.find((o) => o.id === 'demo-computer-tower')!
+assert.equal(tower.transform.rotationY, 0, 'computer tower translates around the seated zone before rotating')
 const holeClearance = packingScene.reserved_zones.map((zone) => ({ id: zone.id, label: 'cable hole clearance',
   min: fromPackingPosition(zone.min, organized.room), max: fromPackingPosition(zone.max, organized.room) }))
 assert.ok(organized.objects.every((object) => objectRoomHits(object, object.transform.position, holeClearance).length === 0),
