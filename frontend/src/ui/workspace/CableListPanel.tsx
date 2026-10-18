@@ -60,7 +60,7 @@ export function CableListPanel({
   onConfirmRouting: (confirmed: boolean) => void
   busy: boolean
   onPlanCables: (targetIds?: string[]) => void
-  /** 打开表面描点页面（走线模式与手机端的入口；桌面也可直接右键物品） */
+  /** 打开表面描点页面（走线模式入口；也可直接右键物品） */
   onOpenMarking?: () => void
   onFlash: (msg: string) => void
   className?: string

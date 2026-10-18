@@ -23,9 +23,8 @@ test.beforeEach(async ({page}) => {
   await page.evaluate(url => { (window as any).__projectsUrl = url }, url)
 })
 
-/** 走线模式入口：工作台左侧工具面板的「连线」标签；手机端先打开物体与线缆抽屉。 */
-async function openCableMode(page: Page, mobile = false) {
-  if (mobile) await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
+/** 走线模式入口：工作台左侧工具面板的「连线」标签。 */
+async function openCableMode(page: Page) {
   await page.getByRole('button', { name: '连线', exact: true }).click()
 }
 
@@ -160,7 +159,6 @@ async function openMarkingPage(page: Page, world: [number, number, number]) {
 }
 
 test.describe('surface port marking', () => {
-  test.skip(({isMobile})=>isMobile,'Full surface editing is a desktop acceptance flow')
   test('marks a real surface point, persists metadata and cancels drafts', async ({ page }) => {
     const id = await cloneDemo(page, 'surface-ports')
     await openWorkspace(page, id)
@@ -427,7 +425,6 @@ test.describe('surface port marking', () => {
 })
 
 test.describe('real service routing', () => {
-  test.skip(({isMobile})=>isMobile,'Full routing editing is a desktop acceptance flow')
   test('plans candidates from the real backend without mocking and preserves project until acceptance', async ({ page }) => {
     test.skip(process.env.PLAYWRIGHT_REAL_ORGANIZATION !== '1', 'Requires a real Python backend')
     test.setTimeout(120_000)
@@ -524,33 +521,7 @@ test.describe('real service routing', () => {
   })
 })
 
-test('mobile can inspect saved endpoint annotations and scene connection review', async ({page,isMobile}) => {
-  test.skip(!isMobile,'Mobile viewing acceptance')
-  const id=await cloneDemo(page,'surface-mobile')
-  const url=await moduleUrl(page,'/src/state/projectsStore.ts')
-  await page.evaluate(async({url,id})=>{
-    const {useProjectsStore}=await import(url)
-    const p=useProjectsStore.getState().projects[id]
-    p.objects[0].name='手机查看设备'
-    p.objects[0].ports=[{id:id+'-port',label:'数据接口',note:'背面的数据连接口',type:'usb-c',powered:false,confirmed:true,offset:[0,.1,.17],localDirection:[0,0,1]}]
-    useProjectsStore.getState().upsert(p)
-  },{url,id})
-  await page.goto(`/projects/${id}/workspace`,{waitUntil:'domcontentloaded'})
-  await expect(page.locator('canvas')).toBeVisible()
-  await openCableMode(page, true)
-  const drawer=page.getByRole('dialog',{name:'物品与线缆面板'})
-  await drawer.getByRole('button',{name:'描点与连接检查'}).click()
-  const marking=page.getByRole('region',{name:'表面描点页面'})
-  await expect(marking).toBeVisible()
-  await expect(marking.getByText('背面的数据连接口',{exact:true})).toBeVisible()
-  await expect(marking.getByText(/全场检查 · 1 件物品/)).toBeVisible()
-  await marking.locator('summary').click()
-  await expect(marking.getByText(/存在可选物理接口|尚未建立连接/)).toBeVisible()
-  await page.screenshot({path:'.work/surface-connections/surface-mobile.png'})
-})
-
-test('picks a loaded GLB with edited dimensions and rotation using its actual mesh', async ({page,isMobile})=>{
-  test.skip(isMobile,'Desktop surface editing')
+test('picks a loaded GLB with edited dimensions and rotation using its actual mesh', async ({page})=>{
   const id=await cloneDemo(page,'surface-glb')
   const url=await moduleUrl(page,'/src/state/projectsStore.ts')
   await page.evaluate(async({url,id})=>{

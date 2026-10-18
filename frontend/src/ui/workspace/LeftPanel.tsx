@@ -73,7 +73,7 @@ function ItemRow({
       }}
       title={hasIssues ? issues!.map((i) => i.message).join('\n') : undefined}
       className={cn(
-        'group relative flex min-h-9 [@media(pointer:coarse)]:min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+        'group relative flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
         selected ? 'bg-primary-soft' : 'hover:bg-muted',
         !object.visible && 'opacity-55',
       )}
@@ -165,7 +165,7 @@ function ItemRow({
 
 /**
  * 左侧物品面板：搜索 / 分类筛选 / 逐项显示隐藏与锁定 / 校验警示，
- * 支持作为停靠面板（宽屏）或抽屉内容（窄屏）复用。
+ * 作为工作台左侧停靠面板使用。
  */
 export function LeftPanel({
   project,
@@ -287,7 +287,7 @@ export function LeftPanel({
             type="button"
             onClick={() => setCategory(c)}
             className={cn(
-              'min-h-7 rounded-full border px-2 py-0.5 text-xs transition-colors [@media(pointer:coarse)]:min-h-11',
+              'min-h-7 rounded-full border px-2 py-0.5 text-xs transition-colors',
               category === c
                 ? 'border-primary bg-primary-soft font-medium text-primary'
                 : 'border-border text-muted-foreground hover:bg-muted',

@@ -819,127 +819,25 @@
   }
 }
 
-/* ── 响应式 ───────────────────────────────────────────── */
-@media (min-width: 720px) {
-  .home-nav,
-  .home-divider {
-    display: flex;
-  }
-
-  .home-theme-choice {
-    width: 40px;
-    height: 40px;
-  }
+/* ── 桌面基线：导航、主题切换与首页主视觉 ─────────────── */
+.home-nav,
+.home-divider {
+  display: flex;
 }
 
-@media (min-width: 1024px) {
-  .home-hero-copy {
-    width: 50%;
-    max-width: 680px;
-    margin: 0;
-    padding-left: clamp(32px, 4vw, 56px);
-  }
-
-  .home-headline {
-    font-size: clamp(56px, 5.9vw, 84px);
-  }
+.home-theme-choice {
+  width: 40px;
+  height: 40px;
 }
 
-@media (max-width: 1023px) {
-  /* 窄屏改为上下结构：文字在实色底上，场景图单独成块，避免文字压住家具 */
-  .home-hero {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    background: var(--home-bg);
-  }
-
-  .home-hero::before {
-    display: none;
-  }
-
-  .home-hero-copy {
-    order: 1;
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 32px clamp(16px, 4vw, 40px) 24px;
-    justify-content: flex-start;
-  }
-
-  .home-hero-art {
-    position: relative;
-    inset: auto;
-    order: 2;
-    height: auto;
-    flex: 1 1 auto;
-    min-height: clamp(240px, 40svh, 460px);
-    overflow: hidden;
-  }
-
-  .home-hero-img {
-    object-position: 62% center;
-  }
-
-  .home-hero-actions {
-    margin-top: 24px;
-  }
-
-  .home-scene-label {
-    right: clamp(16px, 4vw, 40px);
-  }
-
-  .home-headline {
-    font-size: clamp(38px, 8.6vw, 56px);
-  }
+.home-hero-copy {
+  width: 50%;
+  max-width: 680px;
+  margin: 0;
+  padding-left: clamp(32px, 4vw, 56px);
 }
 
-@media (max-width: 719px) {
-  /* 帮助按钮靠右，绝对定位的面板会从左侧溢出屏幕：窄屏改为贴边铺满 */
-  .home-help-panel {
-    position: fixed;
-    top: 68px;
-    left: 12px;
-    right: 12px;
-    width: auto;
-    max-width: none;
-  }
-
-  .home-recent-inner {
-    height: 84px;
-    gap: 8px;
-  }
-
-  .home-recent-name {
-    max-width: 96px;
-  }
-
-  .home-space-main {
-    min-height: 68px;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 4px;
-  }
-
-  .home-space-meta {
-    gap: 12px;
-  }
-
-  .home-space-meta span:last-child {
-    display: none;
-  }
-
-  .home-space-menu {
-    width: 168px;
-  }
+.home-headline {
+  font-size: clamp(56px, 5.9vw, 84px);
 }
 
-@media (pointer: coarse) {
-  .home-theme-choice,
-  .home-help > summary,
-  .home-space-more {
-    min-width: 44px;
-    min-height: 44px;
-  }
-}

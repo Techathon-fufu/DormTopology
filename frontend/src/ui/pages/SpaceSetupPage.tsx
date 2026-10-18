@@ -199,7 +199,7 @@ export function SpaceSetupPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6">
         {/* ── 表单 ─────────────────────────────────────────────── */}
         <div className="space-y-4">
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
@@ -224,7 +224,7 @@ export function SpaceSetupPage() {
               </label>
             }
           >
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className={cn(!form.shelfEnabled && 'opacity-50')}>层数</Label>
                 <Select
@@ -321,7 +321,7 @@ export function SpaceSetupPage() {
         </div>
 
         {/* ── 预览 / 校验 / 操作 ───────────────────────────────── */}
-        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+        <aside className="sticky top-24 space-y-4 self-start">
           <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
             <h2 className="mb-2 text-sm font-semibold">三维预览</h2>
             <SpacePreview3D room={previewRoom} />

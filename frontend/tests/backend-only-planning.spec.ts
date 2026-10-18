@@ -148,14 +148,11 @@ test('blocks cable planning until the scene is confirmed despite the old demo ov
   page.on('request', (request) => {
     if (['PUT', 'POST'].includes(request.method()) && new URL(request.url()).pathname.startsWith('/api/v1/')) requests.push(request.url())
   })
-  await page.getByRole('button', { name: '规划走线', exact: true }).click()
+  await page.getByRole('button', { name: '连线', exact: true }).click()
   await page.getByRole('button', { name: '规划全部走线', exact: true }).click()
   await expect(page.getByRole('contentinfo')).toContainText('请先核对并确认物品尺寸、位置与接口')
   expect(requests).toEqual([])
   expect((await readProject(page, id)).cables).toEqual(original.cables)
-  if (!await page.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).isVisible()) {
-    await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
-  }
   await expect(page.getByRole('checkbox', { name: '已核对尺寸、位置与接口' })).not.toBeChecked()
   await expect(page.getByText(/规则式?演示|恢复真实模式|切换到演示模式/)).toHaveCount(0)
   const screenshot = testInfo.outputPath('backend-only-routing-confirmation.png')
@@ -178,7 +175,7 @@ test('shows historical demo-rule planned paths as unverified and needing recalcu
   expect(original.cables[0].planSource).toBe('demo-rule')
   await page.reload()
   await expect(page.locator('canvas')).toBeVisible()
-  await page.getByRole('button', { name: '规划走线', exact: true }).click()
+  await page.getByRole('button', { name: '连线', exact: true }).click()
   if (!await page.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).isVisible()) {
     await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
   }
@@ -224,7 +221,7 @@ test('plans a verified route without asking for actual length and shows the comp
   }, { url, id })
   await page.reload()
   await expect(page.locator('canvas')).toBeVisible()
-  await page.getByRole('button', { name: '规划走线', exact: true }).click()
+  await page.getByRole('button', { name: '连线', exact: true }).click()
   if (!await page.getByRole('checkbox', { name: '已核对尺寸、位置与接口' }).isVisible()) {
     await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
   }

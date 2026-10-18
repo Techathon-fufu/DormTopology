@@ -70,7 +70,7 @@ npm run test:e2e:ui
 npm run test:e2e:report
 ```
 
-配置会自动在 `127.0.0.1:4174` 启动 Vite；端口被占用时停止冲突进程，或通过 `PLAYWRIGHT_BASE_URL` 指向已经运行的本地服务。测试覆盖桌面 Chromium 和模拟 Pixel 7 的手机 Chromium，输出位于被 Git 忽略的 `test-results/` 和 `playwright-report/`。
+配置会自动在 `127.0.0.1:4174` 启动 Vite；端口被占用时停止冲突进程，或通过 `PLAYWRIGHT_BASE_URL` 指向已经运行的本地服务。测试覆盖桌面 Chromium（1440×1000），输出位于被 Git 忽略的 `test-results/` 和 `playwright-report/`。
 
 `npm run test:e2e` 运行全部浏览器回归；仅检查算法工作台可运行 `npm run test:e2e -- tests/algorithm-lab.spec.ts`。另有 4 项产品工作台白屏与任务状态回归，范围见[产品验收记录](../frontend/docs/demo-and-acceptance.md)第 6 节。
 

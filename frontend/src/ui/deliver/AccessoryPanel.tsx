@@ -149,7 +149,7 @@ export function AccessoryPanel({
         ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-4">
         <div className="space-y-3">
           <div>
             <label className="text-xs text-muted-foreground">线径（单根线缆外径）</label>

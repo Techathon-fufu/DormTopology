@@ -75,6 +75,3 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
 }
-@media (pointer: coarse) {
-  .ui-button, .ui-input, .ui-select, summary { min-height: 44px; }
-}

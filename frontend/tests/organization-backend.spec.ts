@@ -74,10 +74,6 @@ async function openConfirmedPreview(page: Page) {
   expect(plan.serviceMeta.applicable).toBe(true)
   expect(plan.serviceMeta.algorithmVersion).toBeTruthy()
   expect((await readProject(page, id)).objects).toEqual(original.objects)
-  // The mobile drawer closes after generation so the resulting scene stays visible.
-  if (!await page.getByRole('button', { name: '接受方案', exact: true }).isVisible()) {
-    await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
-  }
   await expect(page.getByRole('button', { name: '接受方案', exact: true })).toBeEnabled()
   return { id, original, plan, baselineSourceId: sync.request().postDataJSON().baseline_source_id }
 }

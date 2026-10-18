@@ -161,7 +161,7 @@ function StepList({
                 type="button"
                 title="在三维视图中高亮"
                 onClick={() => onFocus(step.target as StepTarget)}
-                className="mt-0.5 hidden shrink-0 rounded p-1 text-faint hover:bg-muted hover:text-primary sm:block print:hidden"
+                className="mt-0.5 shrink-0 rounded p-1 text-faint hover:bg-muted hover:text-primary print:hidden"
               >
                 <Crosshair className="h-4 w-4" />
               </button>
@@ -468,7 +468,7 @@ export function GuidePage() {
       ) : null}
 
       {/* 概览统计 */}
-      <section className="grid break-inside-avoid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid break-inside-avoid grid-cols-4 gap-3">
         <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
           <p className="text-xs text-muted-foreground">物品</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">
@@ -504,7 +504,7 @@ export function GuidePage() {
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_400px] gap-5">
         {/* 左列：步骤与清单 */}
         <div className="space-y-5">
           <SectionCard
@@ -635,7 +635,7 @@ export function GuidePage() {
 
         {/* 右列：场景视图 + 进度 */}
         <aside className="space-y-4 print:hidden">
-          <div className="rounded-xl border border-border bg-surface p-4 shadow-xs xl:sticky xl:top-20">
+          <div className="sticky top-20 rounded-xl border border-border bg-surface p-4 shadow-xs">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">当前方案场景</h2>
               <Segmented<GuideView>

@@ -1,9 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
 test.setTimeout(60_000)
-test.beforeEach(({ isMobile }) => {
-  test.skip(isMobile, 'Independent model marking is a desktop-only flow')
-})
 
 async function setup(page: Page) {
   await page.goto('/')

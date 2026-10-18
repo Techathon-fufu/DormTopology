@@ -77,7 +77,7 @@
 | `src/features/connections/SurfacePointOverlay.tsx` | 位于 R3F Canvas 内，消费临时描点状态，显示候选点及法向 |
 | `src/features/connections/RoutingPreviewLayer.tsx` | 位于走线模式的 Canvas 内，绘制仍匹配当前输入/快照的候选路径 |
 
-桌面完整描点与理线编辑已验收；手机范围是查看已保存标记和连接检查，不把它称为完整移动端编辑。
+桌面完整描点与理线编辑已验收。
 
 共享挂载点均为小范围修改：`SceneObjectMesh.tsx` 增加拾取事件、右键上报与拖动互斥；`PortMarkers.tsx` 支持普通物品接口及说明；`Viewport.tsx` 添加两个叠加层并透传 `onObjectContextMenu`；`CableListPanel.tsx` 只保留「描点与连接检查」入口按钮，不再内嵌描点面板；`WorkspacePage.tsx` 持有描点页面与右键菜单的会话状态、在规划前审计，规划后改为候选暂存。合并时逐段保留其他 agent 的布局变化，不整文件覆盖。
 
@@ -161,7 +161,6 @@ node node_modules/@playwright/test/cli.js test tests/surface-connections.spec.ts
 5. 确认端点并建立连接，查看全场审计；检查被引用端点的删除保护。加入错误引用或未确认连接时，应阻止规划并给出原因；点审计条目的「定位」应切到该物品（含隐藏物品）并高亮接口。
 6. 调用真实规划，确认结果先显示为候选，当前项目线缆未提前改变；检查单线有效/失败状态、原因及有效路径。
 7. 接受候选，确认服务端版本检查成功后只有有效路径写入本机且可单步撤销，失败线路保持原状；取消、编辑场景或换候选后不应被迟到返回覆盖。
-8. 在模拟手机经走线面板「描点与连接检查」查看保存的标记、全场检查和结果，确认可读、无明显重叠；完整手机编辑不在本次完成范围。
 
 ## 验收留痕与交付限制
 

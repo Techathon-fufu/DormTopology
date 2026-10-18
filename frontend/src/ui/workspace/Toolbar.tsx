@@ -7,7 +7,6 @@ import {
   MoreHorizontal,
   ChevronDown,
   Loader2,
-  PanelLeft,
   PanelRight,
   Redo2,
   RotateCcw,
@@ -62,7 +61,6 @@ interface ToolbarProps {
   onOpenPlans: () => void
   plansOpen: boolean
   busy: 'cable' | null
-  onToggleLeftPanel: () => void
   onToggleRightPanel: () => void
 }
 
@@ -72,7 +70,6 @@ export function Toolbar({
   onSavePlan,
   onOpenPlans,
   plansOpen,
-  onToggleLeftPanel,
   onToggleRightPanel,
 }: ToolbarProps) {
   const mode = useWorkspaceStore((s) => s.mode)
@@ -92,29 +89,27 @@ export function Toolbar({
 
   return (
     <header className="relative z-30 shrink-0 border-b border-border bg-surface">
-      <div className="flex h-14 min-w-0 items-center gap-3 border-b border-border/60 px-3 sm:px-5">
+      <div className="flex h-14 min-w-0 items-center gap-3 border-b border-border/60 px-5">
         <Link to="/" className="flex shrink-0 items-center gap-2" title="返回项目列表">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft"><LogoMark className="h-5 w-5" /></span>
-          <span className="hidden text-sm font-semibold sm:inline">寝空拓扑</span>
+          <span className="text-sm font-semibold">寝空拓扑</span>
         </Link>
-        <span className="hidden text-border sm:inline">/</span>
-        <div className="min-w-0 flex-1 xl:flex-none">
-          <p className="truncate text-[13px] font-semibold sm:max-w-[220px]" title={project.name}>{project.name}</p>
-          <div className="hidden sm:block">{previewBlocking ? <span className="text-[11px] text-primary">预览中 · 原布局保留</span> : <SaveStatus updatedAt={project.updatedAt} />}</div>
+        <span className="text-border">/</span>
+        <div className="min-w-0 flex-1 flex-none">
+          <p className="max-w-[220px] truncate text-[13px] font-semibold" title={project.name}>{project.name}</p>
+          <div>{previewBlocking ? <span className="text-[11px] text-primary">预览中 · 原布局保留</span> : <SaveStatus updatedAt={project.updatedAt} />}</div>
         </div>
-        <ProjectSteps projectId={project.id} current="workspace" className="mx-auto hidden xl:flex" />
+        <ProjectSteps projectId={project.id} current="workspace" className="mx-auto flex" />
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {project.isDemo ? <DataBadge kind="demo" /> : null}
-          <Button variant="ghost" size="icon" className="lg:hidden" aria-label="打开物品面板" title="打开物品面板" onClick={onToggleLeftPanel}><PanelLeft className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="xl:hidden" aria-label="打开引导与方案" title="打开引导与方案" onClick={onToggleRightPanel}><PanelRight className="h-4 w-4" /></Button>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-5">
-        <div className="hidden items-center gap-0.5 md:flex">
+      <div className="flex flex-wrap items-center gap-3 px-5 py-2.5">
+        <div className="flex items-center gap-0.5">
           <Button variant="ghost" size="icon" title="撤销（Ctrl+Z）" aria-label="撤销" disabled={!canUndo || previewBlocking} onClick={() => undo(project.id)}><Undo2 className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled={!canRedo || previewBlocking} onClick={() => redo(project.id)}><Redo2 className="h-4 w-4" /></Button>
         </div>
-        <Select aria-label="场景视角" value={viewPreset} onChange={(e) => setViewPreset(e.target.value as ViewPreset)} className="hidden h-9 w-28 bg-background/60 sm:block">
+        <Select aria-label="场景视角" value={viewPreset} onChange={(e) => setViewPreset(e.target.value as ViewPreset)} className="h-9 w-28 bg-background/60">
           <option value="persp">透视视角</option><option value="top">俯视视角</option><option value="front">正面视角</option><option value="desk">桌面视角</option>
         </Select>
         <div className="ml-auto flex items-center gap-2">
@@ -147,8 +142,6 @@ export function Toolbar({
               <div className="my-1 h-px bg-border" />
               <label className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><ChevronDown className="h-3 w-3" />场景视角</label>
               <Select aria-label="更多操作中的场景视角" value={viewPreset} onChange={(e) => setViewPreset(e.target.value as ViewPreset)}><option value="persp">透视</option><option value="top">俯视</option><option value="front">正面</option><option value="desk">桌面</option></Select>
-              <div className="flex gap-1 md:hidden"><Button size="sm" variant="ghost" disabled={!canUndo || previewBlocking} onClick={() => undo(project.id)}><Undo2 className="h-4 w-4" />撤销</Button><Button size="sm" variant="ghost" disabled={!canRedo || previewBlocking} onClick={() => redo(project.id)}><Redo2 className="h-4 w-4" />重做</Button></div>
-              <div className="mt-1 border-t border-border pt-2 xl:hidden"><ProjectSteps projectId={project.id} current="workspace" className="flex-wrap" /></div>
             </div>
           </Dropdown>
         </div>

@@ -92,8 +92,8 @@ function OperationPlayback() {
   const finished = status === 'finished'
   const problems = plan.metrics.unplacedCount + plan.metrics.overlapCount + plan.metrics.outOfBoundsCount
   return (
-    <section aria-label="整理预览控制" className="absolute bottom-12 left-3 right-3 z-10 mx-auto max-w-xl overflow-hidden rounded-xl border border-border bg-surface shadow-md sm:bottom-10 sm:left-5 sm:right-5">
-      <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
+    <section aria-label="整理预览控制" className="absolute bottom-10 left-5 right-5 z-10 mx-auto max-w-xl overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+      <div className="flex items-center gap-3 px-4 py-2.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Play className="h-4 w-4" /></span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold">{compare === 'before' ? '正在查看原布局' : finished ? '预览完成' : status === 'paused' ? '预览已暂停' : '正在整理'}<span className="ml-2 font-normal tabular-nums text-muted-foreground">{finished ? commands.length : Math.min(index + 1, commands.length)} / {commands.length}</span></p>
@@ -102,7 +102,7 @@ function OperationPlayback() {
         <Button size="icon" variant="ghost" aria-label={status === 'playing' ? '暂停预览' : status === 'paused' ? '继续播放' : '重新播放'} title={status === 'playing' ? '暂停' : status === 'paused' ? '继续播放' : '重新播放'} onClick={status === 'playing' ? pause : status === 'paused' ? resume : replay}>{status === 'playing' ? <Pause className="h-4 w-4" /> : finished ? <RotateCcw className="h-4 w-4" /> : <Play className="h-4 w-4" />}</Button>
         <Button size="icon" variant="ghost" aria-label="查看最终效果" title="查看最终效果" onClick={finish}><SkipForward className="h-4 w-4" /></Button>
       </div>
-      <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2 sm:px-4">
+      <div className="flex items-center justify-between gap-2 border-t border-border/70 px-4 py-2">
         <span className="text-[11px] text-muted-foreground">同视角对比</span>
         <div className="flex gap-1"><Button size="sm" className="h-7 px-2 text-xs" variant={compare === 'before' ? 'secondary' : 'ghost'} aria-pressed={compare === 'before'} onClick={() => setCompare('before')}>整理前</Button><Button size="sm" className="h-7 px-2 text-xs" variant={compare === 'after' && finished ? 'secondary' : 'ghost'} aria-pressed={compare === 'after' && finished} onClick={finish}>最终方案</Button></div>
       </div>

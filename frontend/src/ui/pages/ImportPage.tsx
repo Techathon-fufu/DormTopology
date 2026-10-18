@@ -500,7 +500,7 @@ export function ImportPage() {
   return (
     <div className="space-y-5">
       <PageIntro step="02 / 照片与物品" title="把桌面，带进三维空间" description="上传照片后，确认物品名称和尺寸，再选择展示模型。识别结果可随时校正。"><ProjectSteps projectId={project.id} current="import" className="flex-wrap" /></PageIntro>
-      <div className="rounded-xl border border-border bg-surface p-3 sm:p-4">
+      <div className="rounded-xl border border-border bg-surface p-4">
         <div className="flex flex-wrap items-center gap-1">
           {STEP_LABELS.map((s, i) => (
             <span key={s.n} className="flex items-center gap-1">
@@ -654,7 +654,7 @@ export function ImportPage() {
                     type="button"
                     title="移除照片"
                     onClick={() => void removePhoto(p)}
-                    className="absolute right-1 top-1 rounded-full bg-surface/90 p-1 opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                    className="absolute right-1 top-1 rounded-full bg-surface/90 p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <Trash2 className="h-3.5 w-3.5 text-danger" />
                   </button>
@@ -788,7 +788,7 @@ export function ImportPage() {
                     <Trash2 className="h-4 w-4 text-danger" />
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <div className="grid grid-cols-4 gap-2">
                   <div className="space-y-1">
                     <Label>分类</Label>
                     <Select

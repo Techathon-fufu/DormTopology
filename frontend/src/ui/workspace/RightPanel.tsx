@@ -662,7 +662,7 @@ function ProjectSummary({ project }: { project: Project }) {
 
 /**
  * 右侧属性面板：随选中对象显示尺寸 / 位置 / 旋转 / 接口 / 模型状态 / 位置校验；
- * 未选中时显示空间与项目摘要。停靠（宽屏）或抽屉（窄屏）复用同一内容。
+ * 未选中时显示空间与项目摘要。
  */
 export function RightPanel({
   project,

@@ -29,12 +29,11 @@ async function attachViewport(page: Page, testInfo: TestInfo, name: string, widt
 function leftRegion(page: Page) { return page.getByRole('complementary', { name: '物体与连线', exact: true }) }
 function rightRegion(page: Page) { return page.getByRole('complementary', { name: '引导与生成', exact: true }) }
 async function openTools(page: Page) {
-  if (!await leftRegion(page).isVisible()) await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
+  await expect(leftRegion(page)).toBeVisible()
   return leftRegion(page)
 }
 async function openGuide(page: Page) {
-  if (await page.getByRole('dialog').isVisible()) await page.keyboard.press('Escape')
-  if (!await rightRegion(page).isVisible()) await page.getByRole('button', { name: '打开引导与方案', exact: true }).click()
+  await expect(rightRegion(page)).toBeVisible()
   return rightRegion(page)
 }
 
@@ -103,8 +102,6 @@ test('renders without overflow and keeps the canvas visible across viewports', a
   const viewports: Array<{ name: string; width: number; height: number }> = [
     { name: 'desktop', width: 1440, height: 900 },
     { name: 'laptop', width: 1366, height: 768 },
-    { name: 'tablet', width: 768, height: 1024 },
-    { name: 'mobile', width: 390, height: 844 },
   ]
 
   for (const vp of viewports) {
