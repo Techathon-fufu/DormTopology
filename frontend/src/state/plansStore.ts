@@ -7,6 +7,7 @@ import { invalidateCableRoutes } from '@/scene/cables'
 import { useProjectsStore } from './projectsStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { useCableStore } from './cableStore'
+import { repairDuplicatePortIds } from '@/scene/portIds'
 
 /**
  * 布局方案仓库：
@@ -145,7 +146,7 @@ export const usePlansStore = create<PlansState>()(
     {
       name: 'dormtopology.plans',
       storage: createJSONStorage(() => recordStorage(['baselines', 'candidates'])),
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PlansState>
         if (version < 2) {
@@ -157,7 +158,19 @@ export const usePlansStore = create<PlansState>()(
           for (const [projectId, plans] of Object.entries(state.candidates ?? {})) {
             if (plans) candidates[projectId] = plans.map(migratePlan)
           }
-          return { ...state, baselines, candidates } as PlansState
+          state.baselines = baselines
+          state.candidates = candidates
+        }
+        if (version < 3) {
+          const repair = (plan: LayoutPlan): LayoutPlan => {
+            if (!plan.scene) return plan
+            const scene = repairDuplicatePortIds(plan.scene)
+            return scene === plan.scene ? plan : { ...plan, scene }
+          }
+          return { ...state,
+            baselines: Object.fromEntries(Object.entries(state.baselines ?? {}).map(([id, plan]) => [id, repair(plan)])),
+            candidates: Object.fromEntries(Object.entries(state.candidates ?? {}).map(([id, plans]) => [id, plans.map(repair)])),
+          } as PlansState
         }
         return state as PlansState
       },

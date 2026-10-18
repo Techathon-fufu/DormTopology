@@ -279,6 +279,9 @@ class RecognitionService:
                     needs_power = False
 
                 ports = _derive_item_ports(name, size_m)
+                # Template names describe roles, not identities. Each detected
+                # item needs its own ports even when several share a category.
+                ports = [{**port, "id": f"port_{uuid4().hex}"} for port in ports]
 
                 wire_items.append({
                     "temp_id": item_id,

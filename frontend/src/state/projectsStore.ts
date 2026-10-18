@@ -9,6 +9,7 @@ import { resolveOrganizationPreferences } from '@/types/organization'
 import { useCableStore } from './cableStore'
 import { usePlansStore } from './plansStore'
 import { normalizeProductRoom } from '@/data/fixedRoom'
+import { repairDuplicatePortIds } from '@/scene/portIds'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -18,7 +19,7 @@ import { normalizeProductRoom } from '@/data/fixedRoom'
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
-const PROJECTS_PERSIST_VERSION = 6
+const PROJECTS_PERSIST_VERSION = 7
 
 /** Drop unsupported saved apertures without moving any objects or rewriting baselines. */
 export function migratePrefabDesktop(project: Project, invalidate = false): Project {
@@ -155,7 +156,7 @@ export const useProjectsStore = create<ProjectsState>()(
         }))
       },
       upsert(project) {
-        project = migratePrefabDesktop(project)
+        project = repairDuplicatePortIds(migratePrefabDesktop(project))
         set((s) => ({
           projects: { ...s.projects, [project.id]: { ...project, updatedAt: Date.now() } },
         }))
@@ -163,7 +164,7 @@ export const useProjectsStore = create<ProjectsState>()(
       update(id, updater) {
         const p = get().projects[id]
         if (!p) return
-        const next = migratePrefabDesktop(updater(p))
+        const next = repairDuplicatePortIds(migratePrefabDesktop(updater(p)))
         const routingChanged = JSON.stringify(p.room) !== JSON.stringify(next.room)
           || JSON.stringify(resolveOrganizationPreferences(p)) !== JSON.stringify(resolveOrganizationPreferences(next))
           || cableRoutingObjectsSignature(p.objects) !== cableRoutingObjectsSignature(next.objects)
@@ -213,6 +214,9 @@ export const useProjectsStore = create<ProjectsState>()(
         }
         if (from < 6) for (const [id, p] of Object.entries(projects)) {
           if (p?.room) projects[id] = migratePrefabDesktop(p, true)
+        }
+        if (from < 7) for (const [id, p] of Object.entries(projects)) {
+          if (p?.objects && p?.cables) projects[id] = repairDuplicatePortIds(p)
         }
         // ensureDemo archives the previous seed after hydration, including schema migrations.
         return { ...state, projects } as ProjectsState

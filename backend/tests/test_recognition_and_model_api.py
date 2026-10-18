@@ -35,6 +35,31 @@ class RecognitionAndModelAPITests(unittest.TestCase):
         self.assertIn("model", data.get("capabilities", []))
 
     @patch("backend.app.service.recognition.VLMClient")
+    def test_repeated_devices_receive_distinct_port_ids(self, mock_vlm_cls):
+        mock_vlm_cls.return_value.perceive.return_value = {"items": [
+            {"id": f"item_{index}", "name": name, "estimated_size_m": [0.3, 0.1, 0.2]}
+            for index, name in enumerate(["显示器", "显示器", "键盘", "键盘", "台灯", "台灯"])
+        ]}
+        image = io.BytesIO()
+        Image.new("RGB", (16, 16)).save(image, format="PNG")
+        response = self.client.post("/api/v1/recognition", data={"project_id": "repeated-devices"},
+                                    files=[("photos", ("devices.png", image.getvalue(), "image/png"))])
+        self.assertEqual(response.status_code, 202, response.text)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            job = self.client.get(f"/api/v1/jobs/{response.json()['job_id']}").json()
+            if job["status"] in ("succeeded", "failed"):
+                break
+            time.sleep(0.01)
+        self.assertEqual(job["status"], "succeeded", job)
+        items = job["result"]["items"]
+        self.assertEqual(len(items), 6)
+        ports = [port for item in items for port in item["ports"]]
+        self.assertEqual(len(ports), 8)
+        self.assertEqual(len({port["id"] for port in ports}), len(ports))
+        self.assertTrue(all(port["confirmed"] is False for port in ports))
+
+    @patch("backend.app.service.recognition.VLMClient")
     def test_recognition_pipeline_end_to_end(self, mock_vlm_cls):
         # Create a mock VLMClient that returns detected items with bbox
         mock_vlm = MagicMock()
