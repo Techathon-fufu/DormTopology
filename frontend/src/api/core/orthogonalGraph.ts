@@ -1,5 +1,5 @@
 import type { Project, Vec3 } from '@/types/project'
-import { fixedFurnitureBoxes, furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
+import { effectiveCableHoles, fixedFurnitureBoxes, furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { portWorldPosition } from '@/scene/ports'
 import { DESK_GAP } from '@/scene/sceneValidation'
 import { toPackingPosition, type RoutingGraph } from './packingWire'
@@ -36,7 +36,7 @@ export function buildOrthogonalRoutingGraph(project: Project): RoutingGraph {
   for (const [surfaceIndex, rect] of surfaces.entries()) {
     const left = rect.x0 + .025, right = rect.x1 - .025
     const xs = [...new Set([left, right, (left + right) / 2, ...portXs,
-      ...room.cableHoles.map(h => h.position[0])].filter(x => x >= left && x <= right))].sort((a, b) => a - b)
+      ...effectiveCableHoles(room).map(h => h.position[0])].filter(x => x >= left && x <= right))].sort((a, b) => a - b)
     const frontZ = Math.max(rect.z0, baffle?.max[2] ?? rect.z0)
     const rearFace = baffle?.min[2] ?? rect.z0
     for (let lane = 0; lane < 3; lane++) {
@@ -63,7 +63,7 @@ export function buildOrthogonalRoutingGraph(project: Project): RoutingGraph {
         previous = row
         // Short parallel branches reach the opening; only slot routes can
         // enter them. A rear-route connector also closes this tunnel in Python.
-        for (const hole of room.cableHoles.filter(h => Math.abs(h.position[0] - x) < 1e-7)) {
+        for (const hole of effectiveCableHoles(room).filter(h => Math.abs(h.position[0] - x) < 1e-7)) {
           const half = hole.diameter / (2 * Math.sqrt(2))
           const dz = lane === 0 ? 0 : (lane === 1 ? -1 : 1) * Math.min(.008, half / 3)
           const clearance = Math.min(.015, half - Math.abs(dz) - .002)

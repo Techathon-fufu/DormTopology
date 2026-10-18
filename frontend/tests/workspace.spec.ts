@@ -171,7 +171,7 @@ test('keeps the fixed furniture visible after a partial asset failure and recove
   expect(failures).toEqual([])
 })
 
-test('uses fixed storage geometry in setup and rejects a hole in the L-shaped void', async ({ page }, testInfo) => {
+test('uses the solid prefab desktop in setup without invented hole controls', async ({ page }, testInfo) => {
   const failures = collectRuntimeFailures(page)
   await page.goto(`/projects/${demoProjectId}/setup`)
   await expect(page.locator('canvas')).toBeVisible()
@@ -179,15 +179,9 @@ test('uses fixed storage geometry in setup and rejects a hole in the L-shaped vo
   await expect(page.getByLabel('离桌高度（最下层）', { exact: true })).toBeDisabled()
   await expect(page.getByText('未发现数值越界或明显结构冲突', { exact: true })).toBeVisible()
   await expectNonblankCanvas(page)
-  await page.getByLabel('孔 X（左右）', { exact: true }).fill('0')
-  await page.getByLabel('孔 Z（距后墙）', { exact: true }).fill('750')
-  await page.getByLabel('孔 Z（距后墙）', { exact: true }).blur()
-  await expect(page.getByText('出线孔需完整位于真实 L 形桌面内，不能位于缺口或桌外', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '保存空间并前往照片导入', exact: true })).toBeDisabled()
-  await page.getByLabel('孔 X（左右）', { exact: true }).fill('500')
-  await page.getByLabel('孔 Z（距后墙）', { exact: true }).fill('280')
-  await page.getByLabel('孔 Z（距后墙）', { exact: true }).blur()
-  await expect(page.getByText('未发现数值越界或明显结构冲突', { exact: true })).toBeVisible()
+  await expect(page.getByText('正式桌面没有穿线孔，按模型原样显示；线缆沿桌后边缘走线。')).toBeVisible()
+  await expect(page.getByLabel('孔 X（左右）', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '前往照片导入', exact: true })).toBeEnabled()
   await attachViewport(page, testInfo, 'fixed-furniture-setup')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
   expect(failures).toEqual([])

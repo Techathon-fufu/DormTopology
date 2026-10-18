@@ -99,6 +99,9 @@ if (process.argv.includes('--write-demo')) {
   assert.equal(result.status, 'success', JSON.stringify(result.issues))
   assert.equal(mapped.plannedCount, 7)
   assert.equal(organizedScene.routing_graph.path_style, 'orthogonal')
+  assert.deepEqual(organized.room.cableHoles, [])
+  assert.ok(!organizedScene.routing_graph.nodes.some(n => n.kind === 'slot'))
+  assert.ok(result.cables.every((c: any) => c.mode === 'backboard'))
   for (const cable of organized.cables.filter(c => ['power', 'video', 'network'].includes(c.kind))) {
     assert.equal(result.cables.find((c: any) => c.id === cable.id).mode, 'backboard')
   }

@@ -17,7 +17,14 @@ import { usePlansStore } from './plansStore'
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
-const PROJECTS_PERSIST_VERSION = 3
+const PROJECTS_PERSIST_VERSION = 4
+
+/** Drop unsupported saved apertures without moving any objects or rewriting baselines. */
+export function migratePrefabDesktop(project: Project, invalidate = false): Project {
+  if (project.room.furnitureModel !== 'dormdesk-v1' || (!invalidate && !project.room.cableHoles.length)) return project
+  return { ...project, room: { ...project.room, cableHoles: [] },
+    cables: invalidateCableRoutes(project.cables ?? []), cableTrayAnalysis: undefined }
+}
 
 /** 内置示例项目是否需要按最新示例数据重种 */
 export function isDemoProjectStale(project: Project | undefined): boolean {
@@ -146,6 +153,7 @@ export const useProjectsStore = create<ProjectsState>()(
         }))
       },
       upsert(project) {
+        project = migratePrefabDesktop(project)
         set((s) => ({
           projects: { ...s.projects, [project.id]: { ...project, updatedAt: Date.now() } },
         }))
@@ -153,7 +161,7 @@ export const useProjectsStore = create<ProjectsState>()(
       update(id, updater) {
         const p = get().projects[id]
         if (!p) return
-        const next = updater(p)
+        const next = migratePrefabDesktop(updater(p))
         const routingChanged = JSON.stringify(p.room) !== JSON.stringify(next.room)
           || JSON.stringify(resolveOrganizationPreferences(p)) !== JSON.stringify(resolveOrganizationPreferences(next))
           || cableRoutingObjectsSignature(p.objects) !== cableRoutingObjectsSignature(next.objects)
@@ -200,6 +208,9 @@ export const useProjectsStore = create<ProjectsState>()(
               },
             }
           }
+        }
+        if (from < 4) for (const [id, p] of Object.entries(projects)) {
+          if (p?.room) projects[id] = migratePrefabDesktop(p, true)
         }
         // ensureDemo archives the previous seed after hydration, including schema migrations.
         return { ...state, projects } as ProjectsState

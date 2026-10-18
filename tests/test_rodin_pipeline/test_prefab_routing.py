@@ -126,7 +126,7 @@ def check_no_stray_glb_outside_asset_dir(project_root: Path = PROJECT_ROOT) -> l
         if not name:
             continue
         path = PurePosixPath(os.fsdecode(name))
-        if path.parent == PurePosixPath(ASSET_DIR_NAME) or path.parts[:2] == ("frontend", "public"):
+        if path.parts[0] == ASSET_DIR_NAME or path.parts[:2] == ("frontend", "public"):
             continue
         errors.append(f"Tracked GLB outside {ASSET_DIR_NAME}/ or frontend/public/: {path}")
     if not errors:
@@ -156,6 +156,7 @@ class AssetLayoutScopeTests(unittest.TestCase):
 
     def test_tracked_archives_and_runtime_glb_are_allowed(self):
         self.stage_asset(f"{ASSET_DIR_NAME}/fixture.glb")
+        self.stage_asset(f"{ASSET_DIR_NAME}/dormdesk_parts/fixture.glb")
         self.stage_asset("frontend/public/models/runtime.glb")
         self.stage_asset("frontend/public/generated/模型 export.glb")
         self.assertEqual(check_no_stray_glb_outside_asset_dir(self.root), [])

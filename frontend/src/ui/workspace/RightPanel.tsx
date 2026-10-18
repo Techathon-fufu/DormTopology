@@ -1,4 +1,4 @@
-import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
+import { effectiveCableHoles, furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { useDrawerStore } from '@/state/drawerStore'
 import { drawerIdForSurface, DORM_DESK_DRAWERS } from '@/scene/dormDeskDrawers'
 import { objectDrawerId } from '@/scene/drawerContents'
@@ -642,7 +642,7 @@ function ProjectSummary({ project }: { project: Project }) {
             value={`${mm3([project.room.desk.width, project.room.desk.depth])} · 台面高 ${formatMm(project.room.desk.height)}`}
           />
           <Row label="书架" value={project.room.shelf.enabled ? `${project.room.shelf.levels} 层` : '无'} />
-          <Row label="出线孔" value={`${project.room.cableHoles.length} 个`} />
+          <Row label="出线孔" value={`${effectiveCableHoles(project.room).length} 个`} />
           <Row label="后墙插座" value={`${project.room.outlets.length} 块 · 双插孔 ×2`} />
         </dl>
         {project.room.note ? (

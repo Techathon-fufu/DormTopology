@@ -12,6 +12,7 @@ import { DESK_GAP, placementIssues } from '@/scene/sceneValidation'
 import { resolvePortOffset } from '@/scene/ports'
 import { estimateDeskFreeArea } from '@/scene/ruleLayout'
 import { uid } from '@/lib/utils'
+import { assertAssetUrl } from '@/scene/assetPolicy'
 import { ApiError } from './errors'
 import type { RoutingSupport, TrayCandidate } from '@/algorithm-lab/contract'
 
@@ -262,7 +263,7 @@ export function toPackingScene(input: {
       allowed_region_ids: allowedRegions, preferred_region_ids: preferred.filter((id) => allowedRegions.includes(id)),
       allowed_rotations_y_rad: workstation && shape === 'laptop' ? [workstation.laptop.rotationY]
         : shape === 'monitor' || shape === 'printer' || desktopBinding(object, room) || (workstation && (shape === 'keyboard' || shape === 'mouse')) ? [0] : [0, Math.PI / 2],
-      collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ?? null,
+      collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ? assertAssetUrl(object.model.assetUrl) : null,
       generation: { task_id: null, status: 'not_requested', source: object.model.assetUrl ? object.model.source === 'generated' ? 'live' : 'cache' : 'placeholder', error: null },
       ...(mounted ? { surface_mount: { obstacle_id: 'furniture:Desk_Back_Baffle', face: 'z_max' as const } } : {}),
       ...(object.powerStrip ? { socket_count: object.powerStrip.socketCount } : {}),

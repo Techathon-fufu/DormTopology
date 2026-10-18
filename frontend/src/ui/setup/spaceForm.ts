@@ -1,7 +1,6 @@
 import { OUTLET_FIXED_Y_M, type RoomConfig, type Vec3 } from '@/types/project'
 import { createStandardRoom } from '@/data/demoProject'
 import { mmToM, mToMm } from '@/lib/units'
-import { validFurnitureHole } from '@/scene/fixedFurniture'
 
 /**
  * 空间配置表单模型（单位：毫米 mm，面向用户）。
@@ -108,21 +107,18 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
   }
 
   // 出线孔
-  if (f.hole.diameter < SPACE_RANGES.holeDiameter.min || f.hole.diameter > SPACE_RANGES.holeDiameter.max) {
+  if (!f.furnitureModel && (f.hole.diameter < SPACE_RANGES.holeDiameter.min || f.hole.diameter > SPACE_RANGES.holeDiameter.max)) {
     push(
       'hole-diameter',
       'error',
       `出线孔直径需在 ${SPACE_RANGES.holeDiameter.min}–${SPACE_RANGES.holeDiameter.max} mm 之间`,
     )
   }
-  if (f.furnitureModel) {
-    const room = formToRoom(f)
-    if (!validFurnitureHole(room, room.cableHoles[0].position, room.cableHoles[0].diameter)) push('hole-position', 'error', '出线孔需完整位于真实 L 形桌面内，不能位于缺口或桌外')
-  } else if (
+  if (!f.furnitureModel && (
     Math.abs(f.hole.x) > f.deskW / 2 - 40 ||
     f.hole.z < DESK_WALL_GAP_MM + 40 ||
     f.hole.z > DESK_WALL_GAP_MM + f.deskD - 40
-  ) {
+  )) {
     push('hole-position', 'error', '出线孔需位于桌面范围内，且距桌面边缘 ≥ 40 mm')
   }
 
@@ -201,7 +197,7 @@ export function formToRoom(f: SpaceForm): RoomConfig {
       position: [mmToM(p.x), 0, mmToM(p.z)] as Vec3,
       section: mmToM(p.section),
     })),
-    cableHoles: [
+    cableHoles: f.furnitureModel ? [] : [
       {
         id: 'hole-1',
         position: [mmToM(f.hole.x), mmToM(f.deskH), mmToM(f.hole.z)] as Vec3,

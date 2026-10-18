@@ -258,6 +258,7 @@ export function SpaceSetupPage() {
           </SectionCard>
 
           <SectionCard title="② 出线孔与电源">
+            {form.furnitureModel ? <p className="text-xs text-muted-foreground">正式桌面没有穿线孔，按模型原样显示；线缆沿桌后边缘走线。</p> : <>
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
                 出线孔
@@ -268,6 +269,7 @@ export function SpaceSetupPage() {
                 <MmField className="w-24" label="孔直径" minMm={0} valueMm={form.hole.diameter} onChangeMm={(v) => patch({ hole: { ...form.hole, diameter: v } })} />
               </div>
             </div>
+            </>}
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
                 后墙插座为固定模型：一块面板 · 两个双插孔插座，仅可左右移动（x 以房间中心为 0），高度固定不可调；调整后保存会提示受影响的走线。
@@ -345,7 +347,7 @@ export function SpaceSetupPage() {
               </div>
               <div className="flex justify-between gap-3">
                 <dt>出线孔</dt>
-                <dd className="tabular-nums">Ø {form.hole.diameter} mm</dd>
+                <dd className="tabular-nums">{form.furnitureModel ? '无（按正式模型）' : `Ø ${form.hole.diameter} mm`}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt>插座</dt>

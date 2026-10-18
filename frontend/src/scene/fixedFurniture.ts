@@ -19,32 +19,19 @@ export function hasFixedFurniture(room: RoomConfig): boolean { return room.furni
 const translate = (v: number[]): Vec3 => v.map((n, i) => +(n + FURNITURE_OFFSET[i]).toFixed(6)) as Vec3
 export const fixedFurnitureBoxes: FurnitureBox[] = asset.parts.map((p) => ({ name: p.name, min: translate(p.min), max: translate(p.max) }))
 
-/** Cut an inscribed square tunnel: conservative clearance for the configured circular grommet. */
-export function furnitureBoxes(room: RoomConfig, offsets: DrawerOffsets = {}): FurnitureBox[] {
-  return fixedFurnitureBoxes.flatMap((original) => {
+/** Geometry comes only from the prefab asset; saved hole settings cannot cut it. */
+export function furnitureBoxes(_room: RoomConfig, offsets: DrawerOffsets = {}): FurnitureBox[] {
+  return fixedFurnitureBoxes.map((original) => {
     const id = drawerIdForPart(original.name)
     const dx = id ? offsets[id] ?? 0 : 0
-    const box = dx ? { ...original, min: [original.min[0] + dx, original.min[1], original.min[2]] as Vec3,
+    return dx ? { ...original, min: [original.min[0] + dx, original.min[1], original.min[2]] as Vec3,
       max: [original.max[0] + dx, original.max[1], original.max[2]] as Vec3 } : original
-    if (!box.name.startsWith('Desk_Top_')) return [box]
-    let parts = [box]
-    room.cableHoles.forEach((hole) => {
-      const [x, , z] = hole.position, half = hole.diameter / (2 * Math.sqrt(2))
-      if (!validFurnitureHole(room, hole.position, hole.diameter) || x < box.min[0] || x > box.max[0] || z < box.min[2] || z > box.max[2]) return
-      parts = parts.flatMap((p) => {
-        const a = Math.max(p.min[0], x - half), b = Math.min(p.max[0], x + half)
-        const c = Math.max(p.min[2], z - half), d = Math.min(p.max[2], z + half)
-        if (a >= b || c >= d) return [p]
-        return [
-          { min: p.min, max: [a, p.max[1], p.max[2]] as Vec3 },
-          { min: [b, p.min[1], p.min[2]] as Vec3, max: p.max },
-          { min: [a, p.min[1], p.min[2]] as Vec3, max: [b, p.max[1], c] as Vec3 },
-          { min: [a, p.min[1], d] as Vec3, max: [b, p.max[1], p.max[2]] as Vec3 },
-        ].filter((v) => v.max[0] - v.min[0] > 1e-6 && v.max[2] - v.min[2] > 1e-6).map((v, i) => ({ ...v, name: `${p.name}:cut-${i}` }))
-      })
-    })
-    return parts
   })
+}
+
+/** dormdesk-v1 has no modeled tabletop apertures. Legacy parametric rooms retain their own holes. */
+export function effectiveCableHoles(room: RoomConfig): RoomConfig['cableHoles'] {
+  return hasFixedFurniture(room) ? [] : room.cableHoles
 }
 
 function surface(id: string, kind: FurnitureSurface['kind'], label: string, bounds: [number, number, number, number], y: number, ceiling: number): FurnitureSurface {
@@ -53,8 +40,9 @@ function surface(id: string, kind: FurnitureSurface['kind'], label: string, boun
 }
 
 /** Actual free interiors, excluding the divider boards and drawer shells. */
-export function furnitureSurfaces(room: RoomConfig, cutHoles = true, offsets: DrawerOffsets = {}): FurnitureSurface[] {
-  const desks = (cutHoles ? furnitureBoxes(room) : fixedFurnitureBoxes).filter((p) => p.name.startsWith('Desk_Top_'))
+export function furnitureSurfaces(_room: RoomConfig, _legacyCutHoles = true, offsets: DrawerOffsets = {}): FurnitureSurface[] {
+  // Retain the second argument for existing callers; prefab surfaces are always solid.
+  const desks = fixedFurnitureBoxes.filter((p) => p.name.startsWith('Desk_Top_'))
     .map((p) => surface(`support-${p.name}`, 'desk', p.name.includes('Main') ? '主桌面' : '右侧回台', [p.min[0], p.max[0], p.min[2], p.max[2]], p.max[1], 1.88))
   const shelves = [
     surface('support-shelf-1-low', 'shelf', '书架左格下层', [-.43, -.11, .04, .29], 1.46, 1.652),
@@ -78,9 +66,7 @@ export function furnitureSurfaces(room: RoomConfig, cutHoles = true, offsets: Dr
   })
 }
 
-export function validFurnitureHole(room: RoomConfig, position: Vec3, diameter: number): boolean {
-  if (!hasFixedFurniture(room)) return false
-  if (!position.every(Number.isFinite) || !Number.isFinite(diameter) || diameter <= 0 || Math.abs(position[1] - .75) > .001) return false
-  const radius = diameter / 2
-  return fixedFurnitureBoxes.some((p) => p.name.startsWith('Desk_Top_') && position[0] - radius >= p.min[0] && position[0] + radius <= p.max[0] && position[2] - radius >= p.min[2] && position[2] + radius <= p.max[2])
+/** No hole is valid until it is declared by the prefab geometry itself. */
+export function validFurnitureHole(_room: RoomConfig, _position: Vec3, _diameter: number): boolean {
+  return false
 }

@@ -336,7 +336,7 @@ export function CableListPanel({
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                   <span>
                     {CABLE_KIND_META[cable.kind].label} ·{' '}
-                    {CABLE_VISIBILITY_META[resolveCableVisibility(cable, project.objects).visibility].label} ·{' '}
+                    {CABLE_VISIBILITY_META[resolveCableVisibility(cable, project.objects, project.room).visibility].label} ·{' '}
                     {CABLE_THICKNESS_META[resolveCableThickness(cable)].label}
                   </span>
                   <span>·</span>

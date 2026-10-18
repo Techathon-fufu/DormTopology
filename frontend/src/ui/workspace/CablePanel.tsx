@@ -130,7 +130,7 @@ export function CablePanel({
   const displayStatus = legacyRoute && cable.status !== 'conflict' ? 'stale' : cable.status
   const status = CABLE_STATUS_META[displayStatus]
   const kindMeta = CABLE_KIND_META[cable.kind]
-  const visInfo = resolveCableVisibility(cable, project.objects)
+  const visInfo = resolveCableVisibility(cable, project.objects, project.room)
   const visMeta = CABLE_VISIBILITY_META[visInfo.visibility]
   const thickness = resolveCableThickness(cable)
   const thicknessMeta = CABLE_THICKNESS_META[thickness]
@@ -435,7 +435,7 @@ export function CablePanel({
             ]}
           />
           <p className="text-[11px] leading-relaxed text-faint">
-            {CABLE_VISIBILITY_META.visible.description}；{CABLE_VISIBILITY_META.hidden.description}。电源、视频和网线沿背板后走线，不经过桌面过线槽；其他线缆可选择策略。主路径沿边角直走，以直角转向。
+            {project.room.furnitureModel === 'dormdesk-v1' ? '正式模型没有桌面穿线孔，所有线缆沿桌后边缘和背板走线。' : '电源、视频和网线沿背板后走线；其他线缆可选择已配置的穿线孔。'}主路径沿边角直走，以直角转向。
           </p>
           {strategyMismatch && cable.route.strategy ? (
             <div className="space-y-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[11px] leading-relaxed text-warning">

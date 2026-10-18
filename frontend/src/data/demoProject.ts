@@ -33,7 +33,7 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
 export const DEMO_SEED_VERSION = 9
 
 export const DEMO_ROOM_NOTE =
-  '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
+  '固定 L 形床桌、四格书架及三抽屉；桌面按正式模型保留，插座可在「空间配置」中调整'
 
 /** 默认空间：上床下桌标准款（单位：米） */
 export function createStandardRoom(): RoomConfig {
@@ -51,7 +51,7 @@ export function createStandardRoom(): RoomConfig {
       { id: 'post-bl', position: [-0.97, 0, 0.87], section: 0.06 },
       { id: 'post-br', position: [0.97, 0, 0.87], section: 0.06 },
     ],
-    cableHoles: [{ id: 'hole-1', position: [0.5, 0.75, 0.28], diameter: 0.05 }],
+    cableHoles: [],
     outlets: [
       { id: 'outlet-1', position: [0, OUTLET_FIXED_Y_M, 0.01], label: '后墙插座（双插孔 ×2）', slots: 2 },
     ],

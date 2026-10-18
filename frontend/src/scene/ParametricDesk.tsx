@@ -27,10 +27,10 @@ const POST_H = 1.68
  * - 工作台中由 DormDeskModel 决策渲染 GLB 还是本回退几何；GLB 加载成功时本几何不渲染；
  * - 同时用于空间配置预览（SpacePreview3D）与交付页三维视图（DeliverViewport）的完整房间渲染。
  */
-export function ParametricDesk({ room, hideBedParts = false, desktopOnly = false }: { room: RoomConfig; hideBedParts?: boolean; desktopOnly?: boolean }) {
+export function ParametricDesk({ room, hideBedParts = false }: { room: RoomConfig; hideBedParts?: boolean }) {
   const offsets = useDrawerOffsets()
   if (hasFixedFurniture(room)) return <group>{furnitureBoxes(room, offsets)
-    .filter((p) => (!desktopOnly || p.name.startsWith('Desk_Top_')) && (!hideBedParts || !/^(Bed_|Guardrail_|Ladder_)/.test(p.name)))
+    .filter((p) => (!hideBedParts || !/^(Bed_|Guardrail_|Ladder_)/.test(p.name)))
     .map((p) => <mesh key={p.name} castShadow receiveShadow onClick={(e) => {
       const id = drawerIdForPart(p.name)
       if (id && useWorkspaceStore.getState().mode !== 'cable' && !useOrganizeStore.getState().isPreviewBlocking()) {

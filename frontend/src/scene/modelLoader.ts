@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { assertAssetUrl } from './assetPolicy'
 
 /**
  * 模型文件加载封装（GLTFLoader，按需动态加载解析器）：
@@ -12,8 +13,11 @@ export interface LoadedModelData {
 }
 
 export async function loadModelFromUrl(url: string): Promise<LoadedModelData> {
+  assertAssetUrl(url)
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
-  const loader = new GLTFLoader()
+  const manager = new THREE.LoadingManager()
+  manager.setURLModifier((resource) => { assertAssetUrl(resource); return resource })
+  const loader = new GLTFLoader(manager)
   return new Promise((resolve, reject) => {
     loader.load(
       url,
