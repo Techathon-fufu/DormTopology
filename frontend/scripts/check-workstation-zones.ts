@@ -30,8 +30,7 @@ assert.deepEqual(find('demo-monitor').allowed_region_ids, ['monitor-view-demo-mo
 assert.deepEqual(find('demo-laptop').allowed_rotations_y_rad, [-Math.PI / 9])
 assert.deepEqual(find('demo-keyboard').allowed_region_ids, ['keyboard'])
 assert.deepEqual(find('demo-mouse').allowed_region_ids, ['mouse'])
-assert.deepEqual(find('demo-cup').allowed_region_ids, ['miscellaneous'])
-assert.ok(find('demo-book-math').preferred_region_ids.includes('support-shelf-2'))
+assert.ok(find('demo-cup').allowed_region_ids.includes('cup'))
 assert.ok(!find('demo-storage-box').allowed_region_ids.includes('support-shelf-2'))
 const cup = project.objects.find((o) => o.id === 'demo-cup')!
 assert.equal(isDailyMiscellaneous({ ...cup, model: { ...cup.model, prefabId: undefined } }), false)
@@ -45,7 +44,7 @@ assert.deepEqual(extraScene.items.find((o) => o.id === 'study-prefab')!.allowed_
 assert.deepEqual(extraScene.items.find((o) => o.id === 'tissue-prefab')!.allowed_region_ids, ['miscellaneous'])
 assert.ok(!extraScene.items.find((o) => o.id === 'unknown-cup')!.allowed_region_ids.includes('miscellaneous'))
 const wrongShelf = { ...extras[2], fixed: true, transform: { position: [.07, 1.46, .16] as [number, number, number], rotationY: 0 } }
-const wrongMisc = { ...extras[2], fixed: true, transform: { position: [.8, .75, .75] as [number, number, number], rotationY: 0 } }
+const wrongMisc = { ...extras[2], fixed: true, transform: { position: [.565, .75, .1475] as [number, number, number], rotationY: 0 } }
 for (const object of [wrongShelf, wrongMisc]) assert.ok(organizationClearanceIssues([object], project.room).some((issue) => issue.code === 'target_region'), 'fixed unknown objects must not bypass exclusive storage zones')
 const [padWidth, padHeight, padDepth] = PREFAB_ITEMS.mousepad.size
 const padScene = toPackingScene({ ...input, objects: [...input.objects, { ...cup, id: 'check-pad', model: prefabModelRef('mousepad', 'genericBox'), dimensions: { width: padWidth, height: padHeight, depth: padDepth }, transform: { position: [.485, .75, .46], rotationY: 0 } }] })

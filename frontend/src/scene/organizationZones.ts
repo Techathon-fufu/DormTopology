@@ -148,7 +148,7 @@ export function computeOrganizationZones(
     laptop: { ...plane(.47, .98, .10, .59), rotationY: -Math.PI / 9 },
     keyboard: { rect: DESKTOP_REGIONS.keyboard, y: deskY },
     mouse: { rect: DESKTOP_REGIONS.mouse, y: deskY },
-    miscellaneous: { rect: DESKTOP_REGIONS.miscellaneous, y: deskY },
+    miscellaneous: { rect: { x0: .45, x1: .68, z0: .085, z1: .21 }, y: deskY },
     operation: plane(-.025, .315, .51, .59),
     seated: { ...plane(-.155, .445, .61, 1.11), y: 0 },
     study: surfaces.find((s) => s.id === 'support-shelf-2')!,

@@ -31,11 +31,12 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
  * 适配器接线，键鼠区左移 10cm 以保留 20mm 净距。
  * v8：按长槽与使用方式固定分区，插排移到右后回台，旧场景及基线另存。
  * v9：按审核分区初始化显示器、键盘、鼠标及常用品，新增预制鼠标垫/纸巾盒时沿用同一范围。
+ * v10：修复整理算法全面失败——杂物区和打印机侧区不再侵入座位活动留空区，初始物品位置消除重叠与间距违规。
  *
  * 注意：新建物品默认尺寸 85%（`createNewSampleSceneObjects`）**不是**种子变更——它只服务新项目
  * 的示例物品库，旧示例 / 旧项目继续用 `createDemoSceneObjects` 的原尺寸，因此不提升本版本号。
  */
-export const DEMO_SEED_VERSION = 9
+export const DEMO_SEED_VERSION = 10
 
 export const DEMO_ROOM_NOTE =
   '固定 L 形床桌、四格书架及三抽屉；桌面按正式模型保留，插座可在「空间配置」中调整'
@@ -334,11 +335,19 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
     },
   ].map((object) => {
     const positions: Record<string, Vec3> = {
-      'demo-laptop': [-.26, deskY, .23], 'demo-monitor': [.1, deskY, .3],
-      'demo-keyboard': [-.15, deskY, .5], 'demo-mouse': [.16, deskY, .5],
-      'demo-lamp': [.48, deskY, .47], 'demo-printer': [.795, deskY, .55],
-      'demo-computer-tower': [.4, 0, .29], 'demo-thermos': [.8, deskY, .29],
-      'demo-cup': [.8, deskY, .4], 'demo-storage-box': [.41, 1.46, .17],
+      'demo-monitor': [.145, deskY, .195],
+      'demo-laptop': [.70, deskY, .35],
+      'demo-keyboard': [.145, deskY, .4125],
+      'demo-mouse': [.485, deskY, .46],
+      'demo-lamp': [-.10, deskY, .20],
+      'demo-printer': [-.25, deskY, .25],
+      'demo-power-adapter': [.25, deskY, .25],
+      'demo-thermos': [.92, deskY, .14],
+      'demo-cup': [.82, deskY, .12],
+      'demo-storage-box': [.41, 1.46, .17],
+      'demo-earbuds': [.35, deskY, .30],
+      'demo-phone': [.70, deskY, .48],
+      'demo-computer-tower': [.50, 0, .30],
     }
     const positioned = { ...object, transform: { position: positions[object.id] ?? object.transform.position, rotationY: 0 } } as SceneObject
     return positioned

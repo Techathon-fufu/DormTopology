@@ -34,7 +34,7 @@ export function monitorViewRegion(object: SceneObject, zones: OrganizationZones)
 
 /** Keep the paper-access position beside both the working lane and screen columns. */
 export function printerSideRegions(zones: OrganizationZones, monitors: SceneObject[], useCurrentPoses = false): RectOnPlane[] {
-  if (zones.workstation) return [{ rect: { x0: -.43, x1: -.045, z0: .305, z1: .61 }, y: zones.deskSurface.y }]
+  if (zones.workstation) return [{ rect: { x0: -.43, x1: -.05, z0: .062, z1: .362 }, y: zones.deskSurface.y }]
   const columns = monitors.flatMap((monitor) => {
     const view = monitorViewRegion(monitor, zones)
     const columns: Array<{ x0: number; x1: number }> = view ? [view.rect] : []

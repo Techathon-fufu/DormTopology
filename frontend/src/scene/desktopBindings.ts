@@ -8,7 +8,8 @@ export const DESKTOP_REGIONS = {
   monitor: { x0: -.165, x1: .455, z0: .085, z1: .29 },
   keyboard: { x0: -.025, x1: .315, z0: .335, z1: .49 },
   mouse: { x0: .335, x1: .645, z0: .30, z1: .61 },
-  miscellaneous: { x0: .61, x1: .98, z0: .63, z1: .88 },
+  miscellaneous: { x0: .45, x1: .68, z0: .085, z1: .21 },
+  cup: { x0: .80, x1: .96, z0: .082, z1: .242 },
 }
 export const DESKTOP_CENTER_X = .145
 export const DESKTOP_BINDINGS = {
@@ -16,9 +17,9 @@ export const DESKTOP_BINDINGS = {
   keyboard: { region: 'keyboard', label: '键盘中部区', position: [.145, .75, .4125] },
   mousepad: { region: 'mouse', label: '右侧鼠标垫区', position: [.485, .75, .46] },
   mouse: { region: 'mouse', label: '鼠标操作区', position: [.485, .751, .46] },
-  tissue_box: { region: 'miscellaneous', label: '右侧常用品区', position: [.71, .75, .715] },
-  stainless_bottle: { region: 'miscellaneous', label: '右侧常用品区', position: [.915, .75, .705] },
-  cup: { region: 'miscellaneous', label: '右侧常用品区', position: [.855, .75, .825] },
+  tissue_box: { region: 'miscellaneous', label: '右侧常用品区', position: [.565, .75, .1475] },
+  stainless_bottle: { region: 'cup', label: '右侧水杯区', position: [.88, .75, .14] },
+  cup: { region: 'cup', label: '右侧水杯区', position: [.85, .75, .10] },
 } as const
 export type DesktopPrefab = keyof typeof DESKTOP_BINDINGS
 export function desktopBinding(object: SceneObject, room: RoomConfig) {

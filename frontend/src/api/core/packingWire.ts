@@ -150,11 +150,12 @@ export function toPackingScene(input: {
       const area = workstation[name]
       addRegion(name, area.rect, area.y, ceiling - area.y)
     }
+    addRegion('cup', zones.cup.rect, zones.cup.y, ceiling - zones.cup.y)
   } else {
     addRegion('typing', zones.typing.rect, zones.typing.y, ceiling - zones.typing.y)
     addRegion('cup', zones.cup.rect, zones.cup.y, ceiling - zones.cup.y)
   }
-  const exclusions = workstation ? [workstation.monitor, workstation.laptop, workstation.keyboard, workstation.mouse, workstation.miscellaneous, workstation.operation] : [zones.typing, zones.cup]
+  const exclusions = workstation ? [workstation.monitor, workstation.laptop, workstation.keyboard, workstation.mouse, workstation.miscellaneous, workstation.operation, zones.cup] : [zones.typing, zones.cup]
   const safe = exclusions.reduce((areas, cut) => areas.flatMap((r) => subtractRect(r, cut.rect, hasFixedFurniture(room))), (zones.deskSurfaces ?? [zones.deskSurface]).map((s) => s.rect))
   safe.forEach((r, i) => addRegion(`desk-clear-${i}`, r, room.desk.height, ceiling - room.desk.height))
   addRegion('under-desk', zones.underDesk.rect, 0, zones.underDesk.clearance)
@@ -205,13 +206,13 @@ export function toPackingScene(input: {
     let allowed: string[]
     let preferred: string[] = []
     if (workstation && (shape === 'keyboard' || shape === 'mouse' || object.model.prefabId === 'mousepad')) allowed = [shape === 'keyboard' ? 'keyboard' : 'mouse']
+    else if (shape === 'cup' || shape === 'thermos') allowed = workstation ? ['cup'] : ['cup', ...clearIds]
     else if (workstation && isDailyMiscellaneous(object)) allowed = ['miscellaneous']
     else if (workstation && isStudyItem(object)) {
       allowed = object.model.prefabId ? [studyId!] : [studyId!, ...shelfIds]
       preferred = [studyId!]
     }
     else if (shape === 'keyboard' || shape === 'mouse') allowed = ['typing']
-    else if (shape === 'cup' || shape === 'thermos') allowed = ['cup', ...clearIds]
     else if (shape === 'monitor') {
       const viewId = `monitor-view-${object.id}`
       if (workstation && !regions.some((r) => r.id === viewId) && !object.fixed && !object.locked) throw new ApiError(`${object.name}：显示器尺寸超出长槽正中主视区，请核对尺寸`, { kind: 'input' })
