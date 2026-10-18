@@ -19,9 +19,22 @@ logger = logging.getLogger(__name__)
 
 ALGORITHM_VERSION = "rodin-fast-1.0"
 
+_CANCELLABLE_STATES = ("queued", "running")
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _safe_token(value: str) -> str:
+    """Reduce an opaque id to a filesystem-safe token.
+
+    Keeps alphanumerics, dash, underscore and dot; every other character is
+    replaced by an underscore. This prevents path traversal when project or
+    object ids come from untrusted client payloads.
+    """
+    token = "".join(c if (c.isalnum() or c in "-_.") else "_" for c in str(value)).strip("_")
+    return token or "unknown"
 
 
 # Map standard prefab keys to files in frontend/public/models/items
@@ -130,7 +143,7 @@ class ModelGenerationService:
         return {"job_id": job_id, "status": "queued", "created_at": now}
 
     def _find_crop_image(self, project_id: str, object_id: str, object_name: str) -> Path | None:
-        """Finds cropped image for an object by id or fuzzy name match."""
+        """Find the crop belonging to this exact recognized object."""
         proj_crops = self.crops_dir / project_id
         if not proj_crops.exists():
             return None
@@ -140,22 +153,29 @@ class ModelGenerationService:
         if exact_file.exists():
             return exact_file
 
-        # 2. File starting with object_id
-        for f in proj_crops.glob(f"{object_id}*"):
-            if f.is_file() and f.suffix.lower() in [".png", ".jpg", ".jpeg", ".webp"]:
-                return f
-
-        # 3. File containing object_name
-        for f in proj_crops.glob(f"*{object_name}*"):
-            if f.is_file() and f.suffix.lower() in [".png", ".jpg", ".jpeg", ".webp"]:
-                return f
-
-        # 4. Fallback: check other project crops or any crop in directory
-        for f in proj_crops.iterdir():
-            if f.is_file() and f.suffix.lower() in [".png", ".jpg", ".jpeg", ".webp"]:
-                return f
-
+        for suffix in (".jpg", ".jpeg", ".webp"):
+            candidate = proj_crops / f"{object_id}{suffix}"
+            if candidate.is_file():
+                return candidate
         return None
+
+    def _is_cancelled(self, job_id: str) -> bool:
+        """Best-effort cancellation probe against the repository.
+
+        Returns True only when the repository reports a terminal, non-success
+        state (cancelled or failed) so an in-flight worker stops writing
+        success/progress. Unknown states are treated as not-cancelled to
+        preserve existing behavior when the repository cannot report.
+        """
+        try:
+            envelope = self.repository.get_job(job_id)
+        except Exception:
+            logger.debug("Cancellation probe failed for job %s", job_id, exc_info=True)
+            return False
+        if not envelope:
+            return False
+        status = envelope.get("status")
+        return status in ("cancelled", "failed")
 
     def _run_generate(
         self,
@@ -167,6 +187,10 @@ class ModelGenerationService:
         try:
             object_id = wire_object["id"]
             name = wire_object.get("name", "未命名物品")
+
+            if self._is_cancelled(job_id):
+                logger.info("Model generation job %s was cancelled before start", job_id)
+                return
 
             self.repository.update_standalone_job(
                 job_id,
@@ -183,6 +207,9 @@ class ModelGenerationService:
                 prefab_rel_url = f"models/items/{prefab_key}.glb"
                 prefab_disk_path = self.frontend_models_dir / "items" / f"{prefab_key}.glb"
                 if prefab_disk_path.exists():
+                    if self._is_cancelled(job_id):
+                        logger.info("Model generation job %s cancelled during prefab match", job_id)
+                        return
                     logger.info("Object %s (%s) matched local prefab %s", object_id, name, prefab_key)
                     result = {
                         "object_id": object_id,
@@ -217,6 +244,11 @@ class ModelGenerationService:
                 )
 
             logger.info("Found crop file for object %s: %s", object_id, crop_file)
+
+            if self._is_cancelled(job_id):
+                logger.info("Model generation job %s cancelled before Rodin submission", job_id)
+                return
+
             self.repository.update_standalone_job(
                 job_id,
                 status="running",
@@ -225,10 +257,18 @@ class ModelGenerationService:
             )
 
             rodin_client = RodinClient()
-            target_filename = f"{object_id}.glb"
+            # Filenames are scoped by project id and job id so concurrent jobs and
+            # cross-project runs can never overwrite each other. The original
+            # object identity is preserved inside the returned result payload.
+            project_token = _safe_token(project_id)
+            job_token = _safe_token(job_id)
+            target_filename = f"{project_token}_{job_token}.glb"
             prompt = f"A clean low poly 3D object of {name}, single isolated game asset"
 
             def _on_prog(msg: str):
+                if self._is_cancelled(job_id):
+                    logger.info("Model generation job %s cancelled during Rodin run", job_id)
+                    return
                 self.repository.update_standalone_job(
                     job_id,
                     status="running",
@@ -246,6 +286,10 @@ class ModelGenerationService:
                 target_filename=target_filename,
                 on_progress=_on_prog,
             )
+
+            if self._is_cancelled(job_id):
+                logger.info("Model generation job %s cancelled after Rodin run; discarding result", job_id)
+                return
 
             target_glb = self.generated_models_dir / target_filename
             if not target_glb.exists():
@@ -266,6 +310,10 @@ class ModelGenerationService:
                 "note": "由 Rodin AI 极速生成 (GLB Low-Poly)",
             }
 
+            if self._is_cancelled(job_id):
+                logger.info("Model generation job %s cancelled before finalizing", job_id)
+                return
+
             self.repository.update_standalone_job(
                 job_id,
                 status="succeeded",
@@ -277,6 +325,8 @@ class ModelGenerationService:
 
         except Exception as e:
             logger.exception("Model generation task %s for object %s failed", job_id, wire_object.get("id"))
+            if self._is_cancelled(job_id):
+                return
             self.repository.update_standalone_job(
                 job_id,
                 status="failed",

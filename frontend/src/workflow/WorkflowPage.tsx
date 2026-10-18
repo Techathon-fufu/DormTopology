@@ -400,8 +400,8 @@ export function WorkflowPage(): React.ReactElement {
           </Button>
         </main>
       ) : (
-        <main className="grid min-w-0 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-          <section className="grid min-w-0 content-start gap-4 lg:sticky lg:top-4 lg:self-start">
+        <main className="grid min-w-0 grid-cols-[minmax(0,1fr)_380px] gap-4 p-4">
+          <section className="sticky top-4 grid min-w-0 content-start gap-4 self-start">
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={handleReload} disabled={busy} data-testid="read-saved">
                 读取已保存场景
@@ -449,7 +449,7 @@ export function WorkflowPage(): React.ReactElement {
               ) : null}
             </div>
 
-            <div className="h-[320px] w-full overflow-hidden rounded-lg border border-border lg:h-[460px]" data-testid="scene-canvas">
+            <div className="h-[460px] w-full overflow-hidden rounded-lg border border-border" data-testid="scene-canvas">
               {activeScene ? (
                 <AlgorithmScene
                   scene={activeScene}

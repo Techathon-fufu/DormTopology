@@ -1,4 +1,6 @@
-import type { RoomConfig, Vec3 } from '@/types/project'
+import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
+import { worldCollision } from './collisionGeometry'
+import type { DrawerSlotId } from './dormDeskDrawers'
 import asset from './furnitureAsset.generated.json'
 import { drawerIdForPart, drawerIdForSurface, type DrawerOffsets } from './dormDeskDrawers'
 
@@ -13,6 +15,43 @@ export interface FurnitureSurface {
   rect: { x0: number; x1: number; z0: number; z1: number }
   y: number
   clearance: number
+}
+
+const drawerSurfaceIds: Record<DrawerSlotId, string> = {
+  bot: 'support-drawer-bottom', mid: 'support-drawer-middle', top: 'support-drawer-top',
+}
+
+export function drawerSlotForSurface(id: string): DrawerSlotId | null {
+  return (Object.keys(drawerSurfaceIds) as DrawerSlotId[]).find((slot) => drawerSurfaceIds[slot] === id) ?? null
+}
+
+/** A stored item belongs to a drawer only if its full volume fits the closed interior. */
+export function drawerSlotForObject(object: SceneObject, position: Vec3, room: RoomConfig, rotationY = object.transform.rotationY): DrawerSlotId | null {
+  if (!hasFixedFurniture(room)) return null
+  const bounds = worldCollision({ ...object, transform: { position, rotationY } }).bounds
+  const tolerance = .001
+  for (const surface of furnitureSurfaces(room).filter((entry) => entry.kind === 'drawer')) {
+    if (Math.abs(bounds.min[1] - surface.y) > tolerance || bounds.max[1] > surface.y + surface.clearance + tolerance) continue
+    if (bounds.min[0] < surface.rect.x0 - tolerance || bounds.max[0] > surface.rect.x1 + tolerance ||
+        bounds.min[2] < surface.rect.z0 - tolerance || bounds.max[2] > surface.rect.z1 + tolerance) continue
+    return drawerSlotForSurface(surface.id)
+  }
+  return null
+}
+
+/** The moving drawer fronts and contents must have a clear path outside the cabinet. */
+export function blockingDrawerOpening(object: SceneObject, position: Vec3, room: RoomConfig): string | null {
+  if (!hasFixedFurniture(room) || drawerSlotForObject(object, position, room)) return null
+  const bounds = worldCollision(object, position).bounds
+  for (const surface of furnitureSurfaces(room).filter((entry) => entry.kind === 'drawer')) {
+    const { x0, z0, z1 } = surface.rect
+    if (bounds.min[0] < x0 - .002 && bounds.max[0] > x0 - .3 + .002 &&
+        bounds.min[2] < z1 + .012 && bounds.max[2] > z0 - .012 &&
+        bounds.min[1] < surface.y + surface.clearance && bounds.max[1] > surface.y - .035) {
+      return surface.label
+    }
+  }
+  return null
 }
 
 export function hasFixedFurniture(room: RoomConfig): boolean { return room.furnitureModel === 'dormdesk-v1' }
@@ -40,7 +79,7 @@ export function furnitureBoxes(_room: RoomConfig, offsets: DrawerOffsets = {}): 
   })
 }
 
-/** Circular user holes are retired; the authored rear notch is rearCablePassage. */
+/** Circular user holes are retired; the authored rear notch is rearCablePassage. The solid prefab has no user-defined tabletop apertures. */
 export function effectiveCableHoles(room: RoomConfig): RoomConfig['cableHoles'] {
   return hasFixedFurniture(room) ? [] : room.cableHoles
 }
@@ -52,7 +91,7 @@ function surface(id: string, kind: FurnitureSurface['kind'], label: string, boun
 
 /** Actual free interiors, excluding the divider boards and drawer shells. */
 export function furnitureSurfaces(_room: RoomConfig, _legacyCutHoles = true, offsets: DrawerOffsets = {}): FurnitureSurface[] {
-  // Retain the second argument for existing callers; prefab surfaces always follow the authored solid regions.
+  // Retain the second argument for existing callers; prefab surfaces are always solid and follow the authored regions.
   const desks = fixedFurnitureBoxes.filter((p) => p.name.startsWith('Desk_Top_'))
     .map((p) => surface(`support-${p.name}`, 'desk', p.name.includes('Main') ? '主桌面' : '右侧回台',
       [p.min[0], p.max[0], p.min[2], p.name.startsWith('Desk_Top_Main_Rear_')
@@ -79,7 +118,7 @@ export function furnitureSurfaces(_room: RoomConfig, _legacyCutHoles = true, off
   })
 }
 
-/** No user-defined circular hole is valid on the fixed prefab. */
+/** No user-defined circular hole is valid on the fixed prefab; the authored rear notch is rearCablePassage. */
 export function validFurnitureHole(_room: RoomConfig, _position: Vec3, _diameter: number): boolean {
   return false
 }

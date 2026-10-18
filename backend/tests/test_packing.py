@@ -293,6 +293,7 @@ class PackingTests(unittest.TestCase):
                     "target_region_id",
                     "placement_status",
                     "reason_code",
+                    *({"target_book_pose"} if original["category"] in {"book", "books"} else set()),
                 },
             )
             self.assertEqual(target["current_pos"], original["position"])

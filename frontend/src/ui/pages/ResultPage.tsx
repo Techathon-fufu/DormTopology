@@ -8,12 +8,14 @@ import { CompareObjectMesh, CompareCables } from '@/scene/PlanCompareScene'
 import { CameraRig } from '@/scene/CameraRig'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 import { Button } from '@/ui/kit/button'
 import { HoldCompareButton } from '@/ui/workspace/HoldCompareButton'
+import { ThemeToggle } from '@/ui/theme/ThemeToggle'
 import { validateScene } from '@/scene/sceneValidation'
 import { hasUsableCableRoute } from '@/scene/cables'
 import { replayObjects, replaySteps } from '@/features/replay/model'
-import { normalizeProductRoom } from '@/data/fixedRoom'
 
 export function ResultPage() {
   const { id } = useParams()
@@ -41,21 +43,26 @@ export function ResultPage() {
   if (!project) return <div className="p-8"><Link to="/">项目不存在，返回首页</Link></div>
   const done = cursor >= steps.length
   const objects = held && before ? before.objects : started && before ? replayObjects(before.objects, steps, cursor) : project.objects
-  const room = normalizeProductRoom(held && before ? before.room : project.room)
+  const room = held && before ? before.room : project.room
   const cables = held && before ? before.cables : !started || done ? project.cables : []
   const active = started && !done ? steps[Math.floor(cursor)] : undefined
   const play = () => { setStarted(true); if (done) setCursor(0); setPlaying(!playing || done) }
-  return <div className="flex h-dvh flex-col bg-background">
-    <header className="flex flex-wrap items-center gap-3 border-b bg-surface px-4 py-3 sm:px-6">
+  return <div className="flex h-full min-h-0 flex-col bg-background">
+    <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-6 py-3">
       <Link to={`/projects/${project.id}/workspace`} className="flex items-center gap-1 text-xs text-primary"><ArrowLeft className="h-4 w-4" />工作台</Link>
       <div className="min-w-0 flex-1"><h1 className="truncate text-sm font-semibold">{project.name}</h1><p className="text-xs text-muted-foreground">看一步，整理一件。</p></div>
       <HoldCompareButton onChange={setHeld} disabled={!before} />
+      <ThemeToggle />
     </header>
     <main className="relative min-h-0 flex-1" aria-label="整理动画场景">
-      <Canvas shadows dpr={[1, 2]} camera={{ fov: 42 }}>
-        <color attach="background" args={['#F4F1EA']} />
-        <ambientLight intensity={.8} />
-        <directionalLight position={[2, 4, 3]} intensity={1.2} castShadow />
+      <Canvas
+        shadows
+        gl={SCENE_GL_OPTIONS}
+        dpr={sceneDpr()}
+        camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+        onCreated={({ gl }) => configureSceneRenderer(gl)}
+      >
+        <SceneLighting />
         <Suspense fallback={null}>
           <RoomShell room={room} deskMode="none" showBed={false} />
           <DormDeskModel room={room} hideBedParts respectToolbar={false} />
@@ -66,7 +73,7 @@ export function ResultPage() {
       </Canvas>
       <span className="pointer-events-none absolute left-3 top-3 rounded-lg bg-surface/95 px-3 py-2 text-xs shadow-sm">{held ? '摆放前 · 松开返回' : active ? `${active.after ? active.before ? '移动' : '放入' : '移出'}：${active.name}` : '当前摆放效果'}</span>
     </main>
-    <footer className="space-y-3 border-t bg-surface px-4 py-4 sm:px-6">
+    <footer className="space-y-3 border-t border-border bg-surface px-6 py-4">
       <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 text-sm"><p className="font-medium">{!before ? '还没有摆放前记录' : !steps.length ? '暂时没有需要演示的调整' : active ? active.name : started ? '演示已结束' : '跟着动画整理'}</p><p className="mt-1 text-xs text-muted-foreground">{steps.length ? `第 ${Math.min(steps.length, Math.floor(cursor) + 1)} / ${steps.length} 步 · 可随时暂停` : '返回工作台调整摆放后，再来看效果。'}</p></div>
         <div className="flex items-center gap-2">

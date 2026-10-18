@@ -253,13 +253,13 @@ test('new space entry opens the creation page', async ({ page }) => {
   await expect(page).toHaveURL(/\/projects\/new$/)
 })
 
-test('takes day and night screenshots at desktop and mobile widths', async ({ page }, testInfo) => {
+test('takes day and night screenshots at desktop widths', async ({ page }, testInfo) => {
   test.setTimeout(120_000)
+  // 仅桌面浏览器；768 及以下的小屏/手机视口已按产品范围废除。
   const viewports = [
+    { name: '1440x1000', width: 1440, height: 1000 },
     { name: '1440x900', width: 1440, height: 900 },
     { name: '1366x768', width: 1366, height: 768 },
-    { name: '768x1024', width: 768, height: 1024 },
-    { name: '390x844', width: 390, height: 844 },
   ]
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
@@ -288,44 +288,12 @@ test('help panel closes with Escape and returns focus', async ({ page }) => {
   const trigger = page.locator('.home-help > summary')
   await trigger.click()
   await expect(page.locator('.home-help-panel')).toBeVisible()
-  await expect(page.locator('.home-help-panel').getByRole('link', { name: '算法实验' })).toBeVisible()
+  // 执行指南已退场：帮助面板改为四步说明，不再挂指南/实验导出链接。
+  await expect(page.locator('.home-help-panel').getByRole('heading', { name: '从照片到整洁桌面', exact: true })).toBeVisible()
+  await expect(page.locator('.home-help-panel')).toContainText('4. 接受方案，跟着动画整理。')
   await page.keyboard.press('Escape')
   await expect(page.locator('.home-help-panel')).toBeHidden()
   await expect(trigger).toBeFocused()
 })
 
-test('help panel stays inside the viewport on narrow screens', async ({ page }, testInfo) => {
-  for (const width of [390, 320]) {
-    await page.setViewportSize({ width, height: 800 })
-    await page.goto('/')
-    await page.locator('.home-help > summary').click()
-    const panel = page.locator('.home-help-panel')
-    await expect(panel).toBeVisible()
-    const box = await panel.boundingBox()
-    expect(box).not.toBeNull()
-    expect(box!.x).toBeGreaterThanOrEqual(8)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(width - 8)
-    await expectNoHorizontalOverflow(page)
-    if (width === 390) {
-      await page.screenshot({ path: `${SHOT_DIR}/${testInfo.project.name}-help-390x844.png`, animations: 'disabled' })
-    }
-  }
-})
-
-test('supports keyboard focus on the compact layout', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/')
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName(/寝空拓扑首页/)
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName('使用帮助')
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName('日间模式')
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName('深夜模式')
-  await page.screenshot({
-    path: `${SHOT_DIR}/${testInfo.project.name}-focus-390x844.png`,
-    animations: 'disabled',
-  })
-  await expectNoHorizontalOverflow(page)
-})
+// 移动端与小屏布局已按产品范围废除，相关手机视口用例一并退役（仅保留桌面 1440×1000 及以上）。

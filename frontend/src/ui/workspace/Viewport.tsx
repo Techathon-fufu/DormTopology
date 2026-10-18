@@ -24,6 +24,8 @@ import { ZoneOverlay } from '@/scene/ZoneOverlay'
 import { basicMaterial, ringGeometry } from '@/scene/resources'
 import { detectWebGL } from '@/lib/webgl'
 import { DeskModelNotice } from '@/ui/workspace/DeskModelNotice'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 
 /** 三维渲染错误边界：渲染失败时给出重试入口，不影响左右面板继续工作 */
 class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -58,6 +60,7 @@ class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: str
 function DragIndicator() {
   const drag = useWorkspaceStore((s) => s.drag)
   if (!drag) return null
+  // 抽屉统一偏移已由 displayPosition 计算，背板支撑时指示环改为竖直面
   const [x, y, z] = drag.displayPosition ?? drag.position
   const size = Math.max(0.06, 0.13)
   return (
@@ -88,8 +91,8 @@ function OperationPlayback() {
   const finished = status === 'finished'
   const problems = plan.metrics.unplacedCount + plan.metrics.overlapCount + plan.metrics.outOfBoundsCount
   return (
-    <section aria-label="整理预览控制" className="absolute bottom-12 left-3 right-3 z-10 mx-auto max-w-xl overflow-hidden rounded-xl border border-border bg-surface shadow-md sm:bottom-10 sm:left-5 sm:right-5">
-      <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
+    <section aria-label="整理预览控制" className="absolute bottom-10 left-5 right-5 z-10 mx-auto max-w-xl overflow-hidden rounded-xl border border-border bg-surface shadow-md">
+      <div className="flex items-center gap-3 px-4 py-2.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Play className="h-4 w-4" /></span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold">{compare === 'before' ? '正在查看原布局' : finished ? '预览完成' : status === 'paused' ? '预览已暂停' : '正在整理'}<span className="ml-2 font-normal tabular-nums text-muted-foreground">{finished ? commands.length : Math.min(index + 1, commands.length)} / {commands.length}</span></p>
@@ -98,7 +101,7 @@ function OperationPlayback() {
         <Button size="icon" variant="ghost" aria-label={status === 'playing' ? '暂停预览' : status === 'paused' ? '继续播放' : '重新播放'} title={status === 'playing' ? '暂停' : status === 'paused' ? '继续播放' : '重新播放'} onClick={status === 'playing' ? pause : status === 'paused' ? resume : replay}>{status === 'playing' ? <Pause className="h-4 w-4" /> : finished ? <RotateCcw className="h-4 w-4" /> : <Play className="h-4 w-4" />}</Button>
         <Button size="icon" variant="ghost" aria-label="查看最终效果" title="查看最终效果" onClick={finish}><SkipForward className="h-4 w-4" /></Button>
       </div>
-      <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2 sm:px-4">
+      <div className="flex items-center justify-between gap-2 border-t border-border/70 px-4 py-2">
         <span className="text-[11px] text-muted-foreground">同视角对比</span>
         <PreviewCompareButton />
       </div>
@@ -137,7 +140,7 @@ export function Viewport({
     const targets = new Map(plan.assignments.map((a) => [a.objectId, a]))
     return validateScene(project.objects.map((o) => {
       const a = targets.get(o.id)
-      return a ? { ...o, transform: { position: a.position, rotationY: a.rotationY } } : o
+      return a ? { ...o, transform: { ...o.transform, position: a.position, rotationY: a.rotationY, bookPose: a.bookPose ?? o.transform.bookPose } } : o
     }), project.room, deskMetrics)
   }, [plan, compare, playbackStatus, project, issuesById, deskMetrics])
   const organizeZonesVisible = useOrganizeStore((s) => s.open && s.showZones)
@@ -162,30 +165,17 @@ export function Viewport({
       <SceneErrorBoundary>
         <Canvas
           shadows
-          dpr={[1, 2]}
-          camera={{ position: [1.9, 1.6, 2.6], fov: 42 }}
+          frameloop="demand"
+          gl={SCENE_GL_OPTIONS}
+          dpr={sceneDpr()}
+          camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+          onCreated={({ gl }) => configureSceneRenderer(gl)}
           onPointerMissed={() => {
             select(null)
             if (mode === 'cable') useCableStore.getState().selectCable(null)
           }}
         >
-          <color attach="background" args={['#F4F1EA']} />
-          <fog attach="fog" args={['#F4F1EA', 9, 20]} />
-          <ambientLight intensity={0.55} />
-          <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.45]} />
-          <directionalLight
-            position={[2.5, 4, 3]}
-            intensity={1.1}
-            castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
-            shadow-camera-left={-3}
-            shadow-camera-right={3}
-            shadow-camera-top={3}
-            shadow-camera-bottom={-3}
-            shadow-camera-near={0.5}
-            shadow-camera-far={14}
-          />
+          <SceneLighting />
           <Suspense fallback={null}>
             {/* 房间外壳与桌体分离：桌体加载正式模型（无抽屉桌体 + 三只抽屉分离件，抽屉可推拉），
                 失败 / 未就绪回退参数化几何；GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}

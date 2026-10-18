@@ -57,7 +57,7 @@ for (const cable of fixture.result.cables) {
 // Filling the only passage must fail explicitly, rather than reverting to a crest route.
 const blocked = { ...scene, cables: [scene.cables.find(c => c.id === 'demo-cable-monitor')!],
   obstacles: [...scene.obstacles, { id: 'test:blocked-passage', min: toPackingPosition(passage.min, project.room), max: toPackingPosition(passage.max, project.room) }] }
-const run = spawnSync('python3', ['-B', '-c', 'import json,sys; from backend.app.domain.routing import plan_routing; print(json.dumps(plan_routing(json.load(sys.stdin))))'],
+const run = spawnSync(process.env.PYTHON ?? 'python', ['-B', '-c', 'import json,sys; from backend.app.domain.routing import plan_routing; print(json.dumps(plan_routing(json.load(sys.stdin))))'],
   { cwd: resolve('..'), input: JSON.stringify(blocked), encoding: 'utf8', timeout: 120_000 })
 assert.equal(run.status, 0, run.stderr)
 const failed = JSON.parse(run.stdout)

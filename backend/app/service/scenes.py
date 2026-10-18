@@ -266,6 +266,8 @@ class SceneService:
             p = by_id[item["id"]]
             item["position"] = list(p["target_pos"])
             item["rotation_y_rad"] = float(p["target_rotation_y_rad"])
+            if "target_book_pose" in p and ("book_pose" in item or p["target_book_pose"] != "original"):
+                item["book_pose"] = p["target_book_pose"]
         updated["scene_revision"] = scene["scene_revision"] + 1
 
         check = self._compute(self._validate_layout, copy.deepcopy(updated))
@@ -507,9 +509,11 @@ def _build_guide(scene, baseline, valid_routes, comparison, check, requested_ids
             continue
         if _vector_changed(old.get("position"), item.get("position")) or abs(
             float(old.get("rotation_y_rad", 0)) - float(item.get("rotation_y_rad", 0))
-        ) > 1e-9:
+        ) > 1e-9 or old.get("book_pose", "original") != item.get("book_pose", "original"):
             move_count += 1
             lines.append(f"- {item['name']}（{item['id']}）：{old['position']} → {item['position']} 米；朝向 {old['rotation_y_rad']} → {item['rotation_y_rad']} 弧度")
+            if item.get("book_pose", "original") != old.get("book_pose", "original"):
+                lines.append(f"  书本姿态：{old.get('book_pose', 'original')} → {item.get('book_pose', 'original')}")
     if move_count == 0:
         lines.append("- 没有物品移动。")
     lines.append("")

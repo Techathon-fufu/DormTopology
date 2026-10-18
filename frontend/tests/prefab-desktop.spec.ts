@@ -18,6 +18,7 @@ async function desktopMeshes(page: Page) {
     return rows
   })
 }
+
 for (const route of ['/routing-demo', '/projects/demo-dorm-101/workspace', '/projects/demo-dorm-101/setup', '/projects/demo-dorm-101/result']) {
   test(`original prefab tabletops remain visible at ${route}`, async ({ page }, testInfo) => {
     await page.addInitScript(() => localStorage.setItem('dormtopology.desk-model', JSON.stringify({

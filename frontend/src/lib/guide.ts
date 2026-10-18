@@ -123,6 +123,8 @@ function placementDetail(project: Project, object: SceneObject): string {
   if (Math.abs(object.transform.rotationY) > 0.01) {
     parts.push(`朝向旋转 ${Math.round(radToDeg(object.transform.rotationY))}°`)
   }
+  if (object.transform.bookPose === 'upright') parts.push('书本立放，按图中朝向排列')
+  if (object.transform.bookPose === 'flat') parts.push('书本平放，保留所需层高')
   if (object.frequent && !object.locked) parts.push('常用物品，放在伸手可及处')
   if (object.needsPower) parts.push('就位后按「线缆连接次序」接线')
   return `${parts.join('；')}。`

@@ -1,8 +1,7 @@
 import { useDrawerOffsets, useDrawerStore } from '@/state/drawerStore'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useMatch, useNavigate, useParams } from 'react-router-dom'
 import { ROTATION_STEP } from '@/scene/placementEditing'
-import { IsolatedObjectViewport } from '@/ui/workspace/IsolatedObjectViewport'
 import { Loader2 } from 'lucide-react'
 import type { GenerationJob, Project, SceneObject } from '@/types/project'
 import { useProject, useProjectsStore } from '@/state/projectsStore'
@@ -15,7 +14,6 @@ import { useWorkspaceStore } from '@/state/workspaceStore'
 import { isMockMode, services } from '@/api'
 import { cablePlanningInputSignature } from '@/api/core/routingWire'
 import { auditConnections } from '@/features/connections/model'
-import { MarkingPage } from '@/features/connections/MarkingPage'
 import { ObjectContextMenu } from '@/features/connections/ObjectContextMenu'
 import { useRoutingPreviewStore } from '@/features/connections/routingPreview'
 import { useConnectionsStore } from '@/features/connections/store'
@@ -33,7 +31,6 @@ import { Viewport } from '@/ui/workspace/Viewport'
 import { DemoTour } from '@/ui/tour/DemoTour'
 import { Button } from '@/ui/kit/button'
 import { DataBadge } from '@/ui/kit/data-badge'
-import { Drawer } from '@/ui/kit/drawer'
 import { EmptyState } from '@/ui/kit/empty-state'
 
 const mm = (v: number) => Math.round(v * 1000) / 1000
@@ -91,7 +88,6 @@ export function WorkspacePage() {
   const drawerOffsets = useDrawerOffsets()
   const mode = useWorkspaceStore((s) => s.mode)
   const selectedId = useWorkspaceStore((s) => s.selectedId)
-  const selectedCableId = useCableStore((s) => s.selectedCableId)
   const createJob = useJobsStore((s) => s.create)
   const updateJob = useJobsStore((s) => s.update)
   const panelVisible = useOrganizeStore((s) => s.panelVisible)
@@ -99,27 +95,26 @@ export function WorkspacePage() {
   const organizeStatus = useOrganizeStore((s) => s.status)
   const workspaceNotice = useWorkspaceStore((s) => s.notice)
   const baseline = usePlansStore((s) => s.baselines[id ?? ''])
-  const [showBefore, setShowBefore] = useState(false)
+  const [showBefore] = useState(false)
   const cableNotice = useCableStore((s) => s.notice)
   const cableAnimStatus = useCableStore((s) => s.animStatus)
   const deskMetrics = useDeskModelStore((s) => s.metrics)
 
   const [busy, setBusy] = useState<'cable' | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
-  const [leftOpen, setLeftOpen] = useState(false)
-  const [rightOpen, setRightOpen] = useState(false)
   const [plansOpen, setPlansOpen] = useState(false)
-  /** 表面描点页面（会话态，全屏覆盖在工作台上；不切路由、不重挂三维视图） */
-  const [marking, setMarking] = useState<{ objectId: string | null; previousMode: 'organize' | 'cable' } | null>(null)
+  // 保留工作台会话和撤销历史；子路由独立渲染单品视口。
+  const marking = useMatch('/projects/:id/objects/:objectId/ports') !== null
   /** 物品右键菜单的屏幕坐标 */
   const [objectMenu, setObjectMenu] = useState<{ objectId: string; x: number; y: number } | null>(null)
   const flashTimer = useRef<number | null>(null)
   const cablePlanning = useRef(false)
   const [routingConfirmation, setRoutingConfirmation] = useState<string | null>(null)
 
-  /** 打开描点页面：进入走线模式（端点与线缆可见），隐藏左右面板与工具栏，三维视图保持同一实例 */
+  /** 打开所选物品的独立描点路由。 */
   const openMarking = (target?: string | null) => {
     if (!project) return
+    if (busy) { showFlash('走线规划进行中，请完成后再描点'); return }
     if (useOrganizeStore.getState().isPreviewBlocking()) {
       showFlash('整理预览进行中，请先结束整理再描点')
       return
@@ -130,19 +125,9 @@ export function WorkspacePage() {
       project.objects.find((o) => o.visible)?.id ??
       null
     setObjectMenu(null)
-    setLeftOpen(false)
-    setRightOpen(false)
-    // 页面已打开时保留最初进入前的模式，退出后仍能回到原工作台。
-    setMarking({ objectId: next, previousMode: marking?.previousMode ?? (mode === 'cable' ? 'cable' : 'organize') })
-    useWorkspaceStore.getState().setMode('cable')
-    if (next) useWorkspaceStore.getState().select(next)
-  }
-
-  const closeMarking = () => {
-    const previous = marking?.previousMode ?? mode
-    useConnectionsStore.getState().cancelPick()
-    setMarking(null)
-    if (previous !== 'cable') useWorkspaceStore.getState().setMode(previous)
+    if (!next) { showFlash('请先添加需要标记的物品'); return }
+    useWorkspaceStore.getState().select(next)
+    navigate(`/projects/${encodeURIComponent(project.id)}/objects/${encodeURIComponent(next)}/ports`)
   }
 
   const projectId = project?.id
@@ -163,15 +148,8 @@ export function WorkspacePage() {
     setRoutingConfirmation(`${current.id}:${routingConfirmationSignature(current)}`)
   }
 
-  // Small screens edit selected scene entities in the left tools drawer.
-  useEffect(() => {
-    if ((!selectedId && !selectedCableId) || window.matchMedia('(min-width: 1024px)').matches) return
-    if (useOrganizeStore.getState().applying) return
-    setRightOpen(false)
-    setLeftOpen(true)
-  }, [selectedId, selectedCableId])
-
-  useEffect(() => { useDrawerStore.getState().closeAll() }, [id, mode, organizeOpen, showBefore, marking !== null])
+  // 抽屉开合只是场景状态：切换项目 / 模式 / 整理面板 / 对比视图 / 描点时收起，避免遮挡摆放
+  useEffect(() => { useDrawerStore.getState().closeAll() }, [id, mode, organizeOpen, showBefore, marking])
 
   // 场景摆放校验（越界 / 相交 / 悬空）：随项目数据变化实时重算
   const issuesById = useMemo(
@@ -204,7 +182,7 @@ export function WorkspacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cableNotice])
 
-  // 从方案对比页返回时携带的提示（设为当前方案的结果）：展示后清除，避免刷新重复出现
+  // 从历史方案 / 结果页跳回时携带的提示：展示后清除，避免刷新重复出现
   useEffect(() => {
     const state = location.state as { flash?: string } | null
     if (!state?.flash) return
@@ -233,7 +211,7 @@ export function WorkspacePage() {
 
   // 快捷键：Ctrl+Z 撤销 / Ctrl+Shift+Z 重做 / F 重置视角 / Q·E 旋转 / 方向键微调 / Delete 删除 / Esc 取消选中
   useEffect(() => {
-    if (!projectId) return
+    if (!projectId || marking) return
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
@@ -293,7 +271,7 @@ export function WorkspacePage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [projectId, showBefore])
+  }, [projectId, marking, showBefore])
 
   // 整理动画驱动器：playing 状态下按帧推进批次进度（只更新会话内覆盖位姿，不写项目存储）
   useEffect(() => {
@@ -328,21 +306,11 @@ export function WorkspacePage() {
   const handleOpenOrganize = () => {
     useWorkspaceStore.getState().setMode('organize')
     useOrganizeStore.getState().openPanel()
-    // 宽屏为右侧停靠面板；窄屏同步打开右侧抽屉展示整理面板
-    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
-      setLeftOpen(false)
-      setRightOpen(true)
-    }
   }
 
   const handleOpenPlans = () => {
     if (useOrganizeStore.getState().applying) return
     setPlansOpen((v) => !v)
-    // 宽屏为右侧停靠面板（优先于整理面板展示）；窄屏同步打开右侧抽屉
-    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1280px)').matches) {
-      setLeftOpen(false)
-      setRightOpen(true)
-    }
   }
 
   const runPlanCables = async (targetIds?: string[]) => {
@@ -511,67 +479,38 @@ export function WorkspacePage() {
     )
   }
 
+  if (marking) return <Outlet />
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      {marking ? null : (
-        <Toolbar
-          project={project}
-          onCompare={setShowBefore}
-          canCompare={Boolean(baseline?.scene)}
-          onOpenOrganize={handleOpenOrganize}
-          onPlanCables={() => void runPlanCables()}
-          onSavePlan={handleSavePlan}
-          onOpenPlans={handleOpenPlans}
-          plansOpen={plansOpen}
-          busy={busy}
-          onToggleLeftPanel={() => { setRightOpen(false); setLeftOpen((v) => !v) }}
-          onToggleRightPanel={() => { setLeftOpen(false); setRightOpen((v) => !v) }}
-        />
-      )}
-
+      <Toolbar project={project} onSavePlan={handleSavePlan} onOpenPlans={handleOpenPlans} plansOpen={plansOpen} />
       <div className="relative flex min-h-0 flex-1">
-        {marking ? null : (
-          <WorkspaceToolPanel
-            project={project}
-            issuesById={issuesById}
-            routingConfirmed={routingConfirmed}
-            onConfirmRouting={confirmRouting}
-            busy={busy === 'cable'}
-            onPlanCables={(ids) => void runPlanCables(ids)}
-            onOpenMarking={() => openMarking()}
-            onFlash={showFlash}
-            onGenerateModel={(o) => void handleGenerateModel(o)}
-            className="hidden w-[264px] shrink-0 border-r lg:flex"
-          />
-        )}
-
+        <WorkspaceToolPanel
+          project={project}
+          issuesById={issuesById}
+          routingConfirmed={routingConfirmed}
+          onConfirmRouting={confirmRouting}
+          busy={busy === 'cable'}
+          onPlanCables={(ids) => void runPlanCables(ids)}
+          onOpenMarking={() => openMarking()}
+          onFlash={showFlash}
+          onGenerateModel={(o) => void handleGenerateModel(o)}
+          className="flex w-[264px] shrink-0 border-r"
+        />
         <div className="relative min-w-0 flex-1">
-          {marking ? <IsolatedObjectViewport project={project} objectId={marking.objectId} /> : <Viewport
+          <Viewport
             project={project}
             before={showBefore ? baseline?.scene : undefined}
             issuesById={issuesById}
             onObjectContextMenu={(objectId, x, y) => setObjectMenu({ objectId, x, y })}
-          />}
+          />
 
-          {marking ? (
-            <MarkingPage
-              project={project}
-              objectId={marking.objectId}
-              onTargetChange={(objectId) => setMarking((current) => current && current.objectId !== objectId ? { ...current, objectId } : current)}
-              busy={busy === 'cable'}
-              onExit={closeMarking}
-            />
-          ) : null}
-
-          {marking ? null : (
-            <div className="pointer-events-none absolute left-4 top-3 flex items-center gap-2">
-              {project.isDemo ? <DataBadge kind="demo" label="示例项目" /> : null}
-              <span className="rounded-full border border-border bg-surface/90 px-2.5 py-1 text-xs font-medium shadow-xs">
-                {organizeOpen ? organizeStatus === 'planning' ? '生成中 · 原布局保留' : organizeStatus === 'config' ? '设置整理偏好' : '方案预览 · 尚未应用' : mode === 'organize' ? '编辑当前摆放' : '确认连接与走线'}
-              </span>
-            </div>
-          )}
-
+          <div className="pointer-events-none absolute left-4 top-3 flex items-center gap-2">
+            {project.isDemo ? <DataBadge kind="demo" label="示例项目" /> : null}
+            <span className="rounded-full border border-border bg-surface/90 px-2.5 py-1 text-xs font-medium shadow-xs">
+              {organizeOpen ? organizeStatus === 'planning' ? '生成中 · 原布局保留' : organizeStatus === 'config' ? '设置整理偏好' : '方案预览 · 尚未应用' : mode === 'organize' ? '编辑当前摆放' : '确认连接与走线'}
+            </span>
+          </div>
           {busy === 'cable' ? (
             <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1.5 text-xs shadow-sm">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -579,38 +518,30 @@ export function WorkspacePage() {
             </div>
           ) : null}
 
-          {marking ? null : (
-            <>
-              <div className="pointer-events-none absolute bottom-10 left-1/2 -translate-x-1/2">
-                <DragHintChip />
-              </div>
+          <div className="pointer-events-none absolute bottom-10 left-1/2 -translate-x-1/2">
+            <DragHintChip />
+          </div>
 
-              <p className="pointer-events-none absolute bottom-3 left-4 right-4 hidden truncate text-center text-xs text-muted-foreground md:block">
-                {mode === 'cable'
-                  ? '右键物品进入描点页面 · 点击线缆查看 / 编辑属性 · 点击两个接口建立连接 · Esc 取消'
-                  : '拖拽物品移动 · 空白处拖动旋转视角 · 滚轮缩放 · Q/E 旋转 10° · 右键物品描点'}
-              </p>
-              <p className="pointer-events-none absolute bottom-3 left-3 right-3 text-center text-[11px] text-muted-foreground md:hidden">
-                单指旋转 · 双指缩放 · 顶部打开物品与属性
-              </p>
-            </>
-          )}
+          <p className="pointer-events-none absolute bottom-3 left-4 right-4 block truncate rounded-lg bg-surface/90 px-3 py-1 text-center text-xs text-muted-foreground">
+            {mode === 'cable'
+              ? '右键物品进入描点页面 · 点击线缆查看 / 编辑属性 · 点击两个接口建立连接 · Esc 取消'
+              : '拖拽物品移动 · 空白处拖动旋转视角 · 滚轮缩放 · Q/E 旋转 10° · 右键物品描点'}
+          </p>
         </div>
 
-        {marking ? null : plansOpen ? (
+        {plansOpen ? (
           <PlanPanel
             project={project}
             onFlash={showFlash}
-            className="hidden w-80 shrink-0 border-l xl:flex"
+            className="flex w-80 shrink-0 border-l"
             onClose={() => setPlansOpen(false)}
           />
         ) : organizeOpen && panelVisible ? (
           <OrganizePanel
             project={project}
             onFlash={showFlash}
-            onPreviewReady={() => setRightOpen(false)}
             onClose={() => useOrganizeStore.getState().hidePanel()}
-            className="hidden w-72 shrink-0 border-l xl:flex"
+            className="flex w-72 shrink-0 border-l"
           />
         ) : (
           <WorkspaceGuide
@@ -620,20 +551,18 @@ export function WorkspacePage() {
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onOpenOrganize={handleOpenOrganize}
-            onGuide={() => navigate(`/projects/${project.id}/result`)}
-            className="hidden w-72 shrink-0 border-l xl:flex"
+            onResult={() => navigate(`/projects/${project.id}/result`)}
+            className="flex w-72 shrink-0 border-l"
           />
         )}
       </div>
 
-      {marking ? null : (
-        <StatusBar
-          project={project}
-          flash={flash}
-          issuesById={issuesById}
-          onRetryJob={handleRetryJob}
-        />
-      )}
+      <StatusBar
+        project={project}
+        flash={flash}
+        issuesById={issuesById}
+        onRetryJob={handleRetryJob}
+      />
 
       {/* 物品右键菜单：唯一入口是进入描点页面，不在一般模式里展示描点控件 */}
       {objectMenu ? (
@@ -651,71 +580,6 @@ export function WorkspacePage() {
           onClose={() => setObjectMenu(null)}
         />
       ) : null}
-
-      {/* 小屏幕抽屉：侧面板收进抽屉，保留主要操作 */}
-      <Drawer
-        open={leftOpen}
-        side="left"
-        onClose={() => setLeftOpen(false)}
-        className="w-80 max-w-[90vw]"
-      >
-        <WorkspaceToolPanel
-            project={project}
-            issuesById={issuesById}
-            routingConfirmed={routingConfirmed}
-            onConfirmRouting={confirmRouting}
-            busy={busy === 'cable'}
-            onPlanCables={(ids) => void runPlanCables(ids)}
-            onOpenMarking={() => openMarking()}
-            onFlash={showFlash}
-            onGenerateModel={(o) => void handleGenerateModel(o)}
-            className="h-full w-full border-r"
-            onClose={() => setLeftOpen(false)}
-          />
-      </Drawer>
-      <Drawer
-        open={rightOpen}
-        side="right"
-        onClose={() => {
-          if (!useOrganizeStore.getState().applying) setRightOpen(false)
-        }}
-        className="w-80 max-w-[85vw]"
-      >
-        {plansOpen ? (
-          <PlanPanel
-            project={project}
-            onFlash={showFlash}
-            className="h-full w-full border-l"
-            onClose={() => {
-              setPlansOpen(false)
-              setRightOpen(false)
-            }}
-          />
-        ) : organizeOpen && panelVisible ? (
-          <OrganizePanel
-            project={project}
-            onFlash={showFlash}
-            onPreviewReady={() => setRightOpen(false)}
-            className="h-full w-full border-l"
-            onClose={() => {
-              useOrganizeStore.getState().hidePanel()
-              setRightOpen(false)
-            }}
-          />
-        ) : (
-          <WorkspaceGuide
-            project={project}
-            routingConfirmed={routingConfirmed}
-            onConfirmRouting={confirmRouting}
-            busy={busy === 'cable'}
-            onPlanCables={(ids) => void runPlanCables(ids)}
-            onOpenOrganize={handleOpenOrganize}
-            onGuide={() => navigate(`/projects/${project.id}/result`)}
-            className="h-full w-full border-l"
-            onClose={() => setRightOpen(false)}
-          />
-        )}
-      </Drawer>
 
       {/* 演示导览卡片（仅激活时渲染；bottom-14 避开底部状态栏） */}
       <DemoTour className="bottom-14" />

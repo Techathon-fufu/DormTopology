@@ -1,3 +1,4 @@
+import { bookPoseDimensions, bookTurned } from './bookPose'
 import { useDrawerOffsets } from '@/state/drawerStore'
 import { drawerDisplayPosition } from './drawerContents'
 import { useEffect, useState } from 'react'
@@ -79,6 +80,13 @@ export function SceneObjectMesh({
     ? [basePos[0], basePos[1], basePos[2] + (dims.depth - object.dimensions.depth) / 2] : basePos
   const rotationY = dragPreview ? renderedObject.transform.rotationY : (organizePose?.rotationY ?? t.rotationY)
 
+  // 书本姿态：显示尺寸按 bookPose 交换，轮廓按同一姿态偏移/旋转，与碰撞体保持一致。
+  const posedObject = { ...renderedObject, dimensions: dims,
+    transform: { ...renderedObject.transform, bookPose: organizePose?.bookPose ?? renderedObject.transform.bookPose } }
+  const displayDims = bookPoseDimensions(posedObject)
+  const postureOffset = (displayDims.height - dims.height) / 2
+  const postureRotation: [number, number, number] = [bookTurned(posedObject) ? -Math.PI / 2 : 0, 0, 0]
+
   return (
     <group position={[pos[0], pos[1] + dims.height / 2, pos[2]]} rotation={[0, rotationY, 0]}>
       <group
@@ -121,12 +129,16 @@ export function SceneObjectMesh({
         />
       </group>
       {selected || hovered || dragging || activeOperation ? (
-        <CollisionOutline object={displayObject} color="#0F9D8A"
-          opacity={selected || dragging || activeOperation ? 0.85 : 0.4} />
+        <group position={[0, postureOffset, 0]} rotation={postureRotation}>
+          <CollisionOutline object={posedObject} color="#0F9D8A"
+            opacity={selected || dragging || activeOperation ? 0.85 : 0.4} />
+        </group>
       ) : null}
       <ObjectResizeHandles project={project} object={object} selected={selected} />
       {hasIssues || dragInvalid ? (
-        <CollisionOutline object={displayObject} color="#D64545" opacity={dragInvalid ? 0.9 : 0.65} />
+        <group position={[0, postureOffset, 0]} rotation={postureRotation}>
+          <CollisionOutline object={posedObject} color="#D64545" opacity={dragInvalid ? 0.9 : 0.65} />
+        </group>
       ) : null}
     </group>
   )

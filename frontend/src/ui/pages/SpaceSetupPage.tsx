@@ -13,7 +13,7 @@ import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { SpacePreview3D } from '@/ui/setup/SpacePreview3D'
 import { Button } from '@/ui/kit/button'
 import { EmptyState } from '@/ui/kit/empty-state'
-import { Label } from '@/ui/kit/primitives'
+import { Input, Label } from '@/ui/kit/primitives'
 import { MmInput } from '@/ui/kit/mm-input'
 import {
   defaultOutletForm,
@@ -92,17 +92,22 @@ export function SpaceSetupPage() {
   const project = useProject(id)
   const navigate = useNavigate()
   const update = useProjectsStore((s) => s.update)
+  const isCreating = useProjectsStore((s) => Boolean(id && s.creationDrafts[id]))
 
   const [form, setForm] = useState<SpaceForm>(() =>
     project ? roomToForm(project.room) : demoSpaceForm(),
   )
+  const [name, setName] = useState(project?.name ?? '我的宿舍书桌')
 
   // 切换项目（或示例项目首次写入完成）时，用已保存的空间重置表单
   const projectId = project?.id
   useEffect(() => {
     if (projectId) {
       const p = useProjectsStore.getState().projects[projectId]
-      if (p) setForm(roomToForm(p.room))
+      if (p) {
+        setForm(roomToForm(p.room))
+        setName(p.name)
+      }
     }
   }, [projectId])
 
@@ -113,8 +118,8 @@ export function SpaceSetupPage() {
 
   const dirty = useMemo(() => {
     if (!project) return false
-    return JSON.stringify(form) !== JSON.stringify(roomToForm(project.room))
-  }, [form, project])
+    return name.trim() !== project.name || JSON.stringify(form) !== JSON.stringify(roomToForm(project.room))
+  }, [form, name, project])
 
   const savedOutlets = useMemo(
     () => (project ? roomToForm(project.room).outlets : []),
@@ -157,13 +162,17 @@ export function SpaceSetupPage() {
   const updateOutletX = (x: number) =>
     setForm((f) => ({ ...f, outlets: [{ ...(f.outlets[0] ?? defaultOutletForm()), x }] }))
 
-  const revert = () => setForm(roomToForm(project.room))
+  const revert = () => {
+    setName(project.name)
+    setForm(roomToForm(project.room))
+  }
 
   const save = () => {
     if (errors.length > 0) return
     const room = formToRoom(form)
     update(project.id, (p) => ({
       ...p,
+      name: name.trim() || '我的宿舍书桌',
       room,
       // 插座位置调整后：相关走线标记「需要重新规划」（保留路径，可在工作台一键重算）
       cables:
@@ -171,19 +180,19 @@ export function SpaceSetupPage() {
           ? markCablesStaleByIds(p.cables, outletImpact.cableIds)
           : p.cables,
       // 已有物品的项目保持原进度，避免覆盖工作台阶段
-      stage: p.objects.length > 0 ? p.stage : 'photos',
+      stage: isCreating ? 'photos' : p.stage,
     }))
-    navigate(`/projects/${project.id}/import`)
+    navigate(isCreating ? `/projects/${project.id}/import` : `/projects/${project.id}/workspace`)
   }
 
   return (
     <div className="space-y-5">
       <PageIntro
-        step="创建项目 · 1/2"
-        title="为你的书桌，建立空间"
-        description="空间配置"
+        step={isCreating ? '创建项目 · 1/2' : '项目设置'}
+        title={isCreating ? '确认项目与空间' : '调整空间配置'}
+        description={isCreating ? '确认项目名称、固定桌体与墙插位置后继续添加物品。' : '保存后返回当前项目工作台。'}
       >
-        <ProjectSteps projectId={project.id} current="setup" className="flex-wrap" />
+        {isCreating ? <ProjectSteps projectId={project.id} current="setup" className="flex-wrap" /> : null}
       </PageIntro>
 
       {project.isDemo ? (
@@ -195,9 +204,22 @@ export function SpaceSetupPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6">
         {/* ── 表单 ─────────────────────────────────────────────── */}
         <div className="space-y-4">
+          <SectionCard title="项目名称">
+            <div className="space-y-1">
+              <Label htmlFor="project-name">名称</Label>
+              <Input
+                id="project-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="例如：3 号楼 502 书桌"
+              />
+              <p className="text-xs text-faint">名称与空间配置一起保存，返回后可继续当前草稿。</p>
+            </div>
+          </SectionCard>
+
           <SectionCard title="后墙插座">
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
@@ -252,15 +274,19 @@ export function SpaceSetupPage() {
         </div>
 
         {/* ── 预览 / 校验 / 操作 ───────────────────────────────── */}
-        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+        <aside className="sticky top-24 space-y-4 self-start">
           <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
             <h2 className="mb-2 text-sm font-semibold">三维预览</h2>
             <SpacePreview3D room={previewRoom} />
             <p className="mt-2 text-xs leading-relaxed text-faint">
               固定 L 形床桌；线缆经后沿长槽进入桌下，不翻越背板顶沿。
             </p>
+            {form.furnitureModel ? (
+              <p className="mt-1 text-xs leading-relaxed text-faint">
+                正式桌面没有穿线孔，按模型原样显示；线缆沿桌后边缘走线。
+              </p>
+            ) : null}
           </div>
-
 
           <div
             className={cn(
@@ -311,7 +337,9 @@ export function SpaceSetupPage() {
 
           <div className="flex flex-col gap-2">
             <Button size="lg" onClick={save} disabled={errors.length > 0}>
-              {dirty ? '保存空间并前往照片导入' : '前往照片导入'}
+              {isCreating
+                ? dirty ? '保存并添加物品' : '下一步：添加物品'
+                : dirty ? '保存并返回工作台' : '返回工作台'}
               <ArrowRight className="h-4 w-4" />
             </Button>
             <Button variant="ghost" onClick={revert} disabled={!dirty}>

@@ -23,6 +23,8 @@ import { basicMaterial, ringGeometry } from '@/scene/resources'
 import { detectWebGL } from '@/lib/webgl'
 import { Button } from '@/ui/kit/button'
 import type { StepTarget } from '@/lib/guide'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 
 /**
  * 方案交付页的三维视图（只读）。
@@ -279,9 +281,12 @@ export function DeliverViewport({ project, view, focus, onFocus, captureRef }: D
     <SceneErrorBoundary>
       <Canvas
         shadows
-        dpr={[1, 1.75]}
-        camera={{ position: VIEW_PRESETS.top.position, fov: 42 }}
+        frameloop="demand"
+        gl={SCENE_GL_OPTIONS}
+        dpr={sceneDpr()}
+        camera={{ position: VIEW_PRESETS.top.position, fov: 42, ...SCENE_CAMERA_CLIP }}
         onCreated={({ gl, scene, camera }) => {
+          configureSceneRenderer(gl)
           if (!captureRef) return
           captureRef.current = {
             capture: () => {
@@ -296,22 +301,7 @@ export function DeliverViewport({ project, view, focus, onFocus, captureRef }: D
         }}
         onPointerMissed={() => onFocus(null)}
       >
-        <color attach="background" args={['#F4F1EA']} />
-        <ambientLight intensity={0.55} />
-        <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.45]} />
-        <directionalLight
-          position={[2.5, 4, 3]}
-          intensity={1.1}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-left={-3}
-          shadow-camera-right={3}
-          shadow-camera-top={3}
-          shadow-camera-bottom={-3}
-          shadow-camera-near={0.5}
-          shadow-camera-far={14}
-        />
+        <SceneLighting />
         <Suspense fallback={null}>
           <RoomShell room={project.room} showBed={view !== 'top'} />
           {project.objects

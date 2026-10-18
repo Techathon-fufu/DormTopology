@@ -26,6 +26,11 @@ class RecognitionAndModelAPITests(unittest.TestCase):
             workflow_data_dir=data_dir,
         )
         self.client = self.enterContext(TestClient(create_app(self.settings)))
+        service = self.client.app.state.model_service
+        service.generated_models_dir = Path(self.temp.name) / "generated"
+        service.prefab_backup_dir = Path(self.temp.name) / "backup"
+        service.generated_models_dir.mkdir()
+        service.prefab_backup_dir.mkdir()
 
     def test_health_capabilities_include_recognition_and_model(self):
         resp = self.client.get("/api/v1/health")
@@ -161,7 +166,11 @@ class RecognitionAndModelAPITests(unittest.TestCase):
 
         self.assertEqual(final_job["status"], "succeeded")
         self.assertEqual(final_job["result"]["status"], "ready")
-        self.assertEqual(final_job["result"]["asset_url"], "models/items/keyboard.glb")
+        self.assertEqual(
+            final_job["result"]["asset_url"],
+            "models/items/keyboard.glb",
+        )
+        self.assertEqual(final_job["result"]["object_id"], "item_kb")
 
     @patch("backend.app.service.model_generation.RodinClient")
     def test_model_generate_custom_item_with_rodin(self, mock_rodin_cls):
@@ -211,7 +220,11 @@ class RecognitionAndModelAPITests(unittest.TestCase):
 
         self.assertEqual(final_job["status"], "succeeded")
         self.assertEqual(final_job["result"]["status"], "ready")
-        self.assertEqual(final_job["result"]["asset_url"], "models/generated/custom_obj_01.glb")
+        self.assertEqual(
+            final_job["result"]["asset_url"],
+            f"models/generated/proj_test_1_{job_id}.glb",
+        )
+        self.assertEqual(final_job["result"]["object_id"], "custom_obj_01")
         mock_rodin.generate_glb_from_image.assert_called_once()
 
     def test_cancel_standalone_job(self):
@@ -232,3 +245,14 @@ class RecognitionAndModelAPITests(unittest.TestCase):
         cancel_resp = self.client.post(f"/api/v1/jobs/{job_id}/cancel")
         self.assertEqual(cancel_resp.status_code, 200)
         self.assertIn(cancel_resp.json()["status"], ("cancelled", "succeeded"))
+
+        # Exercise the cancellation race deterministically, independent of prefab speed.
+        repo = self.client.app.state.model_service.repository
+        pending = {**repo.get_job(job_id), "job_id": "job_cancel_race", "status": "queued", "result": None, "error": None}
+        repo.create_standalone_job(pending)
+        cancelled = repo.update_standalone_job("job_cancel_race", status="cancelled", stage="Cancelled")
+        for update in ({"status": "running", "progress": .5},
+                       {"status": "succeeded", "result": {"asset_url": "leak.glb"}},
+                       {"status": "failed", "error": {"code": "boom"}}):
+            self.assertEqual(repo.update_standalone_job("job_cancel_race", **update), cancelled)
+        self.assertEqual(repo.get_job("job_cancel_race"), cancelled)

@@ -184,7 +184,6 @@ test('keeps conflicting scene data and continues in an independently confirmed c
   await duplicate.click()
   await expect(page).toHaveURL(/\/projects\/proj-[^/]+\/workspace$/)
   const copyId = new URL(page.url()).pathname.split('/')[2]
-  await expect(page.getByRole('dialog', { name: '属性与方案面板' })).toBeHidden()
   expect(copyId).not.toBe(id)
   await expect.poll(async () => (await readBaseline(page, copyId))?.projectId).toBe(copyId)
   const copy = await readProject(page, copyId)

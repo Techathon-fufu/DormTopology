@@ -20,6 +20,7 @@ export function assignmentFromObject(o: SceneObject): LayoutAssignment {
     objectId: o.id,
     position: [...o.transform.position] as Vec3,
     rotationY: o.transform.rotationY,
+    bookPose: o.transform.bookPose ?? 'original',
     zone: y < 0.1 ? 'floor' : 'free',
   }
 }

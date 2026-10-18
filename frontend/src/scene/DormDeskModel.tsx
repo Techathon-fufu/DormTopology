@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import type { RoomConfig, Vec3 } from '@/types/project'
@@ -19,6 +19,8 @@ import { disposeObject3D, loadModelFromUrl } from '@/scene/modelLoader'
 import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useDrawerStore } from '@/state/drawerStore'
+import { hasFixedFurniture } from './fixedFurniture'
+import { prepareFurnitureAppearance } from './furnitureAppearance'
 import { normalizeProductRoom } from '@/data/fixedRoom'
 
 /**
@@ -27,7 +29,10 @@ import { normalizeProductRoom } from '@/data/fixedRoom'
  * 加载完成前 / 加载失败 / 用户选择简化几何时回退参数化桌体（ParametricDesk，与逻辑尺寸一致）。
  *
  * 固定家具（hasFixedFurniture）走 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
- * （FURNITURE_OFFSET 由 mountDeskModel 施加），完整显示模型定义的桌板，不程序开孔。
+ * （FURNITURE_OFFSET 由 mountDeskModel 施加），直接显示模型内的桌板；
+ * 本地程序化开孔已由远端作者版本取代：GLB 自带后桌板凹口（rear desk notch），
+ * 不再程序开孔，solid-no-notch 说明已过时。
+ * 共面清理由 prepareFurnitureAppearance 在显示副本上完成。非固定家具沿用历史归一化路径。
  * 产品不提供其他家具模型入口。
  *
  * 抽屉推拉：每只抽屉包一层滑动组，逐帧由 drawerStore 的 progress 驱动
@@ -46,12 +51,13 @@ interface MountedDeskParts {
 }
 
 export function DormDeskModel({
-  room,
+  room: roomProp,
   position = [0, 0, 0],
   rotationY = 0,
   visible = true,
   respectToolbar = true,
   hideBedParts = false,
+  forceFallback = false,
 }: {
   room: RoomConfig
   /** 额外位置偏移（米；叠加在归一化结果之上） */
@@ -64,8 +70,10 @@ export function DormDeskModel({
   respectToolbar?: boolean
   /** 显示-only 剖切：俯视时隐藏床体 / 护栏 / 爬梯（整组家具模型；碰撞与校验几何不变） */
   hideBedParts?: boolean
+  /** 强制回退参数化几何（本地新增：导入 / 预览路径需要忽略缓存 GLB） */
+  forceFallback?: boolean
 }) {
-  room = normalizeProductRoom(room)
+  const room = normalizeProductRoom(roomProp)
   const retryNonce = useDeskModelStore((s) => s.retryNonce)
   const status = useDeskModelStore((s) => s.status)
   const showDesk = useDeskModelStore((s) => s.showDesk)
@@ -129,9 +137,11 @@ export function DormDeskModel({
       if (bodyResult.status !== 'fulfilled') return
       const bodyData = bodyResult.value
       const body = bodyData.scene
+      prepareFurnitureAppearance(body)
       const mounted = mountDeskModel(body, DORM_DESK_MODEL_CONFIG, room)
       const drawers = drawerResults.map((result, index) => {
         const scene = (result as PromiseFulfilledResult<{ scene: Group }>).value.scene
+        prepareFurnitureAppearance(scene)
         // 分离件与桌体同一建模坐标系（清单标注未施加平移）：套用桌体归一化的同一变换
         scene.applyMatrix4(body.matrix)
         return { spec: DORM_DESK_DRAWERS[index], scene }
@@ -147,10 +157,10 @@ export function DormDeskModel({
     }
     // roomShapeKey 覆盖归一化依赖的桌面 / 书架尺寸；room 其余字段（如位置微调）不触发重载
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryNonce, roomShapeKey])
+  }, [forceFallback, retryNonce, roomShapeKey])
 
   // 显示-only 剖切（俯视）：隐藏床体 / 护栏 / 爬梯，便于查看桌面与地面布局
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!parts) return
     applyBedCutaway(parts.body, hideBedParts)
   }, [parts, hideBedParts])
@@ -169,17 +179,27 @@ export function DormDeskModel({
     [],
   )
 
+  // 抽屉缓动统一在父级推进一次（避免每只抽屉各自驱动同一状态，造成重复动画驱动）；
+  // 缓动状态变化会触发 invalidate，按需绘制下仍逐帧推进。
+  const drawerMoving = useRef<Partial<Record<string, boolean>>>({})
   useFrame((_, delta) => {
+    const store = useDrawerStore.getState()
     for (const spec of DORM_DESK_DRAWERS) {
-      const store = useDrawerStore.getState(), state = store.drawers[spec.id]
-      if (store.draggingId !== spec.id) {
-        const next = advanceDrawerProgress(state.progress, state.target, delta)
-        if (next !== state.progress) store.setProgress(spec.id, next)
+      const state = store.drawers[spec.id]
+      // 拖拽中 progress 由交互直接写入；其余时间由缓动驱动（running toward target）
+      if (store.draggingId === spec.id) {
+        drawerMoving.current[spec.id] = false
+        continue
       }
+      // 忽略启动前的空闲间隔，之后使用真实帧间隔，避免低帧率下动画变慢
+      const step = drawerMoving.current[spec.id] ? delta : 1 / 60
+      const next = advanceDrawerProgress(state.progress, state.target, step)
+      drawerMoving.current[spec.id] = next !== state.target
+      if (next !== state.progress) store.setProgress(spec.id, next)
     }
   })
 
-  const useGlb = status === 'loaded' && parts !== null
+  const useGlb = hasFixedFurniture(room) && !forceFallback && status === 'loaded' && parts !== null
   return (
     <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
       {useGlb && parts ? (
@@ -196,7 +216,7 @@ export function DormDeskModel({
   )
 }
 
-/** 单只抽屉：滑动组 + 交互 + 逐帧缓动（progress → target） */
+/** 单只抽屉：滑动组 + 交互 + 逐帧跟随（progress 由 DormDeskModel 统一缓动推进） */
 function DeskDrawerPart({ spec, scene }: { spec: DormDeskDrawerSpec; scene: Group }) {
   const pivotRef = useRef<Group>(null)
   const handlers = useDrawerInteraction(spec, scene)

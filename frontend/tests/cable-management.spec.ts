@@ -77,30 +77,17 @@ async function createProject(page: Page) {
 }
 
 async function openPanel(page: Page) {
-  const guideDrawer = page.getByRole('dialog', { name: '属性与方案面板' })
-  if (await guideDrawer.isVisible()) await page.keyboard.press('Escape')
-  const tools = page.getByRole('complementary', { name: '物体与连线', exact: true }).filter({ visible: true })
-  if (!await tools.isVisible()) {
-    await page.getByRole('button', { name: '打开物品面板', exact: true }).click()
-  }
+  const tools = page.getByRole('complementary', { name: '物体与连线', exact: true })
   await expect(tools).toBeVisible()
   await tools.getByRole('button', { name: '连线', exact: true }).click()
-  const panel = page.getByTestId('cable-management-panel').filter({ visible: true })
+  const panel = page.getByTestId('cable-management-panel')
   await expect(panel).toBeVisible()
   return panel
 }
 
-async function closeDrawer(page: Page) {
-  const drawer = page.getByRole('dialog').filter({ visible: true })
-  if (await drawer.count()) await page.keyboard.press('Escape')
-}
-
 async function openRoutingGuide(page: Page) {
-  await closeDrawer(page)
+  // 仅桌面端：右侧引导面板始终停靠，不需要抽屉开合
   const guide = page.getByRole('complementary', { name: '整理与理线', exact: true }).filter({ visible: true })
-  if (!await guide.isVisible()) {
-    await page.getByRole('button', { name: '打开引导与方案', exact: true }).click()
-  }
   await expect(guide).toBeVisible()
   return guide
 }
@@ -121,7 +108,6 @@ async function acceptRoutingCandidate(page: Page, id: string, count: number, tim
 }
 
 async function historyAction(page: Page, action: '撤销' | '重做') {
-  await closeDrawer(page)
   const button = page.getByRole('button', { name: action, exact: true }).filter({ visible: true })
   if (await button.count()) {
     await button.click()
@@ -243,7 +229,6 @@ test('edits installed accessories, persists history, and renders real tray analy
   expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   await panel.getByTestId('tray-analysis').scrollIntoViewIfNeeded()
   await screenshot(page, testInfo, 'real-tray-analysis')
-  await closeDrawer(page)
   await expectScene(page, config.mounts.length - 1)
   await screenshot(page, testInfo, 'accessory-scene')
   panel = await openPanel(page)

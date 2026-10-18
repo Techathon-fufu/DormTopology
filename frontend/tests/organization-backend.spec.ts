@@ -74,10 +74,6 @@ async function openConfirmedPreview(page: Page) {
   expect(plan.serviceMeta.applicable).toBe(true)
   expect(plan.serviceMeta.algorithmVersion).toBeTruthy()
   expect((await readProject(page, id)).objects).toEqual(original.objects)
-  // The mobile drawer closes after generation so the resulting scene stays visible.
-  if (!await page.getByRole('button', { name: '接受方案', exact: true }).isVisible()) {
-    await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
-  }
   await expect(page.getByRole('button', { name: '接受方案', exact: true })).toBeEnabled()
   return { id, original, plan, baselineSourceId: sync.request().postDataJSON().baseline_source_id }
 }
@@ -165,7 +161,7 @@ test('centres the monitor, places the printer beside it and keeps ordinary objec
   }, { url, id })
   await page.goto(`/projects/${id}/workspace`)
   const original = await readProject(page, id)
-  expect(original.objects).toHaveLength(17)
+  expect(original.objects).toHaveLength(14)
   await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
   await page.getByRole('checkbox', { name: '我已核对物品尺寸及整理前位置' }).check()
   await page.getByRole('button', { name: '生成整理方案', exact: true }).last().click()
@@ -174,10 +170,10 @@ test('centres the monitor, places the printer beside it and keeps ordinary objec
   expect(plan.serviceMeta.status).toBe('success')
   expect(plan.serviceMeta.applicable).toBe(true)
   expect(plan.unplaced).toEqual([])
-  expect(plan.assignments).toHaveLength(17)
-  expect(new Set(plan.assignments.map((a: { objectId: string }) => a.objectId)).size).toBe(17)
-  expect(plan.metrics.movableCount).toBe(16)
-  expect(plan.metrics.placedCount).toBe(16)
+  expect(plan.assignments).toHaveLength(14)
+  expect(new Set(plan.assignments.map((a: { objectId: string }) => a.objectId)).size).toBe(14)
+  expect(plan.metrics.movableCount).toBe(13)
+  expect(plan.metrics.placedCount).toBe(13)
   expect(plan.metrics.unplacedCount).toBe(0)
   expect(plan.metrics.overlapCount).toBe(0)
   expect(plan.metrics.outOfBoundsCount).toBe(0)

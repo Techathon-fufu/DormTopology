@@ -107,7 +107,8 @@ CollisionBody = AABB | OBB | Compound
 
 
 def obb_from_item(item: dict) -> OBB:
-    width, height, depth = item["size_m"]
+    from ..book_pose import pose_size
+    width, height, depth = pose_size(item)
     return OBB(
         AABB((-width / 2.0, 0.0, -depth / 2.0), (width / 2.0, height, depth / 2.0)),
         point(item["position"]),

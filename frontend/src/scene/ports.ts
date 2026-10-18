@@ -1,3 +1,4 @@
+import { bookPosePoint, bookPoseDirection } from './bookPose'
 import type { Port, PortDirection, PortType, SceneObject, Vec3 } from '@/types/project'
 import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 
@@ -46,7 +47,7 @@ export function rotateLocalVecY(v: Vec3, rotationY: number): Vec3 {
 
 /** 局部点（相对底面中心）→ 世界坐标 */
 export function localToWorld(object: SceneObject, local: Vec3): Vec3 {
-  const r = rotateLocalVecY(local, object.transform.rotationY)
+  const r = rotateLocalVecY(bookPosePoint(object, local), object.transform.rotationY)
   return [
     object.transform.position[0] + r[0],
     object.transform.position[1] + r[1],
@@ -80,7 +81,7 @@ export function portWorldPosition(object: SceneObject, port: Port): Vec3 {
 
 /** 接口世界朝向（单位向量） */
 export function portWorldDirection(object: SceneObject, port: Port): Vec3 {
-  return rotateLocalVecY(resolvePortLocalDirection(port), object.transform.rotationY)
+  return rotateLocalVecY(bookPoseDirection(object, resolvePortLocalDirection(port)), object.transform.rotationY)
 }
 
 /**

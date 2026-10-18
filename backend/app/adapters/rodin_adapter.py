@@ -131,9 +131,21 @@ class RodinClient:
         self.session.headers["Authorization"] = f"Bearer {self.api_key}"
 
     def _resolve_api_key(self, api_key: Optional[str]) -> str:
-        """Resolve API key from arg or round-robin key pool."""
+        """Resolve API key from an explicit argument, environment variables, or the shared round-robin key pool.
+
+        Resolution order:
+        1. Explicit api_key argument.
+        2. Explicit RODIN_API_KEY / RODIN_API_KEYS environment variables.
+        3. Shared DEFAULT_RODIN_KEY_POOL (round-robin across discovered keys), which
+           also discovers candidate key files (vlm/rodin_key.txt, rodin_key.txt, .env, etc.).
+        """
         if api_key and api_key.strip():
             return api_key.strip()
+
+        env_key = os.environ.get("RODIN_API_KEYS") or os.environ.get("RODIN_API_KEY", "")
+        if env_key.strip():
+            return env_key.replace(";", ",").split(",")[0].strip()
+
         return DEFAULT_RODIN_KEY_POOL.get_next_key()
 
     def _request_with_rate_limit(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:

@@ -67,6 +67,11 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
   const push = (id: string, level: ValidationIssue['level'], message: string) =>
     issues.push({ id, level, message })
 
+  // 出线孔位置校验（深度与直径固定，仅调节左右 X）
+  if (Math.abs(f.hole.x) > f.deskW / 2 - 40) {
+    push('hole-position', 'error', '出线孔需位于桌面范围内，且距桌面边缘 ≥ 40 mm')
+  }
+
   // 插座（固定模型：一块双插孔 ×2 面板，仅可沿后墙左右移动，高度固定）
   f.outlets.forEach((o, i) => {
     const xMax = f.roomL / 2 - OUTLET_EDGE_MARGIN_MM
@@ -152,7 +157,7 @@ export function formToRoom(f: SpaceForm): RoomConfig {
         slots: 2,
       },
     ],
-    note: '固定正式床桌及后沿长槽；仅墙面插座位置可调整',
+    note: '固定标准空间：床桌 / 房间 / 立柱 / 书架 / 出线孔为预设固定模型（不可编辑）；插座可在「空间配置」中调整；床桌及后沿长槽为正式模型',
   })
 }
 

@@ -80,6 +80,7 @@ export function resolveOrganizationPreferences(project: {
 
 /** 方案中的一次落位（含规则解释，保证可解释性） */
 export interface PlanAssignment {
+  bookPose?: import('./project').BookPose
   objectId: string
   position: Vec3
   rotationY: number

@@ -7,7 +7,7 @@ import { drawerIdForSurface, type DrawerOffsets } from './dormDeskDrawers'
 import { backboardSurface, validBackboardMount } from './backboardMount'
 import { isPowerStripObject } from './powerStrip'
 import { roomSolids, cachedRoomSolids } from './roomCollision'
-import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
+import { blockingDrawerOpening, furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
 
 /**
  * 场景摆放校验与支撑面计算（本地真实计算，非模拟）。
@@ -232,8 +232,32 @@ export function objectsOverlapAt(a: SceneObject, aPos: Vec3, b: SceneObject, bPo
 }
 
 /**
+ * 显示坐标 → 保存坐标：落点位于某个已滑出的抽屉内腔时，减掉该抽屉的滑出偏移。
+ *
+ * 校验统一以「显示坐标」进行（抽屉滑出后内腔几何随 offsets 一起平移），
+ * 但抽屉滑出路径属于关闭状态下定义的固定几何，因此阻挡判定必须先换回保存坐标，
+ * 否则抽屉打开时存放在里面的物品会被误判为「挡住抽屉开口」。
+ */
+function closedDrawerPosition(position: Vec3, room: RoomConfig, offsets: DrawerOffsets): Vec3 {
+  if (!hasFixedFurniture(room)) return position
+  // 全部抽屉关闭时显示坐标即保存坐标，跳过几何构建（拖拽每帧都会调用本函数）。
+  if (!Object.values(offsets).some((dx) => Math.abs(dx ?? 0) > 0)) return position
+  for (const surface of furnitureSurfaces(room, false, offsets)) {
+    const drawer = drawerIdForSurface(surface.id)
+    const dx = drawer ? offsets[drawer] ?? 0 : 0
+    if (!dx) continue
+    const r = surface.rect
+    if (position[1] < surface.y - .001 || position[1] > surface.y + surface.clearance + .001) continue
+    if (position[0] < r.x0 - .001 || position[0] > r.x1 + .001) continue
+    if (position[2] < r.z0 - .001 || position[2] > r.z1 + .001) continue
+    return [position[0] - dx, position[1], position[2]]
+  }
+  return position
+}
+
+/**
  * 指定位置下某物品的摆放问题（拖动预览与正式校验共用）。
- * position 为物品底面中心点（米）。
+ * position 为物品底面中心点（米），采用显示坐标（已叠加抽屉滑出偏移）。
  */
 export function placementIssues(
   object: SceneObject,
@@ -298,6 +322,8 @@ export function placementIssues(
       relatedId: roomHits[0].id,
     })
   }
+  const blockedDrawer = blockingDrawerOpening(object, closedDrawerPosition(position, room, offsets), room)
+  if (blockedDrawer) issues.push({ type: 'roomCollision', message: `挡住${blockedDrawer}开口或滑出路径` })
 
   // Every bottom contact must rest on a declared room plane or a real horizontal solid face.
   const contacts = bottomContacts(object, position)

@@ -11,6 +11,7 @@ import { Button } from '@/ui/kit/button'
 import { auditConnections } from './model'
 import { resolvePortLocalDirection } from './portGeometry'
 import { useConnectionsStore } from './store'
+import { IsolatedModelViewport } from './IsolatedModelViewport'
 
 type Draft = { objectId: string; portId?: string; label: string; type: PortType; powered: boolean; note: string; offset: Vec3; localDirection: Vec3; source: string }
 
@@ -18,10 +19,10 @@ type Draft = { objectId: string; portId?: string; label: string; type: PortType;
 const signature = (o: SceneObject) => JSON.stringify([o.transform, o.dimensions, o.model, o.ports])
 
 /**
- * 表面描点页面（全屏会话态，不切换路由、不重挂三维视图）。
+ * 独立的单模型描点页：局部展示副本与工作台位姿分离。
  *
- * - 由工作台右键菜单或走线面板入口打开，三维视口保持原实例，所以没有刷新与相机重置；
- * - 所有描点操作与提示都在本页完成：选物品、在表面标记、重新描点、确认、连线、删除、全场检查；
+ * - 由工作台右键菜单或走线面板入口跳转，三维视口只显示当前物品；
+ * - 本页完成描点、重新定位、确认、删除和检查；选定接口后回工作台连线；
  * - 物品下拉包含隐藏物品（标注「已隐藏」），全场检查的条目可直接「定位」到对应物品与接口；
  * - 草稿只存在于本页会话，保存才写项目；物品在编辑期间变化时拒绝写入旧草稿。
  */
@@ -30,19 +31,17 @@ export function MarkingPage({
   objectId,
   busy = false,
   onExit,
-  onTargetChange,
+  onObjectChange,
 }: {
   project: Project
   objectId: string | null
   busy?: boolean
-  onTargetChange: (id: string) => void
   onExit: () => void
+  /** 切换物品的唯一出口：路由内嵌页面与工作台覆盖层都改用它 */
+  onObjectChange: (objectId: string) => void
 }) {
   const session = useConnectionsStore()
-  const initial = objectId && project.objects.some((o) => o.id === objectId)
-    ? objectId
-    : project.objects.find((o) => o.visible)?.id ?? ''
-  const [target, setTarget] = useState(initial)
+  const target = objectId ?? ''
   const [draft, setDraft] = useState<Draft | null>(null)
   const [focusPort, setFocusPort] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
@@ -54,13 +53,16 @@ export function MarkingPage({
   const audit = useMemo(() => auditConnections(project), [project])
   const object = project.objects.find((o) => o.id === target)
 
-  useEffect(() => { onTargetChange(target) }, [target, onTargetChange])
 
+  // 换物品或重新进入页面即开始取点；未保存草稿不跨物品保留。
   // 从右键菜单切换到另一件物品时同步目标；不重置已打开的草稿以外的东西。
   useEffect(() => {
-    if (objectId && objectId !== target && project.objects.some((o) => o.id === objectId)) setTarget(objectId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objectId])
+    pendingRelocation.current = null
+    setDraft(null)
+    setNotice('')
+    if (target && !blocked) useConnectionsStore.getState().startPick(project.id, target)
+    else useConnectionsStore.getState().cancelPick()
+  }, [project.id, target, blocked])
 
   useEffect(() => {
     useConnectionsStore.getState().open(project.id)
@@ -72,7 +74,7 @@ export function MarkingPage({
 
   useEffect(() => {
     const hit = session.hit
-    if (session.projectId !== project.id || !hit) return
+    if (session.projectId !== project.id || !hit || hit.objectId !== target) return
     const o = useProjectsStore.getState().projects[project.id]?.objects.find((item) => item.id === hit.objectId)
     if (!o) return
     const prior = pendingRelocation.current
@@ -82,8 +84,8 @@ export function MarkingPage({
       return
     }
     const p = o.ports.find((port) => port.id === session.editingPortId)
-    setDraft({ objectId: o.id, portId: p?.id, label: p?.label ?? '', type: p?.type ?? 'usb-a', powered: p?.powered ?? false, note: p?.note ?? '', offset: hit.offset, localDirection: hit.localDirection, source: signature(o) })
-  }, [session.hit, session.projectId, session.editingPortId, project.id])
+    setDraft({ objectId: o.id, portId: p?.id, label: p?.label ?? '', type: p?.type ?? 'power-ac', powered: p?.powered ?? true, note: p?.note ?? '', offset: hit.offset, localDirection: hit.localDirection, source: signature(o) })
+  }, [session.hit, session.projectId, session.editingPortId, project.id, target])
 
   useEffect(() => {
     if (draft && !dialog.current?.open) dialog.current?.showModal()
@@ -133,19 +135,20 @@ export function MarkingPage({
   }
 
   function save() {
-    if (!draft || blocked) return
-    if (useOrganizeStore.getState().isPreviewBlocking()) return
+    if (!draft || blocked) return false
+    if (useOrganizeStore.getState().isPreviewBlocking()) return false
     const current = useProjectsStore.getState().projects[project.id]?.objects.find((o) => o.id === draft.objectId)
     if (!current || signature(current) !== draft.source) {
       cancel()
       setNotice('物品在编辑期间已变化，请重新描点。')
-      return
+      return false
     }
     const old = current.ports.find((p) => p.id === draft.portId)
     const p: Port = { ...old, id: old?.id ?? uid('port'), label: draft.label.trim() || undefined, type: draft.type, powered: draft.powered, note: draft.note.trim() || undefined, offset: draft.offset, localDirection: draft.localDirection, confirmed: old?.confirmed ?? false }
     useWorkspaceStore.getState().updateObject(project.id, current.id, { ports: old ? current.ports.map((x) => (x.id === p.id ? p : x)) : [...current.ports, p] })
     cancel()
     setNotice('接口已保存；请核对并确认。可撤销本次修改。')
+    return true
   }
 
   function remove(o: SceneObject, p: Port) {
@@ -158,15 +161,16 @@ export function MarkingPage({
 
   /** 全场检查条目定位：切到该物品并高亮相关接口（隐藏物品同样可定位并确认） */
   function locate(targetId: string, portId?: string) {
-    setTarget(targetId)
+    cancel()
+    onObjectChange(targetId)
     setFocusPort(portId ?? null)
     setNotice('')
     useWorkspaceStore.getState().select(targetId)
   }
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20" role="region" aria-label="表面描点页面">
-      <header className="pointer-events-auto absolute inset-x-0 top-0 flex flex-wrap items-center gap-2 border-b border-border bg-surface/95 px-3 py-2 shadow-sm backdrop-blur">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-background" role="region" aria-label="表面描点页面">
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-3">
         <Button size="sm" variant="outline" onClick={exit}>返回工作台</Button>
         <h2 className="text-sm font-semibold">表面描点</h2>
         <span className="max-w-[40vw] truncate text-xs text-muted-foreground">
@@ -182,14 +186,18 @@ export function MarkingPage({
         </span>
       </header>
 
-      <aside className="pointer-events-auto absolute inset-x-3 bottom-3 max-h-[46vh] space-y-2 overflow-y-auto rounded-xl border border-border bg-surface/95 p-3 text-xs shadow-lg sm:inset-x-auto sm:bottom-3 sm:right-3 sm:top-14 sm:max-h-none sm:w-[320px]">
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          {object ? <IsolatedModelViewport key={object.id} project={project} object={object} /> : null}
+        </div>
+      <aside aria-label="接口标记设置" className="w-[320px] shrink-0 space-y-3 overflow-y-auto border-l border-border bg-surface p-4 text-xs">
         <label className="block">
           标记物品
           <select
             aria-label="标记物品"
             className="mt-1 w-full rounded border border-border bg-surface p-2"
             value={target}
-            onChange={(e) => { setTarget(e.target.value); cancel() }}
+            onChange={(e) => { cancel(); setFocusPort(null); onObjectChange(e.target.value) }}
           >
             {project.objects.map((o) => (
               <option key={o.id} value={o.id}>{o.visible ? o.name : `${o.name}（已隐藏）`}</option>
@@ -198,7 +206,7 @@ export function MarkingPage({
         </label>
 
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="flex-1" disabled={!object || blocked || !object.visible} onClick={() => object && begin(object)}>
+          <Button size="sm" variant="outline" className="flex-1" disabled={!object || blocked} onClick={() => object && begin(object)}>
             在表面标记接口
           </Button>
           {session.projectId === project.id && session.pickingObjectId ? (
@@ -207,10 +215,11 @@ export function MarkingPage({
         </div>
 
         {object && !object.visible ? (
-          <p className="text-warning">该物品已隐藏：可查看与确认已有接口，需要描点时先在物品列表恢复显示。</p>
+          <p className="text-warning">该物品在工作台中已隐藏；此处单独显示，标记后仍保持隐藏。</p>
         ) : null}
 
         {notice ? <p role="status" className="break-words text-muted-foreground">{notice}</p> : null}
+        {blocked ? <p role="status" className="text-warning">请先返回工作台完成当前规划或退出预览，再编辑接口。</p> : null}
 
         {object?.ports.map((p) => (
           <div key={p.id} data-port-id={p.id} className={cn('space-y-1 rounded border border-border p-2', focusPort === p.id && 'ring-2 ring-primary')}>
@@ -223,7 +232,7 @@ export function MarkingPage({
                   确认接口
                 </Button>
               ) : null}
-              <Button size="sm" variant="ghost" disabled={blocked || !p.confirmed || p.type === 'wireless'} onClick={() => link(project, object.id, p.id)}>以此点连线</Button>
+              <Button size="sm" variant="ghost" disabled={blocked || !p.confirmed || p.type === 'wireless'} onClick={() => { useWorkspaceStore.getState().setMode('cable'); link(project, object.id, p.id); exit() }}>以此点连线</Button>
               <Button size="sm" variant="ghost" disabled={blocked} aria-label={`删除接口 ${p.label ?? p.id}`} onClick={() => remove(object, p)}>删除</Button>
             </div>
           </div>
@@ -233,7 +242,7 @@ export function MarkingPage({
           撤销上次修改
         </Button>
 
-        <details className="rounded border border-border p-2" open>
+        <details className="rounded border border-border p-2">
           <summary className="cursor-pointer">全场检查 · {audit.objects.length} 件物品 · {audit.issues.length} 项阻断</summary>
           <ul className="mt-2 space-y-1">
             {audit.objects.map((o, i) => (
@@ -258,8 +267,9 @@ export function MarkingPage({
           <p className="mt-2 text-muted-foreground">点「定位」切到该物品并高亮相关接口；未接线设备请复核用途，兼容接口不会自动连接。</p>
         </details>
       </aside>
+      </div>
 
-      <p className="pointer-events-none absolute bottom-3 left-3 hidden max-w-[42%] rounded-full border border-border bg-surface/90 px-3 py-1 text-[11px] text-muted-foreground sm:block">
+      <p className="pointer-events-none absolute bottom-3 left-3 max-w-[42%] rounded-full border border-border bg-surface/90 px-3 py-1 text-[11px] text-muted-foreground">
         点击物品表面放置接口 · 拖动空白处旋转视角 · Esc 取消描点 · 右侧切换物品
       </p>
 
@@ -274,12 +284,12 @@ export function MarkingPage({
             <h3 className="font-semibold">{draft.portId ? '编辑接口标记' : '新建接口标记'}</h3>
             <label className="block text-xs">标记名称<input autoFocus maxLength={100} className="mt-1 w-full rounded border border-border bg-surface p-2" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} /></label>
             <label className="block text-xs">接口类型<select className="mt-1 w-full rounded border border-border bg-surface p-2" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as PortType })}>{Object.entries(PORT_TYPE_LABELS).map(([t, l]) => <option key={t} value={t}>{l}</option>)}</select></label>
-            <label className="flex gap-2 text-xs"><input type="checkbox" checked={draft.powered} onChange={(e) => setDraft({ ...draft, powered: e.target.checked })} />受电接口（电源输入）</label>
+            <label className="flex gap-2 text-xs"><input type="checkbox" checked={draft.powered} onChange={(e) => setDraft({ ...draft, powered: e.target.checked })} />受电口（电源输入）</label>
             <label className="block text-xs">标记说明<textarea maxLength={500} className="mt-1 w-full rounded border border-border bg-surface p-2" value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></label>
             <p className="text-xs text-muted-foreground">朝向取自所选表面。位置：{(project.objects.some((o) => o.id === draft.objectId) ? localToWorld(project.objects.find((o) => o.id === draft.objectId)!, draft.offset) : draft.offset).map((n) => Math.round(n * 1000)).join(' / ')} mm</p>
             <Button type="button" variant="outline" size="sm" onClick={() => { pendingRelocation.current = { ...draft }; setDraft(null); session.startPick(project.id, draft.objectId, draft.portId); setNotice('请在模型表面选择新位置。') }}>重新描点</Button>
             <p className="text-xs text-muted-foreground">保存后需确认接口；修改位置会使旧理线失效。</p>
-            <div className="flex gap-2"><Button type="submit" disabled={blocked}>保存接口</Button><Button type="button" variant="outline" onClick={cancel}>取消</Button></div>
+            <div className="flex flex-wrap gap-2"><Button type="submit" disabled={blocked}>保存接口</Button><Button type="button" variant="outline" disabled={blocked} onClick={() => { if (save()) exit() }}>保存并返回工作台</Button><Button type="button" variant="ghost" onClick={cancel}>取消</Button></div>
           </form>
         ) : null}
       </dialog>

@@ -17,7 +17,7 @@ import { repairDuplicatePortIds } from '@/scene/portIds'
  *
  * 两层版本，职责不同，不要混用：
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
- * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
+ * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 定向迁移或归档重种。
  */
 const PROJECTS_PERSIST_VERSION = 7
 
@@ -116,11 +116,15 @@ export function migrateDefaultDemoWiring(project: Project): Project {
 
 interface ProjectsState {
   projects: Record<string, Project>
+  /** 由新版两段式创建流程产生的未完成草稿；旧项目不按 stage 猜测，避免误拦截。 */
+  creationDrafts: Record<string, true>
   ensureDemo: () => void
   /** 重新种入内置示例项目（回到凌乱初始状态，供「一键演示 / 重置重播」使用） */
   resetDemo: () => void
   upsert: (project: Project) => void
   update: (id: string, updater: (p: Project) => Project) => void
+  markCreationDraft: (id: string) => void
+  completeCreationDraft: (id: string) => void
   remove: (id: string) => void
 }
 
@@ -128,8 +132,22 @@ export const useProjectsStore = create<ProjectsState>()(
   persist(
     (set, get) => ({
       projects: {},
+      creationDrafts: {},
       ensureDemo() {
-        const existing = get().projects[DEMO_PROJECT_ID]
+        let existing = get().projects[DEMO_PROJECT_ID]
+        // v6 → v7 只移除演示书本，保留用户对其余物品、接口和房间的编辑。
+        if (DEMO_SEED_VERSION >= 7 && existing?.demoSeedVersion === 6) {
+          get().update(DEMO_PROJECT_ID, (p) => {
+            const removedIds = new Set(p.objects
+              .filter((o) => o.id === 'demo-books' || o.id.startsWith('demo-book-'))
+              .map((o) => o.id))
+            return { ...p, demoSeedVersion: 7,
+              objects: p.objects.filter((o) => !removedIds.has(o.id)),
+              cables: p.cables.filter((c) => !removedIds.has(c.from.objectId) && !removedIds.has(c.to.objectId)),
+            }
+          })
+          existing = get().projects[DEMO_PROJECT_ID]
+        }
         // 不存在，或仍是旧种子版本的示例场景：按最新示例数据重种。
         // 仅作用于内置示例项目，用户自建项目不受影响。
         if (!existing || isDemoProjectStale(existing)) {
@@ -175,24 +193,38 @@ export const useProjectsStore = create<ProjectsState>()(
             updatedAt: Date.now() } },
         }))
       },
+      markCreationDraft(id) {
+        set((s) => ({ creationDrafts: { ...s.creationDrafts, [id]: true } }))
+      },
+      completeCreationDraft(id) {
+        set((s) => {
+          const creationDrafts = { ...s.creationDrafts }
+          delete creationDrafts[id]
+          return { creationDrafts }
+        })
+      },
       remove(id) {
         if (id === DEMO_PROJECT_ID) return // 内置示例项目不可删除
         set((s) => {
           const next = { ...s.projects }
+          const creationDrafts = { ...s.creationDrafts }
           delete next[id]
-          return { projects: next }
+          delete creationDrafts[id]
+          return { projects: next, creationDrafts }
         })
       },
     }),
     {
       name: 'dormtopology.projects',
-      storage: createJSONStorage(() => recordStorage(['projects'])),
+      storage: createJSONStorage(() => recordStorage(['projects', 'creationDrafts'])),
       version: PROJECTS_PERSIST_VERSION,
       /**
        * 迁移历史（两轮改动合并后的口径）：
        * v1 → v2：早期版本把旧示例场景写进了本地存储，示例数据更新后不生效；迁移时按种子版本重种内置示例项目。
        * v2 → v3（0.9.0）：墙面插座收敛为一块「双插孔 ×2」面板（合并历史左右两个独立插座）；
        *   示例项目同时按最新示例数据重种，用户自建项目仅归一插座，其余字段原样保留。
+       * v3 → v4：移除旧预制桌面的虚构孔位；v4 → v5：合并显式创建草稿，保留已有标记、不按 stage 推断。
+       * v5 → v6：预制桌面归一化不再移动物品或重写基线；v6 → v7：修复重复的接口 id（保留端口语义）。
        */
       migrate: (persisted, from) => {
         const state = persisted as Partial<ProjectsState> | undefined
@@ -219,7 +251,7 @@ export const useProjectsStore = create<ProjectsState>()(
           if (p?.objects && p?.cables) projects[id] = repairDuplicatePortIds(p)
         }
         // ensureDemo archives the previous seed after hydration, including schema migrations.
-        return { ...state, projects } as ProjectsState
+        return { ...state, projects, creationDrafts: state.creationDrafts ?? {} } as ProjectsState
       },
     },
   ),

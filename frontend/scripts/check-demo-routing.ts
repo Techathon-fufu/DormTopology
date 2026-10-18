@@ -43,6 +43,8 @@ if (process.argv.includes('--ports-only')) {
 const preferences = resolveOrganizationPreferences(demo)
 const input = { projectId: demo.id, objects: demo.objects, room: demo.room, preferences, confirmed: true }
 const packingScene = { ...toPackingScene(input), baseline_id: 'demo-routing-regression' }
+// The fixed desk has an authored rear passage (no circular holes); packing protects that passage,
+// the hands zone and the seated operation zone.
 assert.equal(packingScene.reserved_zones.length, 3, 'packing protects the authored rear passage, hands and seated operation zones')
 const packing = domain('from backend.app.domain.packing import plan_packing,validate_layout; from backend.examples.packing_demo import preview_scene; s=json.load(sys.stdin); r=plan_packing(s); print(json.dumps({"result":r,"before":validate_layout(s),"after":validate_layout(preview_scene(s,r))}))', packingScene)
 assert.equal(packing.result.status, 'success', JSON.stringify(packing.result.issues))
@@ -66,10 +68,10 @@ assert.equal(organized.objects.find((o) => o.id === 'demo-power-adapter')!.trans
 assert.ok(organized.objects.filter((o) => o.transform.position[1] === 0).every((o) => o.id === 'demo-computer-tower'))
 const tower = organized.objects.find((o) => o.id === 'demo-computer-tower')!
 assert.equal(tower.transform.rotationY, 0, 'computer tower translates around the seated zone before rotating')
-const holeClearance = packingScene.reserved_zones.map((zone) => ({ id: zone.id, label: 'cable hole clearance',
+const holeClearance = packingScene.reserved_zones.map((zone) => ({ id: zone.id, label: 'rear passage clearance',
   min: fromPackingPosition(zone.min, organized.room), max: fromPackingPosition(zone.max, organized.room) }))
 assert.ok(organized.objects.every((object) => objectRoomHits(object, object.transform.position, holeClearance).length === 0),
-  'all organized real collision parts must leave the cable hole top clearance free')
+  'all organized real collision parts must leave the rear passage top clearance free')
 const originalScene = { ...toRoutingScene({ project: demo, confirmed: true }), baseline_id: packingScene.baseline_id }
 const organizedScene = { ...toRoutingScene({ project: organized, confirmed: true }), baseline_id: packingScene.baseline_id }
 assert.deepEqual(originalScene.reserved_zones.map(z => z.id), ['routing:no-baffle-top', 'routing:no-mouse-area', 'routing:no-laptop-overhead:demo-laptop'])

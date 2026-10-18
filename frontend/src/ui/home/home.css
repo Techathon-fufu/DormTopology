@@ -1,32 +1,24 @@
-/**
- * 首页专用样式（仅 / 路由使用）。
- *
- * 主题令牌只定义在 `.home-shell` 上：header 与页面是兄弟节点，共享同一份作用域变量，
- * 不修改全局 html / body 或工作台颜色。
- * 数据契约、算法结果与其余页面外观不受本文件影响。
- */
+/** Homepage composition. Color decisions come from the shared app theme tokens. */
 
 .home-shell {
-  /* 日间：雾白、浅橡木、低饱和青绿 */
-  --home-bg: #f7f8f7;
-  --home-bg-tint: #ecefec;
-  --home-ink: #1f2529;
-  --home-ink-soft: #59636b;
-  --home-line: #e0e4e0;
-  --home-surface: #ffffff;
-  --home-accent: #0b7a72;
-  --home-accent-strong: #096259;
-  --home-accent-ink: #ffffff;
-  --home-chip-bg: #eaf2ef;
-  --home-chip-ink: #0a6a62;
-  --home-hover: rgba(20, 30, 28, 0.055);
-  --home-thumb-a: #e8ede8;
-  --home-thumb-b: #dbe2dd;
-  --home-shadow: 0 14px 34px rgba(20, 26, 24, 0.14);
-  --home-focus: #0b7a72;
+  --home-bg: var(--app-bg);
+  --home-bg-tint: var(--app-muted);
+  --home-ink: var(--app-foreground);
+  --home-ink-soft: var(--app-muted-foreground);
+  --home-line: var(--app-border);
+  --home-surface: var(--app-surface);
+  --home-accent: var(--app-primary);
+  --home-accent-strong: var(--app-primary-hover);
+  --home-accent-ink: var(--app-on-primary);
+  --home-chip-bg: var(--app-primary-soft);
+  --home-chip-ink: var(--app-primary);
+  --home-hover: var(--app-hover);
+  --home-thumb-a: var(--app-thumb-a);
+  --home-thumb-b: var(--app-thumb-b);
+  --home-shadow: var(--app-shadow-overlay);
+  --home-focus: var(--app-primary);
 
   display: flex;
-  /* 旧内核没有 svh：先用 vh 兜底，支持的浏览器再用 svh */
   min-height: 100vh;
   min-height: 100svh;
   flex-direction: column;
@@ -34,28 +26,6 @@
   color: var(--home-ink);
   font-family: 'Inter', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-
-.home-shell[data-theme='dark'] {
-  /* 深夜：石墨灰、柔和薄荷绿、暖色桌灯 */
-  --home-bg: #16191c;
-  --home-bg-tint: #1b1f23;
-  --home-ink: #eaedef;
-  --home-ink-soft: #a6aeb4;
-  --home-line: #2b3136;
-  --home-surface: #1c2125;
-  --home-accent: #8fcdb6;
-  --home-accent-strong: #a6dbc6;
-  --home-accent-ink: #10201b;
-  --home-chip-bg: rgba(143, 205, 182, 0.14);
-  --home-chip-ink: #a9dcc7;
-  --home-hover: rgba(255, 255, 255, 0.06);
-  --home-thumb-a: #2a3136;
-  --home-thumb-b: #22282c;
-  --home-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
-  --home-focus: #8fcdb6;
-
-  color-scheme: dark;
 }
 
 /* ── 顶部栏 ───────────────────────────────────────────── */
@@ -819,134 +789,24 @@
   }
 }
 
-/* ── 响应式 ───────────────────────────────────────────── */
-@media (min-width: 720px) {
-  .home-nav,
-  .home-divider {
-    display: flex;
-  }
-
-  .home-theme-choice {
-    width: 40px;
-    height: 40px;
-  }
+/* ── 桌面基线：导航、主题切换与首页主视觉 ─────────────── */
+.home-nav,
+.home-divider {
+  display: flex;
 }
 
-@media (min-width: 1024px) {
-  .home-hero-copy {
-    width: 50%;
-    max-width: 680px;
-    margin: 0;
-    padding-left: clamp(32px, 4vw, 56px);
-  }
-
-  .home-headline {
-    font-size: clamp(56px, 5.9vw, 84px);
-  }
+.home-theme-choice {
+  width: 40px;
+  height: 40px;
 }
 
-@media (max-width: 1023px) {
-  /* 窄屏改为上下结构：文字在实色底上，场景图单独成块，避免文字压住家具 */
-  .home-hero {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    background: var(--home-bg);
-  }
-
-  .home-hero::before {
-    display: none;
-  }
-
-  .home-hero-copy {
-    order: 1;
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 32px clamp(16px, 4vw, 40px) 24px;
-    justify-content: flex-start;
-  }
-
-  .home-hero-art {
-    position: relative;
-    inset: auto;
-    order: 2;
-    height: auto;
-    flex: 1 1 auto;
-    min-height: clamp(240px, 40svh, 460px);
-    overflow: hidden;
-  }
-
-  .home-hero-img {
-    object-position: 62% center;
-  }
-
-  .home-hero-actions {
-    margin-top: 24px;
-  }
-
-  .home-scene-label {
-    right: clamp(16px, 4vw, 40px);
-  }
-
-  .home-headline {
-    font-size: clamp(38px, 8.6vw, 56px);
-  }
+.home-hero-copy {
+  width: 50%;
+  max-width: 680px;
+  margin: 0;
+  padding-left: clamp(32px, 4vw, 56px);
 }
 
-@media (max-width: 719px) {
-  /* 帮助按钮靠右，绝对定位的面板会从左侧溢出屏幕：窄屏改为贴边铺满 */
-  .home-help-panel {
-    position: fixed;
-    top: 68px;
-    left: 12px;
-    right: 12px;
-    width: auto;
-    max-width: none;
-  }
-
-  .home-recent-inner {
-    height: 84px;
-    gap: 8px;
-  }
-
-  .home-recent-name {
-    max-width: 96px;
-  }
-
-  .home-space-main {
-    min-height: 68px;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 4px;
-  }
-
-  .home-space-meta {
-    gap: 12px;
-  }
-
-  .home-space-meta span:last-child {
-    display: none;
-  }
-
-  .home-space-menu {
-    width: 168px;
-  }
-}
-
-@media (pointer: coarse) {
-  .home-theme-choice,
-  .home-help > summary,
-  .home-space-more {
-    min-width: 44px;
-    min-height: 44px;
-  }
-}
-
-@media (max-width: 719px) {
-  .home-recent-inner { height: auto; min-height: 76px; flex-wrap: wrap; padding-block: 12px; }
-  .home-recent-item:nth-of-type(2) { display: none; }
-  .home-recent-more { margin-left: auto; }
-  .home-space-meta { flex-wrap: wrap; }
+.home-headline {
+  font-size: clamp(56px, 5.9vw, 84px);
 }

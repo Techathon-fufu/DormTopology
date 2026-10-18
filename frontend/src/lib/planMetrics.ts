@@ -287,7 +287,7 @@ export function resolvePlanScene(plan: LayoutPlan, project: Project): ResolvedPl
     if (!object) continue
     objects.push({
       ...object,
-      transform: { ...object.transform, position: [...assignment.position] as Vec3, rotationY: assignment.rotationY },
+      transform: { ...object.transform, position: [...assignment.position] as Vec3, rotationY: assignment.rotationY, bookPose: assignment.bookPose ?? object.transform.bookPose },
     })
   }
   return { planId: plan.id, objects, cables: [], room: project.room, fallback: true }
@@ -309,7 +309,7 @@ const r3 = (v: number) => Math.round(v * 1000) / 1000
 const poseKey = (object: SceneObject): string =>
   `${r3(object.transform.position[0])},${r3(object.transform.position[1])},${r3(
     object.transform.position[2],
-  )},${r3(object.transform.rotationY)}`
+  )},${r3(object.transform.rotationY)},${object.transform.bookPose ?? 'original'}`
 
 const cableKey = (cable: CableConnection, objects: SceneObject[]): string => {
   const visibility = resolveCableVisibility(cable, objects).visibility

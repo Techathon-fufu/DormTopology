@@ -153,6 +153,10 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _fail(path + ".size_m", "dimensions must be positive")
         _vector(item["position"], 3, path + ".position")
         _number(item["rotation_y_rad"], path + ".rotation_y_rad")
+        if "book_pose" in item:
+            _enum(item["book_pose"], {"original", "upright", "flat"}, path + ".book_pose")
+            if item["category"] not in {"book", "books"}:
+                _fail(path + ".book_pose", "only books support book posture")
         try:
             validate_item_geometry(item)
         except (OverflowError, ValueError) as error:

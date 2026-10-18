@@ -1,9 +1,4 @@
-import { effectiveCableHoles, furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
-import { useDrawerStore } from '@/state/drawerStore'
-import { drawerIdForSurface, DORM_DESK_DRAWERS } from '@/scene/dormDeskDrawers'
-import { objectDrawerId } from '@/scene/drawerContents'
-import { placePowerStripOnBackboard, orientPowerStrip } from '@/scene/backboardMount'
-import { placementAtSupport } from '@/scene/placementEditing'
+import { ScaleControls } from './LeftPanel'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -365,15 +360,15 @@ function ObjectInspector({
         <Label>尺寸（毫米）</Label>
         <div className="grid grid-cols-3 gap-1.5">
           <div className="space-y-0.5">
-            <MmInput label="物品宽度" value={dims.width} min={10} onChange={(v) => patch({ dimensions: { width: v } })} />
+            <MmInput value={dims.width} min={10} onChange={(v) => patch({ dimensions: { width: v } })} />
             <p className="text-center text-[11px] text-faint">宽</p>
           </div>
           <div className="space-y-0.5">
-            <MmInput label="物品高度" value={dims.height} min={5} onChange={(v) => patch({ dimensions: { height: v } })} />
+            <MmInput value={dims.height} min={5} onChange={(v) => patch({ dimensions: { height: v } })} />
             <p className="text-center text-[11px] text-faint">高</p>
           </div>
           <div className="space-y-0.5">
-            <MmInput label="物品深度" value={dims.depth} min={10} onChange={(v) => patch({ dimensions: { depth: v } })} />
+            <MmInput value={dims.depth} min={10} onChange={(v) => patch({ dimensions: { depth: v } })} />
             <p className="text-center text-[11px] text-faint">深</p>
           </div>
         </div>
@@ -420,39 +415,13 @@ function ObjectInspector({
           disabled={locked || !support || supportDeltaMm === 0}
           title={support ? `吸附到「${support.label}」表面` : '当前位置在房间外，没有支撑面'}
           onClick={() => {
-            if (support) {
-              const candidate = orientPowerStrip(object, false)
-              patch({ dimensions: candidate.dimensions, ports: candidate.ports, powerStrip: candidate.powerStrip,
-                transform: { ...candidate.transform, position: [pos[0], support.y, pos[2]] } })
-            }
+            if (support) patch({ transform: { position: [pos[0], support.y, pos[2]] } })
           }}
         >
           <Magnet className="h-3.5 w-3.5" />
           {support ? `吸附到${support.label}` : '无可吸附的支撑面'}
           {support && supportDeltaMm !== 0 ? `（${supportDeltaMm! > 0 ? '+' : ''}${supportDeltaMm} mm）` : ''}
         </Button>
-        {hasFixedFurniture(project.room) && <>
-          {isPowerStripObject(object) ? <Button className="w-full" variant="outline" size="sm" disabled={locked} onClick={() => {
-            const mounted = placePowerStripOnBackboard(object, project.room)
-            patch({ transform: mounted.transform, dimensions: mounted.dimensions, ports: mounted.ports, powerStrip: mounted.powerStrip })
-            useWorkspaceStore.getState().setViewPreset('front')
-          }}>吸附到桌下背板</Button> : <Select aria-label="放入抽屉或柜格" value="" disabled={locked} onChange={(e) => {
-            const s = furnitureSurfaces(project.room, false).find(s => s.id === e.target.value)
-            if (!s) return
-            const candidate = placementAtSupport(object, { ...s, surfaceId: s.id, x: (s.rect.x0 + s.rect.x1) / 2, z: (s.rect.z0 + s.rect.z1) / 2 }, project.room, project.objects)
-            patch({ transform: candidate.transform })
-            const drawer = drawerIdForSurface(s.id)
-            if (drawer) useDrawerStore.getState().open(drawer)
-            useWorkspaceStore.getState().setViewPreset('left')
-          }}>
-            <option value="">放入抽屉或柜格…</option>
-            {furnitureSurfaces(project.room, false).filter(s => s.kind === 'drawer' || s.id.startsWith('support-cabinet')).map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </Select>}
-          {objectDrawerId(object, project.room) && <p className="text-xs text-muted-foreground">已放入{DORM_DESK_DRAWERS.find(s => s.id === objectDrawerId(object, project.room))?.label}，随抽屉移动；拖出即可取出。</p>}
-          <div className="flex gap-1" aria-label="抽屉开合">
-            {DORM_DESK_DRAWERS.map(s => <Button key={s.id} variant="outline" size="sm" aria-label={`${s.label}开/关`} className="min-w-0 flex-1 px-0 text-[11px]" disabled={useWorkspaceStore.getState().mode === 'cable'} onClick={() => useDrawerStore.getState().toggle(s.id)}>{s.label.replace('抽屉', '')}开/关</Button>)}
-          </div>
-        </>}
       </section>
 
       <section className="space-y-1.5">
@@ -463,7 +432,7 @@ function ObjectInspector({
               key={d}
               size="sm"
               variant={deg === d ? 'primary' : 'outline'}
-              disabled={locked || object.powerStrip?.mount === 'backboard'}
+              disabled={locked}
               className="h-8 flex-1 px-0 text-xs"
               onClick={() => patch({ transform: { rotationY: degToRad(d) } })}
             >
@@ -471,7 +440,7 @@ function ObjectInspector({
             </Button>
           ))}
         </div>
-        <DegInput value={deg} disabled={locked || object.powerStrip?.mount === 'backboard'} onCommit={(d) => patch({ transform: { rotationY: degToRad(d) } })} />
+        <DegInput value={deg} disabled={locked} onCommit={(d) => patch({ transform: { rotationY: degToRad(d) } })} />
       </section>
 
       <section className="space-y-1.5">
@@ -494,9 +463,10 @@ function ObjectInspector({
             ))}
           </ul>
         )}
-        <p className="text-[11px] leading-relaxed text-faint">
-          红色线框与左侧 ⚠ 表示干涉（越界、相交或穿模）。拖动和位置编辑保留落点，仅作提醒；尺寸修改会检查碰撞和边界，冲突时保留原尺寸。
-        </p>
+        {issues.length > 0 ? <details className="text-[11px] leading-relaxed text-muted-foreground">
+          <summary className="cursor-pointer">如何处理位置问题</summary>
+          <p className="mt-1">拖动物品或调整坐标，避开红色线框标出的干涉位置。</p>
+        </details> : null}
       </section>
 
       <Separator />
@@ -642,7 +612,7 @@ function ProjectSummary({ project }: { project: Project }) {
             value={`${mm3([project.room.desk.width, project.room.desk.depth])} · 台面高 ${formatMm(project.room.desk.height)}`}
           />
           <Row label="书架" value={project.room.shelf.enabled ? `${project.room.shelf.levels} 层` : '无'} />
-          <Row label="出线孔" value={`${effectiveCableHoles(project.room).length} 个`} />
+          <Row label="出线孔" value={`${project.room.cableHoles.length} 个`} />
           <Row label="后墙插座" value={`${project.room.outlets.length} 块 · 双插孔 ×2`} />
         </dl>
         {project.room.note ? (
@@ -680,9 +650,6 @@ function ProjectSummary({ project }: { project: Project }) {
         <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${project.id}/import`)}>
           修改物品与照片
         </Button>
-        <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${project.id}/guide`)}>
-          查看交付方案
-        </Button>
       </div>
 
       <p className="text-[11px] leading-relaxed text-faint">
@@ -694,7 +661,7 @@ function ProjectSummary({ project }: { project: Project }) {
 
 /**
  * 右侧属性面板：随选中对象显示尺寸 / 位置 / 旋转 / 接口 / 模型状态 / 位置校验；
- * 未选中时显示空间与项目摘要。停靠（宽屏）或抽屉（窄屏）复用同一内容。
+ * 未选中时显示空间与项目摘要。
  */
 export function RightPanel({
   project,
@@ -715,6 +682,7 @@ export function RightPanel({
 
   return (
     <aside className={cn('flex flex-col border-border bg-surface', className)}>
+      {selected && !selected.powerStrip && selected.model.shape !== 'powerStrip' ? <ScaleControls project={project} object={selected} /> : null}
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
         <h2 className="text-sm font-semibold">
           {selected ? '对象属性' : '空间与项目'}

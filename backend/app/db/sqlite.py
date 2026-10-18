@@ -12,6 +12,9 @@ from ..service.errors import Conflict, NotFound
 from ..service.ports import SceneRecord
 
 
+TERMINAL_STANDALONE_STATUSES = ("cancelled", "failed", "succeeded")
+
+
 def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -232,11 +235,16 @@ class SQLiteOrganizationRepository:
     ) -> dict | None:
         with self._transaction() as connection:
             row = connection.execute(
-                "SELECT envelope FROM standalone_jobs WHERE job_id = ?", (job_id,)
+                "SELECT status, envelope FROM standalone_jobs WHERE job_id = ?",
+                (job_id,),
             ).fetchone()
             if row is None:
                 return None
             envelope = json.loads(row["envelope"])
+            # Once a standalone job reaches a terminal state, later writes must
+            # not resurrect it or mutate the retained terminal envelope.
+            if row["status"] in TERMINAL_STANDALONE_STATUSES:
+                return envelope
             if status is not None:
                 envelope["status"] = status
             if stage is not None:

@@ -33,6 +33,8 @@ import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { CameraRig } from '@/scene/CameraRig'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 import { RoomShell } from '@/scene/RoomShell'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { CompareCables, CompareObjectMesh, DIFF_COLOR } from '@/scene/PlanCompareScene'
@@ -438,7 +440,7 @@ export function PlanComparePage() {
           {project.name}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-[11px] text-muted-foreground sm:inline">
+          <span className="text-[11px] text-muted-foreground">
             所有方案共用同一相机角度与场景尺寸
           </span>
           <Segmented
@@ -458,9 +460,9 @@ export function PlanComparePage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* 方案选择：宽屏为左栏；窄屏为顶部可滚动列表 */}
-        <aside className="flex max-h-44 w-full shrink-0 flex-col border-b border-border bg-surface lg:max-h-none lg:w-72 lg:border-b-0 lg:border-r">
+      <div className="flex min-h-0 flex-1 flex-row">
+        {/* 方案选择：左侧固定栏 */}
+        <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-surface">
           <div className="space-y-2 border-b border-border p-3">
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-semibold">选择方案</span>
@@ -634,26 +636,13 @@ export function PlanComparePage() {
                       {webglOk ? (
                         <Canvas
                           shadows
-                          dpr={[1, 2]}
-                          camera={{ position: [1.9, 1.6, 2.6], fov: 42 }}
+                          frameloop="demand"
+                          gl={SCENE_GL_OPTIONS}
+                          dpr={sceneDpr()}
+                          camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+                          onCreated={({ gl }) => configureSceneRenderer(gl)}
                         >
-                          <color attach="background" args={['#F4F1EA']} />
-                          <fog attach="fog" args={['#F4F1EA', 9, 20]} />
-                          <ambientLight intensity={0.55} />
-                          <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.45]} />
-                          <directionalLight
-                            position={[2.5, 4, 3]}
-                            intensity={1.1}
-                            castShadow
-                            shadow-mapSize-width={2048}
-                            shadow-mapSize-height={2048}
-                            shadow-camera-left={-3}
-                            shadow-camera-right={3}
-                            shadow-camera-top={3}
-                            shadow-camera-bottom={-3}
-                            shadow-camera-near={0.5}
-                            shadow-camera-far={14}
-                          />
+                          <SceneLighting />
                           <Suspense fallback={null}>
                             {baselineRoom ? (
                               <>
@@ -758,10 +747,10 @@ export function PlanComparePage() {
                       className={cn(
                         'grid gap-3',
                         selectedPlans.length === 1
-                          ? 'grid-cols-1 lg:grid-cols-1'
+                          ? 'grid-cols-1'
                           : selectedPlans.length === 2
-                            ? 'grid-cols-1 lg:grid-cols-2'
-                            : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3',
+                            ? 'grid-cols-2'
+                            : 'grid-cols-3',
                       )}
                     >
                       {selectedPlans.map((plan) => {
@@ -924,7 +913,7 @@ export function PlanComparePage() {
 
               {/* 右侧：当前方案详情（视口 tab 的「切换查看」内容） */}
               {tab === 'viewport' && activePlan ? (
-                <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-l border-border bg-surface p-3 xl:flex">
+                <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-border bg-surface p-3">
                   <h3 className="text-[13px] font-semibold">当前视口方案详情</h3>
                   <p className="mt-0.5 truncate text-[11px] text-muted-foreground" title={activePlan.name}>
                     {activePlan.name} · 来源：{sourceLabel(activePlan)}

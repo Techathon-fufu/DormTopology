@@ -3,11 +3,11 @@ import { Grid } from '@react-three/drei'
 import type { RoomConfig } from '@/types/project'
 import { effectiveCableHoles, hasFixedFurniture } from './fixedFurniture'
 import { DormDeskModel } from './DormDeskModel'
-import { boxGeometry, standardMaterial, torusGeometry } from './resources'
+import { boxGeometry, planeGeometry, standardMaterial, torusGeometry } from './resources'
 
-const WALL = '#EFECE6'
-const FLOOR = '#E9E4DB'
-const METAL = '#3A3F45'
+const WALL = '#F8FAFB'
+const FLOOR = '#E5EBED'
+const METAL = '#64727B'
 
 /**
  * 房间外壳与床架结构：地面 / 墙面 / 网格 + 床架横梁 / 床板 / 梯子 + 墙面插座。
@@ -65,25 +65,29 @@ export function RoomShell({
       />
       <mesh
         receiveShadow
-        position={[0, H / 2, -0.025]}
-        geometry={boxGeometry(L, H, 0.05)}
+        position={[0, H / 2, -0.002]}
+        geometry={planeGeometry(L, H)}
         material={wallMat}
       />
       <mesh
         receiveShadow
-        position={[-L / 2 - 0.025, H / 2, D / 2]}
-        geometry={boxGeometry(0.05, H, D)}
+        position={[-L / 2 - 0.002, H / 2, D / 2]}
+        rotation={[0, Math.PI / 2, 0]}
+        geometry={planeGeometry(D, H)}
         material={wallMat}
       />
       <Grid
+        material-depthWrite={false}
         position={[0, 0.004, D / 2]}
         args={[L, D]}
         cellSize={0.1}
         sectionSize={0.5}
-        cellColor="#DCD6C9"
-        sectionColor="#CFC7B6"
-        fadeDistance={9}
-        fadeStrength={1.4}
+        cellColor="#D7E1E4"
+        sectionColor="#C5D4D8"
+        cellThickness={0.35}
+        sectionThickness={0.5}
+        fadeDistance={5}
+        fadeStrength={2}
       />
 
       {/* 所有页面共用正式桌体；加载失败仅显示同源简化几何 */}

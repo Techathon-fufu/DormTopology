@@ -37,6 +37,7 @@ class Item(TypedDict):
     size_m: Vec3
     position: Vec3
     rotation_y_rad: float
+    book_pose: NotRequired[Literal["original", "upright", "flat"]]
     dimensions_source: str
     dimensions_confirmed: bool
     fixed: bool
@@ -113,6 +114,7 @@ class PackingItem(TypedDict):
     current_pos: Vec3
     target_pos: Vec3
     target_rotation_y_rad: float
+    target_book_pose: NotRequired[Literal["original", "upright", "flat"]]
     target_region_id: str | None
     placement_status: Literal["placed", "unchanged", "unplaced"]
     reason_code: str | None

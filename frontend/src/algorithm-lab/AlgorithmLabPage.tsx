@@ -134,6 +134,7 @@ export function AlgorithmLabPage() {
     const targets = new Map(bundle.packingResult.items.map(item => [item.item_id, item]))
     return { ...bundle.scene, items: bundle.scene.items.map(item => ({ ...item,
       position: targets.get(item.id)!.target_pos, rotation_y_rad: targets.get(item.id)!.target_rotation_y_rad,
+      ...(targets.get(item.id)!.target_book_pose !== undefined ? { book_pose: targets.get(item.id)!.target_book_pose } : {}),
     })) }
   }, [bundle])
   const shown = phase === 'before' ? bundle?.scene : after

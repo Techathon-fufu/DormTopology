@@ -85,8 +85,14 @@ export function ProjectsPage() {
           </h1>
           <p className="home-subtitle">整理与理线，一目了然。</p>
           <div className="home-hero-actions">
-            <Link to="/projects/new" className="home-cta">创建项目<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
-            <button type="button" className="home-cta-secondary" onClick={startDemoTour}>体验示例<ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+            <Link to="/projects/new" className="home-cta">
+              创建项目
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <button type="button" className="home-cta-secondary" onClick={startDemoTour}>
+              体验示例
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
         </div>
         <span className="home-scene-label">场景示意 · 非项目截图</span>
@@ -157,8 +163,6 @@ export function ProjectsPage() {
               ))}
             </ul>
           )}
-
-
         </section>
       ) : null}
     </div>

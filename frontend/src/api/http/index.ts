@@ -196,7 +196,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
           const targets = objects.map((object) => {
             const target = assignments.get(object.id)
             if (!target) throw new ApiError('整理结果引用错误', { kind: 'input' })
-            return { ...object, visible: true, transform: { position: target.position, rotationY: target.rotationY } }
+            return { ...object, visible: true, transform: { ...object.transform, position: target.position, rotationY: target.rotationY, bookPose: target.bookPose ?? object.transform.bookPose } }
           })
           assertRecommendedScenePlacement(targets, room, objects)
           const expected = toPackingScene({ projectId, objects: targets, room, preferences, confirmed: true, ref: known })

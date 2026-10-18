@@ -6,6 +6,8 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ..book_pose import pose_direction, pose_point, pose_size, unpose_point
+
 Point = tuple[float, float, float]
 Footprint = tuple[tuple[float, float], ...]
 EPSILON = 0.001
@@ -61,22 +63,26 @@ def rotate_y(vector: Point, angle: float) -> Point:
 
 def local_to_world(item: dict, local: Sequence[float]) -> Point:
     return add(
-        point(item["position"]), rotate_y(point(local), item.get("rotation_y_rad", 0.0))
+        point(item["position"]),
+        rotate_y(pose_point(item, local), item.get("rotation_y_rad", 0.0)),
     )
 
 
 def world_to_local(item: dict, world: Sequence[float]) -> Point:
-    return rotate_y(
-        sub(point(world), point(item["position"])), -item.get("rotation_y_rad", 0.0)
+    return unpose_point(
+        item,
+        rotate_y(sub(point(world), point(item["position"])), -item.get("rotation_y_rad", 0.0)),
     )
 
 
 def direction_to_world(item: dict, local: Sequence[float]) -> Point:
-    return rotate_y(point(local), item.get("rotation_y_rad", 0.0))
+    return rotate_y(pose_direction(item, local), item.get("rotation_y_rad", 0.0))
 
 
 def direction_to_local(item: dict, world: Sequence[float]) -> Point:
-    return rotate_y(point(world), -item.get("rotation_y_rad", 0.0))
+    return pose_direction(
+        item, rotate_y(point(world), -item.get("rotation_y_rad", 0.0)), inverse=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -90,7 +96,7 @@ class AABB:
 
 
 def footprint(item: dict) -> Footprint:
-    width, _, depth = item["size_m"]
+    width, _, depth = pose_size(item)
     corners = (
         (-width / 2, -depth / 2),
         (width / 2, -depth / 2),
@@ -98,7 +104,9 @@ def footprint(item: dict) -> Footprint:
         (-width / 2, depth / 2),
     )
     return tuple(
-        (p[0], p[2]) for x, z in corners for p in (local_to_world(item, (x, 0, z)),)
+        (p[0], p[2])
+        for x, z in corners
+        for p in (add(point(item["position"]), rotate_y((x, 0, z), item.get("rotation_y_rad", 0))),)
     )
 
 
@@ -112,7 +120,7 @@ def aabb_from_item(item: dict) -> AABB:
         (min(p[0] for p in corners), item["position"][1], min(p[1] for p in corners)),
         (
             max(p[0] for p in corners),
-            item["position"][1] + item["size_m"][1],
+            item["position"][1] + pose_size(item)[1],
             max(p[1] for p in corners),
         ),
     )
@@ -139,7 +147,7 @@ def pose_extent(item: dict) -> tuple[float, float, float]:
             max((maximum[2] - minimum[2]) / 2, 0.0),
             max(maximum[1] - min(minimum[1], 0.0), 0.0),
         )
-    width, height, depth = item["size_m"]
+    width, height, depth = pose_size(item)
     return (width / 2, depth / 2, height)
 
 
@@ -170,7 +178,7 @@ def validate_item_geometry(item: dict) -> None:
     """Reject boxes whose world geometry collapses or overflows float precision."""
     _footprint_axes(footprint(item))
     bottom = float(item["position"][1])
-    top = bottom + float(item["size_m"][1])
+    top = bottom + float(pose_size(item)[1])
     if not math.isfinite(top) or top <= bottom:
         raise ValueError("item height must have finite nonzero world extent")
 
@@ -190,7 +198,7 @@ def items_overlap(a: dict, b: dict) -> bool:
         from .convex import items_overlap as compound_overlap
         return compound_overlap(a, b)
     ay, by = a["position"][1], b["position"][1]
-    if min(ay + a["size_m"][1], by + b["size_m"][1]) - max(ay, by) <= NUMERIC_EPSILON:
+    if min(ay + pose_size(a)[1], by + pose_size(b)[1]) - max(ay, by) <= NUMERIC_EPSILON:
         return False
     return footprints_overlap(footprint(a), footprint(b))
 
@@ -203,7 +211,7 @@ def item_intersects_box(item: dict, box: AABB) -> bool:
         return any(overlap(p,(vertices,axes,axes)) for p in world_parts(item))
     y = item["position"][1]
     if (
-        min(y + item["size_m"][1], box.maximum[1]) - max(y, box.minimum[1])
+        min(y + pose_size(item)[1], box.maximum[1]) - max(y, box.minimum[1])
         <= NUMERIC_EPSILON
     ):
         return False

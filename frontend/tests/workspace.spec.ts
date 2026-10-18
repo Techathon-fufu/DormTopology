@@ -175,10 +175,12 @@ test('uses the solid prefab desktop in setup without invented hole controls', as
   const failures = collectRuntimeFailures(page)
   await page.goto(`/projects/${demoProjectId}/setup`)
   await expect(page.locator('canvas')).toBeVisible()
+  // 固定家具配置不再提供书架分层与出线孔参数，实心桌面按模型原样显示。
   await expect(page.getByRole('checkbox', { name: '书架', exact: true })).toHaveCount(0)
   await expect(page.getByLabel('离桌高度（最下层）', { exact: true })).toHaveCount(0)
   await expect(page.getByText('未发现数值越界或明显结构冲突', { exact: true })).toBeVisible()
   await expectNonblankCanvas(page)
+  // 桌体 GLB 自带后沿出线缺口，正式桌面按模型原样显示；线缆沿桌后缺口走线，不翻越背板顶沿。
   await expect(page.getByText('固定 L 形床桌；线缆经后沿长槽进入桌下，不翻越背板顶沿。')).toBeVisible()
   await expect(page.getByLabel('孔 X（左右）', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '前往照片导入', exact: true })).toBeEnabled()

@@ -47,18 +47,17 @@ export function StatusBar({
   const firstIssueId = issuesById.keys().next().value as string | undefined
 
   return (
-    <footer aria-label="工作台状态" className="relative z-30 flex h-10 shrink-0 items-center gap-3 border-t border-border bg-surface px-3 text-xs text-muted-foreground sm:px-4">
-      <span className="hidden shrink-0 items-center gap-1.5 md:inline-flex">
+    <footer aria-label="工作台状态" className="relative z-30 flex h-10 shrink-0 items-center gap-3 border-t border-border bg-surface px-4 text-xs text-muted-foreground">
+      <span className="inline-flex shrink-0 items-center gap-1.5">
         <span className="font-medium text-foreground">
           {mode === 'organize' ? '整理物品' : '规划走线'}
         </span>
-
       </span>
 
       <span role="status" className="min-w-0 flex-1 truncate font-medium text-primary" title={flash ?? undefined}>{flash ?? (preview ? '预览尚未应用 · 原布局保留' : '布局已保存至本机')}</span>
 
       {issueCount > 0 ? <button type="button" className="inline-flex shrink-0 items-center gap-1 text-warning" title="定位到第一个有警示的物品" onClick={() => { if (firstIssueId) select(firstIssueId) }}><AlertTriangle className="h-3.5 w-3.5" />{preview ? '原布局' : '警示'} {issueCount} 件</button> : null}
-      <span className="hidden shrink-0 tabular-nums lg:inline">物品 {project.objects.length} · 线缆 {project.cables.length}</span>
+      <span className="shrink-0 tabular-nums">物品 {project.objects.length} · 线缆 {project.cables.length}</span>
       <details className="group shrink-0">
         <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg px-2 hover:bg-muted [&::-webkit-details-marker]:hidden">
           {active.length > 0 ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : null}

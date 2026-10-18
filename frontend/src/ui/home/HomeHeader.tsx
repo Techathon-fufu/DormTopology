@@ -1,13 +1,11 @@
 import { Link } from 'react-router-dom'
-import { HelpCircle, Moon, Sun } from 'lucide-react'
+import { HelpCircle } from 'lucide-react'
 import { LogoMark } from '@/ui/brand/LogoMark'
 import { Dropdown } from '@/ui/kit/dropdown'
-import { useHomeTheme } from '@/ui/home/useHomeTheme'
+import { ThemeToggle } from '@/ui/theme/ThemeToggle'
 
-/** 首页顶部栏：品牌、我的项目、帮助、日夜外观。所有颜色来自 .home-shell 的作用域令牌。 */
+/** 首页顶部栏：品牌、我的空间、帮助与共享日夜主题。 */
 export function HomeHeader() {
-  const { theme, setTheme } = useHomeTheme()
-
   return (
     <header className="home-header print:hidden">
       <div className="home-header-inner">
@@ -31,40 +29,17 @@ export function HomeHeader() {
               <HelpCircle className="h-[18px] w-[18px]" aria-hidden="true" />
             </summary>
             <div className="home-help-panel">
-              <h2 className="home-help-title">从照片到整洁桌面</h2>
+              <h2 className="home-help-title">三步开始整理</h2>
               <ol className="home-help-steps">
-                <li>1. 确认桌面尺寸与收纳区域。</li>
-                <li>2. 上传照片，检查物品清单。</li>
-                <li>3. 在工作台预览整理与走线。</li>
-                <li>4. 接受方案，跟着动画整理。</li>
+                <li>1. 创建项目，确认空间与物品。</li>
+                <li>2. 在工作台调整整理与理线方案。</li>
+                <li>3. 跟随动画，在现实场景中完成整理。</li>
               </ol>
               <p className="home-help-note">尺寸需要实际测量。简化模型与演示结果会单独标注。</p>
-
             </div>
           </Dropdown>
 
-          <div className="home-theme-toggle" role="group" aria-label="首页外观">
-            <button
-              type="button"
-              className="home-theme-choice"
-              aria-pressed={theme === 'light'}
-              aria-label="日间模式"
-              title="日间模式"
-              onClick={() => setTheme('light')}
-            >
-              <Sun className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="home-theme-choice"
-              aria-pressed={theme === 'dark'}
-              aria-label="深夜模式"
-              title="深夜模式"
-              onClick={() => setTheme('dark')}
-            >
-              <Moon className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
-          </div>
+          <ThemeToggle className="home-theme-toggle" choiceClassName="home-theme-choice" ariaLabel="全站外观" />
         </div>
       </div>
     </header>

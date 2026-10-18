@@ -4,8 +4,6 @@
 __pycache__/
 *.py[cod]
 *key*.txt
-!vlm/key.txt
-!vlm/rodin_key.txt
 *.env
 _temp_*
 *.blend1
@@ -15,17 +13,3 @@ _temp_*
 
 # Local application scenes, uploaded reference photos and SQLite files
 backend/data/
-frontend/public/models/generated/*.glb
-!frontend/public/models/generated/.gitkeep
-Prefabmodel/item_*.glb
-Prefabmodel/custom_obj_*.glb
-
-# Test pipeline scratch outputs
-tests/crops/
-tests/test_pipeline_run/
-tests/test_rodin_pipeline/
-tests/test_vlm_round2/
-tests/test_e2e_real_flow.py
-vlm/input_photo.jpg
-vlm/vlm_pipeline_visualized.jpg
-backend/scripts/run_full_vlm_rodin_pipeline.py

@@ -206,3 +206,90 @@ test('toggles, drags and cancels the top desk drawer from the left view', async 
   await attachViewport(page, testInfo, 'drawer-left-view')
   expect(failures).toEqual([])
 })
+
+test('drawer contents fit the cavity, open on placement and keep closed-frame coordinates', async ({ page }, testInfo) => {
+  await page.goto(`/projects/${demoProjectId}/workspace`)
+  await expect.poll(async () => (await readDrawers(page)).loadedIds.length).toBe(3)
+
+  const result = await page.evaluate(async () => {
+    const loaded = (path: string) => performance.getEntriesByType('resource')
+      .map((entry) => entry.name).find((name) => new URL(name).pathname === path)
+    const fixedUrl = loaded('/src/scene/fixedFurniture.ts')
+    const validationUrl = loaded('/src/scene/sceneValidation.ts')
+    const workspaceUrl = loaded('/src/state/workspaceStore.ts')
+    const projectsUrl = loaded('/src/state/projectsStore.ts')
+    if (!fixedUrl || !validationUrl || !workspaceUrl || !projectsUrl) throw new Error('Scene modules did not load')
+    const { drawerSlotForObject } = await import(fixedUrl)
+    const { placementIssues, raycastSupports } = await import(validationUrl)
+    const threeUrl = performance.getEntriesByType('resource').map((entry) => entry.name)
+      .find((name) => new URL(name).pathname === '/node_modules/.vite/deps/three.js')
+    if (!threeUrl) throw new Error('Three.js module did not load')
+    const { Raycaster, Vector3 } = await import(threeUrl)
+    const { useWorkspaceStore } = await import(workspaceUrl)
+    const { useProjectsStore } = await import(projectsUrl)
+    const drawerUrl = loaded('/src/state/drawerStore.ts')
+    if (!drawerUrl) throw new Error('Drawer store did not load')
+    const { useDrawerStore } = await import(drawerUrl)
+    const project = useProjectsStore.getState().projects['demo-dorm-101']
+    const existingBlockers = project.objects.filter((item: { visible: boolean }) => item.visible)
+      .flatMap((item: typeof project.objects[number]) => placementIssues(item, item.transform.position, project.objects, project.room)
+        .filter((issue: { message: string }) => issue.message.includes('挡住'))
+        .map((issue: { message: string }) => ({ name: item.name, position: item.transform.position, dimensions: item.dimensions, issue: issue.message })))
+    const probe = {
+      ...project.objects[0], id: 'drawer-content-probe', name: '抽屉物品测试',
+      ports: [], cables: undefined, fixed: false, locked: false, visible: true,
+      model: { shape: 'genericBox', status: 'placeholder' },
+      dimensions: { width: .08, height: .08, depth: .08 },
+      transform: { position: [.78, .549, .65], rotationY: 0 },
+    }
+    const fit = drawerSlotForObject(probe, probe.transform.position, project.room)
+    const partial = drawerSlotForObject(probe, [.635, .549, .65], project.room)
+    const mouth = placementIssues(probe, [.48, .549, .65], [probe], project.room)
+      .map((issue: { message: string }) => issue.message)
+    const valid = placementIssues(probe, probe.transform.position, [probe], project.room)
+      .map((issue: { message: string }) => issue.message)
+    const hit = raycastSupports(
+      new Raycaster(new Vector3(.48, 1, .65), new Vector3(0, -1, 0)).ray,
+      project.room, null, { top: -.3 },
+    )
+    useWorkspaceStore.getState().addObject(project.id, {
+      ...probe, transform: { ...probe.transform, position: [0, 0, 1.2] },
+    })
+    const initiallyClosed = useDrawerStore.getState().drawers.top.target === 0
+    useWorkspaceStore.getState().updateObject(project.id, probe.id, { transform: { position: probe.transform.position } }, true)
+    const stored = useProjectsStore.getState().projects[project.id].objects.find((item: { id: string }) => item.id === probe.id)
+    return { fit, partial, mouth, valid, existingBlockers,
+      initiallyClosed, hit: hit && { surface: hit.surfaceId, x: hit.x, y: hit.y }, storedPosition: stored?.transform.position }
+
+  })
+
+  expect(result.fit).toBe('top')
+  expect(result.partial).toBeNull()
+  expect(result.mouth.some((message: string) => message.includes('挡住上层抽屉开口'))).toBe(true)
+  expect(result.valid).toEqual([])
+  expect(result.existingBlockers).toEqual([])
+  expect(result.initiallyClosed).toBe(true)
+  expect(result.hit?.surface).toBe('support-drawer-top')
+  expect(result.hit?.x).toBeCloseTo(.48, 5)
+  expect(result.hit?.y).toBe(.549)
+  expect(result.storedPosition).toEqual([.78, .549, .65])
+  await waitForTopSettled(page, 1)
+  await applyViewPreset(page, 'left')
+  await page.waitForTimeout(250)
+  await attachViewport(page, testInfo, 'drawer-with-content-open')
+  await page.evaluate(async () => {
+    const moduleUrl = performance.getEntriesByType('resource').map((entry) => entry.name)
+      .find((name) => new URL(name).pathname === '/src/state/drawerStore.ts')!
+    const { useDrawerStore } = await import(moduleUrl)
+    useDrawerStore.getState().toggle('top')
+  })
+  await waitForTopSettled(page, 0)
+  await attachViewport(page, testInfo, 'drawer-with-content-closed')
+  expect(await page.evaluate(async () => {
+    const moduleUrl = performance.getEntriesByType('resource').map((entry) => entry.name)
+      .find((name) => new URL(name).pathname === '/src/state/projectsStore.ts')!
+    const { useProjectsStore } = await import(moduleUrl)
+    return useProjectsStore.getState().projects['demo-dorm-101'].objects
+      .find((item: { id: string }) => item.id === 'drawer-content-probe')?.transform.position
+  })).toEqual([.78, .549, .65])
+})

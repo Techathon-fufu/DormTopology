@@ -19,6 +19,8 @@ import { useProjectsStore } from './projectsStore'
 import { usePlansStore } from './plansStore'
 import { useCableStore } from './cableStore'
 import { useOrganizeStore } from './organizeStore'
+import { useDrawerStore } from './drawerStore'
+import { drawerSlotForObject } from '@/scene/fixedFurniture'
 import { placePowerStripOnBackboard } from '@/scene/backboardMount'
 import { resizeIssue, laptopViewingAngle } from '@/scene/placementEditing'
 
@@ -36,7 +38,9 @@ export interface DragState {
   position: Vec3
   /** 吸附到的支撑面 */
   support: 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'backboard' | 'none'
+  /** 拖拽中的候选物品（含背板安装等姿态调整），仅用于预览 */
   object?: SceneObject
+  /** 候选物品的显示位置（已叠加抽屉滑出偏移） */
   displayPosition?: Vec3
   /** 预览位置是否通过越界 / 相交校验 */
   valid: boolean
@@ -58,6 +62,7 @@ export type ObjectPatch = Partial<
     | 'locked'
     | 'frequent'
     | 'powerStrip'
+    | 'baseDimensions'
   >
 > & {
   transform?: Partial<SceneObject['transform']>
@@ -157,7 +162,7 @@ interface WorkspaceState {
   ) => { removed: number; affected: number; socketCount: number } | null
   applyAssignments: (
     projectId: string,
-    assignments: Pick<LayoutAssignment, 'objectId' | 'position' | 'rotationY'>[],
+    assignments: Pick<LayoutAssignment, 'objectId' | 'position' | 'rotationY' | 'bookPose'>[],
     record?: boolean,
   ) => void
   /**
@@ -216,6 +221,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       room: patch.cableManagement ? { ...p.room, cableManagement: patch.cableManagement } : p.room,
       cables,
     }))
+    if (patch.objects) {
+      const previous = new Map(project.objects.map((object) => [object.id, object]))
+      for (const object of patch.objects) {
+        const before = previous.get(object.id)
+        if (before === object) continue
+        const slot = drawerSlotForObject(object, object.transform.position, project.room)
+        if (slot && (!before || drawerSlotForObject(before, before.transform.position, project.room) !== slot)) {
+          useDrawerStore.getState().open(slot)
+        }
+      }
+    }
   }
 
   return {
@@ -437,11 +453,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           a.position[0] !== o.transform.position[0] ||
           a.position[1] !== o.transform.position[1] ||
           a.position[2] !== o.transform.position[2] ||
-          a.rotationY !== o.transform.rotationY
+          a.rotationY !== o.transform.rotationY ||
+          (a.bookPose ?? o.transform.bookPose ?? 'original') !== (o.transform.bookPose ?? 'original')
         if (changed) movedIds.push(o.id)
         return {
           ...o,
-          transform: { position: a.position, rotationY: a.rotationY },
+          transform: { ...o.transform, position: a.position, rotationY: a.rotationY, bookPose: a.bookPose ?? o.transform.bookPose },
         }
       })
       commit(

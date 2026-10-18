@@ -9,16 +9,18 @@ import {
   LockOpen,
   Pin,
   Plus,
+  RotateCcw,
   Search,
   Star,
   Upload,
   X,
 } from 'lucide-react'
-import type { ObjectCategory, Project, SceneObject } from '@/types/project'
+import type { ObjectCategory, ObjectDimensions, Project, SceneObject } from '@/types/project'
 import { CATEGORY_LABELS, CATEGORY_ORDER, MODEL_STATUS_LABELS } from '@/types/project'
 import type { SceneIssue } from '@/scene/sceneValidation'
-import { createDemoSceneObjects } from '@/data/demoProject'
+import { createNewSampleSceneObjects } from '@/data/demoProject'
 import { initialDeskPlacement } from '@/scene/geometry'
+import { createNewSceneObject } from '@/scene/objectDefaults'
 import { cn, uid } from '@/lib/utils'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
@@ -36,6 +38,37 @@ const STATUS_DOT: Record<SceneObject['model']['status'], string> = {
 }
 
 const CATEGORY_FILTERS: Array<ObjectCategory | 'all'> = ['all', ...CATEGORY_ORDER]
+
+/** 等比缩放范围（%）：自基准尺寸的 60% 起，每 5% 一档，最大 150% */
+const SCALE_MIN_PERCENT = 60
+const SCALE_MAX_PERCENT = 150
+const SCALE_STEP_PERCENT = 5
+
+
+function isPowerStrip(object: SceneObject): boolean {
+  return object.model.shape === 'powerStrip' || Boolean(object.powerStrip)
+}
+
+/** 当前缩放百分比（相对基准尺寸；基准缺失时视为 100%） */
+function currentScalePercent(object: SceneObject): number {
+  const base = object.baseDimensions ?? object.dimensions
+  if (base.width <= 0) return 100
+  return Math.round((object.dimensions.width / base.width) * 100)
+}
+
+function clampScalePercent(percent: number): number {
+  const clamped = Math.min(SCALE_MAX_PERCENT, Math.max(SCALE_MIN_PERCENT, percent))
+  return Math.round(clamped / SCALE_STEP_PERCENT) * SCALE_STEP_PERCENT
+}
+
+function scaledDimensions(base: ObjectDimensions, percent: number): ObjectDimensions {
+  const factor = percent / 100
+  return {
+    width: base.width * factor,
+    height: base.height * factor,
+    depth: base.depth * factor,
+  }
+}
 
 function ItemRow({
   project,
@@ -73,7 +106,7 @@ function ItemRow({
       }}
       title={hasIssues ? issues!.map((i) => i.message).join('\n') : undefined}
       className={cn(
-        'group relative flex min-h-9 [@media(pointer:coarse)]:min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+        'group relative flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
         selected ? 'bg-primary-soft' : 'hover:bg-muted',
         !object.visible && 'opacity-55',
       )}
@@ -164,8 +197,102 @@ function ItemRow({
 }
 
 /**
+ * 选中物品的等比缩放控件：60%–150%（5% 档），
+ * 首次缩放时在同一对象更新中记录基准尺寸（保留如 85% 的初始默认语义），
+ * 缩放通过工作台 updateObject 提交（一次可撤销，走尺寸碰撞校验，端口由存储统一重建）。
+ */
+export function ScaleControls({
+  project,
+  object,
+}: {
+  project: Project
+  object: SceneObject
+}) {
+  const previewBlocking = useOrganizeStore((s) => s.isPreviewBlocking())
+  const updateObject = useWorkspaceStore((s) => s.updateObject)
+  const percent = currentScalePercent(object)
+
+  const applyPercent = (target: number) => {
+    if (useOrganizeStore.getState().isPreviewBlocking()) return
+    const clamped = clampScalePercent(target)
+    const base = object.baseDimensions ?? object.dimensions
+    const dimensions = scaledDimensions(base, clamped)
+    const ratio = { width: dimensions.width / object.dimensions.width, height: dimensions.height / object.dimensions.height, depth: dimensions.depth / object.dimensions.depth }
+    const ports = object.ports.map(port => ({ ...port, offset: port.offset
+      ? [port.offset[0] * ratio.width, port.offset[1] * ratio.height, port.offset[2] * ratio.depth] as [number, number, number]
+      : undefined }))
+    updateObject(project.id, object.id, {
+      baseDimensions: base,
+      dimensions,
+      ports,
+    })
+  }
+
+  return (
+    <section className="border-b border-border px-3 py-2">
+      <div className="flex items-center justify-between pb-1.5">
+        <h3 className="text-[11px] font-medium text-faint">等比缩放</h3>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {percent}%
+          <span className="text-faint"> · 60–150%</span>
+        </span>
+      </div>
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7"
+          title="缩小 5%"
+          aria-label="缩小"
+          disabled={previewBlocking || percent <= SCALE_MIN_PERCENT}
+          onClick={() => applyPercent(percent - SCALE_STEP_PERCENT)}
+        >
+          <span className="text-sm leading-none">−</span>
+        </Button>
+        <input
+          type="range"
+          min={SCALE_MIN_PERCENT}
+          max={SCALE_MAX_PERCENT}
+          step={SCALE_STEP_PERCENT}
+          value={Math.min(SCALE_MAX_PERCENT, Math.max(SCALE_MIN_PERCENT, percent))}
+          disabled={previewBlocking}
+          aria-label="等比缩放比例"
+          className="h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
+          onChange={(e) => applyPercent(Number(e.target.value))}
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7"
+          title="放大 5%"
+          aria-label="放大"
+          disabled={previewBlocking || percent >= SCALE_MAX_PERCENT}
+          onClick={() => applyPercent(percent + SCALE_STEP_PERCENT)}
+        >
+          <span className="text-sm leading-none">＋</span>
+        </Button>
+      </div>
+      <div className="flex items-center justify-between pt-1.5">
+        <span className="text-[11px] text-faint">整体等比缩放，接口随设备保留</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-1.5 text-[11px]"
+          title="恢复基准尺寸"
+          disabled={previewBlocking || percent === 100}
+          onClick={() => applyPercent(100)}
+        >
+          <RotateCcw className="h-3 w-3" />
+          重置
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+/**
  * 左侧物品面板：搜索 / 分类筛选 / 逐项显示隐藏与锁定 / 校验警示，
- * 支持作为停靠面板（宽屏）或抽屉内容（窄屏）复用。
+ * 作为工作台左侧停靠面板使用。
  */
 export function LeftPanel({
   project,
@@ -185,6 +312,7 @@ export function LeftPanel({
   const replaceObjects = useWorkspaceStore((s) => s.replaceObjects)
   const addObject = useWorkspaceStore((s) => s.addObject)
   const updateObject = useWorkspaceStore((s) => s.updateObject)
+  const selectedId = useWorkspaceStore((s) => s.selectedId)
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<ObjectCategory | 'all'>('all')
@@ -197,11 +325,13 @@ export function LeftPanel({
       (category === 'all' || o.category === category) &&
       (q === '' || o.name.toLowerCase().includes(q)),
   )
+  const selectedObject = selectedId ? project.objects.find((o) => o.id === selectedId) ?? null : null
+  const scalableObject = selectedObject && !isPowerStrip(selectedObject) ? selectedObject : null
 
   const loadDemoObjects = () => {
     if (useOrganizeStore.getState().isPreviewBlocking()) return
     const existingNames = new Set(project.objects.map((o) => o.name))
-    const fresh = createDemoSceneObjects(project.id).filter((o) => !existingNames.has(o.name))
+    const fresh = createNewSampleSceneObjects(project.id).filter((o) => !existingNames.has(o.name))
     if (fresh.length === 0) return
     replaceObjects(project.id, [...project.objects, ...fresh])
   }
@@ -209,26 +339,15 @@ export function LeftPanel({
   const addCustomObject = () => {
     if (useOrganizeStore.getState().isPreviewBlocking()) return
     const n = project.objects.filter((o) => o.name.startsWith('自定义物品')).length + 1
-    addObject(project.id, {
+    addObject(project.id, createNewSceneObject({
       id: uid('obj'),
       projectId: project.id,
       name: `自定义物品 ${n}`,
       category: 'nonElectrical',
       dimensions: { width: 0.15, height: 0.1, depth: 0.1 },
-      transform: {
-        position: initialDeskPlacement(project.objects.length, project.room),
-        rotationY: 0,
-      },
-      model: { status: 'none', source: 'demo', format: 'placeholder-box', shape: 'genericBox' },
-      ports: [],
-      quantity: 1,
-      needsPower: false,
-      fixed: false,
-      locked: false,
-      frequent: false,
-      visible: true,
-      source: 'manual',
-    })
+      position: initialDeskPlacement(project.objects.length, project.room),
+      shape: 'genericBox',
+    }))
   }
 
   const restoreAll = () => {
@@ -287,7 +406,7 @@ export function LeftPanel({
             type="button"
             onClick={() => setCategory(c)}
             className={cn(
-              'min-h-7 rounded-full border px-2 py-0.5 text-xs transition-colors [@media(pointer:coarse)]:min-h-11',
+              'min-h-7 rounded-full border px-2 py-0.5 text-xs transition-colors',
               category === c
                 ? 'border-primary bg-primary-soft font-medium text-primary'
                 : 'border-border text-muted-foreground hover:bg-muted',
@@ -297,6 +416,14 @@ export function LeftPanel({
           </button>
         ))}
       </div>
+
+      {scalableObject ? (
+        <ScaleControls project={project} object={scalableObject} />
+      ) : selectedObject ? (
+        <div className="border-b border-border px-3 py-2 text-[11px] text-faint">
+          排插尺寸由规格（孔数 / 孔距）决定，不支持整体等比缩放
+        </div>
+      ) : null}
 
       {hiddenCount > 0 || lockedCount > 0 ? (
         <div className="flex items-center gap-3 px-3 pb-2 text-[11px]">

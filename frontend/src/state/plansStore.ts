@@ -15,7 +15,7 @@ import { repairDuplicatePortIds } from '@/scene/portIds'
  * - candidates：对比用方案（「保存方案」生成，0.8.0 起携带完整场景 / 线缆快照）
  * 当前方案实时保存在 Project.objects（projectsStore）。
  *
- * 持久化版本：v1（仅物品指派）→ v2（updatedAt / 场景快照 / 来源）。
+ * 持久化版本：v1（仅物品指派）→ v2（updatedAt / 场景快照 / 来源）→ v3（接口 ID 去重修复）。
  * v1 数据迁移时仅补齐 updatedAt，其余字段保持缺失（界面按「旧版本方案」展示，不丢数据）。
  */
 interface PlansState {

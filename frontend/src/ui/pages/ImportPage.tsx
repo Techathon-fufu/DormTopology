@@ -1,3 +1,4 @@
+import { applyNewObjectDefaults } from '@/scene/objectDefaults'
 import { placePowerStripOnBackboard } from '@/scene/backboardMount'
 import { laptopViewingAngle } from '@/scene/placementEditing'
 import { useEffect, useState } from 'react'
@@ -21,7 +22,7 @@ import {
 import type { GenerationJob, PrimitiveShape, SceneObject } from '@/types/project'
 import { CATEGORY_LABELS } from '@/types/project'
 import type { ObjectCategory } from '@/types/project'
-import { createDemoCables, createDemoSceneObjects } from '@/data/demoProject'
+import { createDemoCables, createNewSampleSceneObjects } from '@/data/demoProject'
 import { initialDeskPlacement } from '@/scene/geometry'
 import { createSamplePhotos } from '@/data/samplePhotos'
 import { cn, uid } from '@/lib/utils'
@@ -41,6 +42,7 @@ import { MmInput } from '@/ui/kit/mm-input'
 import { PageIntro } from '@/ui/layout/PageIntro'
 import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { JobList } from '@/ui/jobs/JobList'
+import { completeProjectCreation } from '@/ui/create/projectCreation'
 
 type Step = 1 | 2 | 3
 /** 识别状态序列：等待 → 分析中 → 待确认 → 完成 / 失败 */
@@ -154,8 +156,9 @@ export function ImportPage() {
   const createJob = useJobsStore((s) => s.create)
   const updateJob = useJobsStore((s) => s.update)
   const jobs = useProjectJobs(project?.id)
+  const isCreating = useProjectsStore((s) => Boolean(id && s.creationDrafts[id]))
 
-  const [step, setStep] = useState<Step>(1)
+  const [step, setStep] = useState<Step>(() => project?.stage === 'assets' ? 3 : 1)
   const [photos, setPhotos] = useState<PhotoEntry[]>([])
   const [uploadIssues, setUploadIssues] = useState<string[]>([])
   const [dragging, setDragging] = useState(false)
@@ -188,6 +191,15 @@ export function ImportPage() {
 
   const projectId = project.id
   const busy = phase === 'waiting' || phase === 'analyzing'
+
+  const finish = () => {
+    if (isCreating) {
+      useProjectsStore.getState().update(projectId, (p) => ({ ...p, stage: 'organize' }))
+      useProjectsStore.getState().completeCreationDraft(projectId)
+      completeProjectCreation(projectId)
+    }
+    navigate(`/projects/${projectId}/workspace`)
+  }
 
   // ── 照片（原图存 IndexedDB，不写入 localStorage） ──────────────────
 
@@ -366,7 +378,7 @@ export function ImportPage() {
         source: isMockMode ? 'mock' : 'ai',
         dimensionSource: item.dimensionSource,
       },
-    })).map(object => placePowerStripOnBackboard(object, project.room))
+    })).map(applyNewObjectDefaults).map(object => placePowerStripOnBackboard(object, project.room))
     useProjectsStore.getState().update(projectId, (p) => ({
       ...p,
       objects,
@@ -385,7 +397,7 @@ export function ImportPage() {
   }
 
   const skipWithDemoObjects = () => {
-    const objects = createDemoSceneObjects(projectId)
+    const objects = createNewSampleSceneObjects(projectId)
     useProjectsStore.getState().update(projectId, (p) => ({
       ...p,
       objects,
@@ -512,8 +524,18 @@ export function ImportPage() {
 
   return (
     <div className="space-y-5">
-      <PageIntro step="创建项目 · 2/2" title="把桌面，带进三维空间" description="上传照片后，确认物品名称和尺寸，再选择展示模型。识别结果可随时校正。"><ProjectSteps projectId={project.id} current="import" className="flex-wrap" /></PageIntro>
-      <div className="rounded-xl border border-border bg-surface p-3 sm:p-4">
+      <PageIntro
+        step={isCreating ? '创建项目 · 2/2' : '项目物品'}
+        title={isCreating ? '把桌面，带进三维空间' : '补充或调整物品'}
+        description={
+          isCreating
+            ? '上传照片后，确认物品名称和尺寸，再选择展示模型。识别结果可随时校正；也可以先用示例物品库快速体验。'
+            : '修改会保存到当前项目，完成后返回工作台。'
+        }
+      >
+        {isCreating ? <ProjectSteps projectId={project.id} current="import" className="flex-wrap" /> : null}
+      </PageIntro>
+      <div className="rounded-xl border border-border bg-surface p-4">
         <div className="flex flex-wrap items-center gap-1">
           {STEP_LABELS.map((s, i) => (
             <span key={s.n} className="flex items-center gap-1">
@@ -667,7 +689,7 @@ export function ImportPage() {
                     type="button"
                     title="移除照片"
                     onClick={() => void removePhoto(p)}
-                    className="absolute right-1 top-1 rounded-full bg-surface/90 p-1 opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                    className="absolute right-1 top-1 rounded-full bg-surface/90 p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <Trash2 className="h-3.5 w-3.5 text-danger" />
                   </button>
@@ -801,7 +823,7 @@ export function ImportPage() {
                     <Trash2 className="h-4 w-4 text-danger" />
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <div className="grid grid-cols-4 gap-2">
                   <div className="space-y-1">
                     <Label>分类</Label>
                     <Select
@@ -1042,8 +1064,8 @@ export function ImportPage() {
             >
               全部使用占位盒
             </Button>
-            <Button size="lg" onClick={() => { useProjectsStore.getState().update(projectId, (p) => ({ ...p, stage: 'organize' })); navigate(`/projects/${projectId}/workspace`) }}>
-              完成创建，进入工作台
+            <Button size="lg" onClick={finish}>
+              {isCreating ? '完成创建，进入工作台' : '返回三维工作台'}
               <ArrowRight className="h-4 w-4" />
             </Button>
             <Button variant="ghost" onClick={() => setStep(2)} disabled={!recognized}>

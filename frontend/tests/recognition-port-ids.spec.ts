@@ -74,10 +74,10 @@ test('migrates saved project and baseline before submitting to the real organize
   expect(portIds(migrated.plans.baselines[id].scene.objects)).toEqual(portIds(migrated.project.objects))
   expect(portIds(migrated.plans.candidates[id][0].scene.objects)).toEqual(portIds(migrated.project.objects))
   expect(migrated.project.objects.map((o: { transform: unknown }) => o.transform)).toEqual(original.objects.map((o) => o.transform))
-  await page.getByRole('button', { name: '整理桌面', exact: true }).first().click()
+  await page.getByRole('button', { name: '生成整理方案', exact: true }).first().click()
   await page.getByRole('checkbox', { name: '我已核对物品尺寸及整理前位置' }).check()
   const sync = page.waitForResponse((r) => r.request().method() === 'PUT' && r.url().includes(`/projects/${id}/scene`))
-  await page.getByRole('button', { name: '生成整理方案', exact: true }).click()
+  await page.getByRole('button', { name: '生成整理方案', exact: true }).last().click()
   expect((await sync).status()).toBe(200)
   await expect.poll(() => page.evaluate(async () => {
     const { useOrganizeStore } = await import('/src/state/organizeStore.ts')
@@ -85,7 +85,7 @@ test('migrates saved project and baseline before submitting to the real organize
   }), { timeout: 60_000 }).toBe('real')
   // The narrow-screen drawer closes when generation completes.
   if (!await page.getByRole('button', { name: '接受方案', exact: true }).isVisible()) {
-    await page.getByRole('button', { name: '整理桌面', exact: true }).first().click()
+    await page.getByRole('button', { name: '生成整理方案', exact: true }).first().click()
   }
   await expect(page.getByRole('button', { name: '接受方案', exact: true })).toBeEnabled({ timeout: 60_000 })
   await page.getByRole('button', { name: '接受方案', exact: true }).click()

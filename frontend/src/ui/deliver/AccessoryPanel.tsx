@@ -18,6 +18,7 @@ import {
 } from '@/scene/accessoryGeometry'
 import type { GuideAccessory } from '@/lib/guide'
 import { detectWebGL } from '@/lib/webgl'
+import { configureSceneRenderer, sceneDpr, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 import { formatMm, mToMm } from '@/lib/units'
 import { Badge } from '@/ui/kit/badge'
 import { Button } from '@/ui/kit/button'
@@ -55,7 +56,9 @@ function AccessoryPreview({ params }: { params: AccessoryParams }) {
 
   return (
     <div className="h-56 overflow-hidden rounded-md border border-border bg-[#F3F1EC] print:hidden">
-      <Canvas dpr={[1, 1.75]} camera={{ position: [0.14, 0.11, 0.18], fov: 42 }}>
+      <Canvas frameloop="demand" gl={SCENE_GL_OPTIONS} dpr={sceneDpr()}
+        camera={{ position: [0.14, 0.11, 0.18], fov: 42, near: 0.002, far: 3 }}
+        onCreated={({ gl }) => configureSceneRenderer(gl)}>
         <color attach="background" args={['#F3F1EC']} />
         <ambientLight intensity={0.7} />
         <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.5]} />
@@ -65,8 +68,6 @@ function AccessoryPreview({ params }: { params: AccessoryParams }) {
         <OrbitControls
           makeDefault
           enablePan={false}
-          autoRotate
-          autoRotateSpeed={1.6}
           minDistance={0.07}
           maxDistance={0.6}
           target={[0, -0.005, 0.01]}
@@ -149,7 +150,7 @@ export function AccessoryPanel({
         ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-4">
         <div className="space-y-3">
           <div>
             <label className="text-xs text-muted-foreground">线径（单根线缆外径）</label>

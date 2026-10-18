@@ -17,6 +17,7 @@ import { organizationPlanFailure } from '@/lib/organizationValidation'
 export type OrganizeStatus = 'config' | 'planning' | 'preview' | 'playing' | 'paused' | 'finished'
 
 export interface PoseOverride {
+  bookPose?: SceneObject['transform']['bookPose']
   position: Vec3
   rotationY: number
 }
@@ -68,6 +69,7 @@ function lerp(a: number, b: number, t: number): number {
 
 function lerpPose(from: PoseOverride, to: PoseOverride, t: number): PoseOverride {
   return {
+    bookPose: t < 1 ? from.bookPose : to.bookPose,
     position: [
       lerp(from.position[0], to.position[0], t),
       lerp(from.position[1], to.position[1], t),
@@ -140,11 +142,11 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
     for (const o of objects) {
       originals[o.id] = {
         position: [...o.transform.position],
-        rotationY: o.transform.rotationY,
+        rotationY: o.transform.rotationY, bookPose: o.transform.bookPose,
       }
     }
     const overrides: Record<string, PoseOverride> = {}
-    if (!failure) for (const a of plan.assignments) overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
+    if (!failure) for (const a of plan.assignments) overrides[a.objectId] = { position: a.position, rotationY: a.rotationY, bookPose: a.bookPose }
     set({
       plan,
       sourceSignature: sourceSignature ?? null,
@@ -195,7 +197,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
     if (get().applying || !plan || organizationPlanFailure(plan)) return
     const overrides: Record<string, PoseOverride> = {}
     for (const a of plan.assignments) {
-      overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
+      overrides[a.objectId] = { position: a.position, rotationY: a.rotationY, bookPose: a.bookPose }
     }
     set({
       status: 'finished',
@@ -226,12 +228,12 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
     while (progress >= 1) {
       for (const id of batches[idx].objectIds) {
         const a = targetById.get(id)
-        if (a) overrides[id] = { position: a.position, rotationY: a.rotationY }
+        if (a) overrides[id] = { position: a.position, rotationY: a.rotationY, bookPose: a.bookPose }
       }
       remaining -= batches[idx].durationMs
       idx += 1
       if (idx >= batches.length) {
-        for (const a of plan.assignments) overrides[a.objectId] = { position: a.position, rotationY: a.rotationY }
+        for (const a of plan.assignments) overrides[a.objectId] = { position: a.position, rotationY: a.rotationY, bookPose: a.bookPose }
         set({
           overrides,
           batchIndex: batches.length - 1,
@@ -249,7 +251,7 @@ export const useOrganizeStore = create<OrganizeState>()((set, get) => ({
       const from = s.originals[id]
       const a = targetById.get(id)
       if (!from || !a) continue
-      overrides[id] = lerpPose(from, { position: a.position, rotationY: a.rotationY }, eased)
+      overrides[id] = lerpPose(from, { position: a.position, rotationY: a.rotationY, bookPose: a.bookPose }, eased)
     }
     set({ overrides, batchIndex: idx, batchProgress: progress })
   },
