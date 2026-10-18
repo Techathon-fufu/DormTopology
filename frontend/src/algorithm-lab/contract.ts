@@ -1,3 +1,4 @@
+import { bookLocalPoint, validBookPose } from '@/scene/bookPose'
 export type Vec3 = [number, number, number];
 export type PlanStatus = 'success' | 'partial' | 'infeasible';
 export type RoutingMode = 'slot' | 'backboard';
@@ -28,6 +29,7 @@ export interface Item {
   size_m: Vec3;
   position: Vec3;
   rotation_y_rad: number;
+  book_pose?: 'original' | 'upright' | 'flat';
   dimensions_source: 'user' | 'template' | 'estimated';
   dimensions_confirmed: boolean;
   fixed: boolean;
@@ -137,6 +139,7 @@ export interface PackingItem {
   current_pos: Vec3;
   target_pos: Vec3;
   target_rotation_y_rad: number;
+  target_book_pose?: 'original' | 'upright' | 'flat';
   target_region_id: string | null;
   placement_status: 'placed' | 'unchanged' | 'unplaced';
   reason_code: ReasonCode | null;
@@ -202,7 +205,7 @@ export interface RoutingResult {
 
 /** Result validation uses source identities and ports, independently of collision representation. */
 export type RoutingResultScene = Omit<Scene, 'items'> & {
-  items: Array<Pick<Item, 'id' | 'position' | 'rotation_y_rad' | 'dimensions_confirmed'> & { ports: Array<Pick<Port, 'id' | 'local_position' | 'confirmed'>> }>;
+  items: Array<Pick<Item, 'id' | 'position' | 'rotation_y_rad' | 'dimensions_confirmed' | 'book_pose' | 'size_m'> & { ports: Array<Pick<Port, 'id' | 'local_position' | 'confirmed'>> }>;
 };
 
 export interface Bundle {
@@ -414,6 +417,7 @@ function parseScene(value: unknown, path: string): Scene {
     vector(item.size_m, `${entryPath}.size_m`, true);
     vector(item.position, `${entryPath}.position`);
     number(item.rotation_y_rad, `${entryPath}.rotation_y_rad`);
+    if (item.book_pose !== undefined && (!validBookPose(item.book_pose) || !['book', 'books'].includes(String(item.category)))) invalid(entryPath, 'invalid book posture');
     choice(item.dimensions_source, ['user', 'template', 'estimated'], `${entryPath}.dimensions_source`);
     boolean(item.dimensions_confirmed, `${entryPath}.dimensions_confirmed`);
     boolean(item.fixed, `${entryPath}.fixed`);
@@ -618,6 +622,7 @@ function parsePacking(value: unknown, scene: Scene): PackingResult {
     const target = vector(item.target_pos, `${path}.target_pos`);
     requireSameVector(current, original.position, `${path}.current_pos`);
     const rotation = number(item.target_rotation_y_rad, `${path}.target_rotation_y_rad`);
+    if (item.target_book_pose !== undefined && (!validBookPose(item.target_book_pose) || !['book', 'books'].includes(original.category))) invalid(path, 'invalid book posture');
     const placement = choice(item.placement_status, ['placed', 'unchanged', 'unplaced'], `${path}.placement_status`);
     nullableString(item.target_region_id, `${path}.target_region_id`);
     if (item.target_region_id !== null && !regions.has(item.target_region_id as string)) invalid(path, 'unknown target_region_id');
@@ -628,6 +633,7 @@ function parsePacking(value: unknown, scene: Scene): PackingResult {
     }
     if (status === 'infeasible' || original.fixed || placement !== 'placed') {
       requireSameVector(target, original.position, `${path}.target_pos`);
+      if ((item.target_book_pose ?? original.book_pose ?? 'original') !== (original.book_pose ?? 'original')) invalid(path, 'retained book posture must be preserved');
       if (Math.abs(rotation - original.rotation_y_rad) > EPSILON) invalid(path, 'fixed, retained and infeasible poses must be preserved');
     }
     if (original.fixed && placement !== 'unchanged') invalid(path, 'fixed items must be unchanged');
@@ -646,7 +652,7 @@ function parsePacking(value: unknown, scene: Scene): PackingResult {
 function worldPortPositions(scene: RoutingResultScene): Map<string, Vec3> {
   const positions = new Map<string, Vec3>();
   scene.items.forEach((item) => item.ports.forEach((port) => {
-    const [x, y, z] = port.local_position;
+    const [x, y, z] = bookLocalPoint(item.size_m, item.book_pose, port.local_position);
     const cosine = Math.cos(item.rotation_y_rad);
     const sine = Math.sin(item.rotation_y_rad);
     positions.set(port.id, [item.position[0] + cosine * x + sine * z,
@@ -870,7 +876,8 @@ export function parseBundle(scene: unknown, packing?: unknown, routing?: unknown
     });
     const expected = { ...bundle.scene, scene_revision: bundle.routingScene.scene_revision,
       items: bundle.scene.items.map((item) => ({ ...item, position: targets.get(item.id)!.target_pos,
-        rotation_y_rad: targets.get(item.id)!.target_rotation_y_rad })),
+        rotation_y_rad: targets.get(item.id)!.target_rotation_y_rad,
+        ...(targets.get(item.id)!.target_book_pose !== undefined ? { book_pose: targets.get(item.id)!.target_book_pose } : {}) })),
     };
     if (!equalData(expected, bundle.routingScene)) {
       invalid('applied_scene', 'applying a layout may only change item positions, rotations and scene_revision');

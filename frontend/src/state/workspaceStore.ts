@@ -155,7 +155,7 @@ interface WorkspaceState {
   ) => { removed: number; affected: number; socketCount: number } | null
   applyAssignments: (
     projectId: string,
-    assignments: Pick<LayoutAssignment, 'objectId' | 'position' | 'rotationY'>[],
+    assignments: Pick<LayoutAssignment, 'objectId' | 'position' | 'rotationY' | 'bookPose'>[],
     record?: boolean,
   ) => void
   /**
@@ -415,11 +415,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           a.position[0] !== o.transform.position[0] ||
           a.position[1] !== o.transform.position[1] ||
           a.position[2] !== o.transform.position[2] ||
-          a.rotationY !== o.transform.rotationY
+          a.rotationY !== o.transform.rotationY ||
+          (a.bookPose ?? o.transform.bookPose ?? 'original') !== (o.transform.bookPose ?? 'original')
         if (changed) movedIds.push(o.id)
         return {
           ...o,
-          transform: { position: a.position, rotationY: a.rotationY },
+          transform: { ...o.transform, position: a.position, rotationY: a.rotationY, bookPose: a.bookPose ?? o.transform.bookPose },
         }
       })
       commit(

@@ -1,7 +1,11 @@
+import { useEffect, useMemo } from 'react'
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from 'three'
 import type { RoomConfig } from '@/types/project'
 import { furnitureBoxes, hasFixedFurniture } from './fixedFurniture'
 import { DeskShelf } from './DeskShelf'
 import { boxGeometry, standardMaterial, torusGeometry } from './resources'
+import { prepareFurnitureAppearance } from './furnitureAppearance'
+import { disposeObject3D } from './modelLoader'
 import {
   DESK_BEAM_DEPTH,
   DESK_BEAM_INSET,
@@ -11,8 +15,8 @@ import {
   deskBeamTopY,
 } from './sceneValidation'
 
-const METAL = '#3A3F45'
-const WOOD = '#D6B98C'
+const METAL = '#64727B'
+const WOOD = '#DFC7A3'
 /** 立柱高度（米）：与床架横梁 / 床板标定一致（RoomShell 梯子亦使用 1.68） */
 const POST_H = 1.68
 
@@ -23,13 +27,35 @@ const POST_H = 1.68
  * - 工作台中由 DormDeskModel 决策渲染 GLB 还是本回退几何；GLB 加载成功时本几何不渲染；
  * - 同时用于空间配置预览（SpacePreview3D）与交付页三维视图（DeliverViewport）的完整房间渲染。
  */
+function FixedDesk({ room, hideBedParts, desktopOnly }: { room: RoomConfig; hideBedParts: boolean; desktopOnly: boolean }) {
+  const group = useMemo(() => {
+    const root = new Group()
+    const materials = new Map<string, MeshStandardMaterial>()
+    for (const part of furnitureBoxes(room)) {
+      if ((desktopOnly && !part.name.startsWith('Desk_Top_')) || (hideBedParts && /^(Bed_|Guardrail_|Ladder_)/.test(part.name))) continue
+      const materialName = part.name.startsWith('Desk_Top_') ? 'Mat_Pine_Natural' : 'Mat_Warm_Oak'
+      let material = materials.get(materialName)
+      if (!material) {
+        material = new MeshStandardMaterial({ roughness: .72 })
+        material.name = materialName
+        materials.set(materialName, material)
+      }
+      const size = part.max.map((v, i) => v - part.min[i]) as [number, number, number]
+      const center = part.min.map((v, i) => (v + part.max[i]) / 2) as [number, number, number]
+      const mesh = new Mesh(new BoxGeometry(...size), material)
+      mesh.name = part.name
+      mesh.position.set(...center)
+      root.add(mesh)
+    }
+    prepareFurnitureAppearance(root)
+    return root
+  }, [room, hideBedParts, desktopOnly])
+  useEffect(() => () => disposeObject3D(group), [group])
+  return <primitive object={group} dispose={null} />
+}
+
 export function ParametricDesk({ room, hideBedParts = false, desktopOnly = false }: { room: RoomConfig; hideBedParts?: boolean; desktopOnly?: boolean }) {
-  if (hasFixedFurniture(room)) return <group>{furnitureBoxes(room)
-    .filter((p) => (!desktopOnly || p.name.startsWith('Desk_Top_')) && (!hideBedParts || !/^(Bed_|Guardrail_|Ladder_)/.test(p.name)))
-    .map((p) => <mesh key={p.name} castShadow receiveShadow
-      position={p.min.map((v, i) => (v + p.max[i]) / 2) as [number, number, number]}
-      geometry={boxGeometry(p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2])}
-      material={standardMaterial(/^(Bed_|Guardrail_|Ladder_|Pillar_)/.test(p.name) ? METAL : WOOD, { roughness: .65 })} />)}</group>
+  if (hasFixedFurniture(room)) return <FixedDesk room={room} hideBedParts={hideBedParts} desktopOnly={desktopOnly} />
   const desk = room.desk
   const deskCZ = desk.depth / 2 + DESK_GAP
 

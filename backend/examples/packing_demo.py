@@ -316,6 +316,8 @@ def preview_scene(scene: dict, result: dict) -> dict:
         target = targets[current["id"]]
         current["position"] = list(target["target_pos"])
         current["rotation_y_rad"] = target["target_rotation_y_rad"]
+        if "target_book_pose" in target and ("book_pose" in current or target["target_book_pose"] != "original"):
+            current["book_pose"] = target["target_book_pose"]
     return preview
 
 

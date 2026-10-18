@@ -9,6 +9,8 @@ import { detectWebGL } from '@/lib/webgl'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import type { ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 
 /**
  * 空间配置三维预览：与三维工作台共用同一套家具加载逻辑——DormDeskModel 负责
@@ -34,17 +36,11 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
   }
 
   return (
-    <div className="relative h-72 overflow-hidden rounded-md border border-border bg-[#F2EFE9]">
-      <Canvas shadows dpr={[1, 1.5]} camera={{ position: [1.9, 1.6, 2.6], fov: 42 }}>
-        <color attach="background" args={['#F2EFE9']} />
-        <ambientLight intensity={0.6} />
-        <directionalLight
-          position={[3, 5, 2.5]}
-          intensity={1.15}
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-        />
-        <directionalLight position={[-4, 3, 3]} intensity={0.35} />
+    <div className="relative h-72 overflow-hidden rounded-md border border-border bg-[#F4F7F8]">
+      <Canvas shadows frameloop="demand" gl={SCENE_GL_OPTIONS} dpr={sceneDpr()}
+        camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+        onCreated={({ gl }) => configureSceneRenderer(gl)}>
+        <SceneLighting />
         {/* 桌体由 DormDeskModel 接管（GLB / 回退几何）；GLB 就绪时床架由模型自带、隐藏参数化床架 */}
         <RoomShell
           room={room}

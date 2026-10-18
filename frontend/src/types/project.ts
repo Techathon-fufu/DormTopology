@@ -169,7 +169,10 @@ export interface ObjectDimensions {
 }
 
 /** 位姿（米 / 弧度，独立于尺寸与模型管理） */
+export type BookPose = 'original' | 'upright' | 'flat'
+
 export interface ObjectTransform {
+  bookPose?: BookPose
   /** 物体底面中心点（米） */
   position: Vec3
   /** 绕 y 轴旋转（弧度） */
@@ -464,6 +467,7 @@ export interface CableConnection {
 // ───────────────────────────── 布局方案 ─────────────────────────────
 
 export interface LayoutAssignment {
+  bookPose?: BookPose
   objectId: string
   position: Vec3
   rotationY: number

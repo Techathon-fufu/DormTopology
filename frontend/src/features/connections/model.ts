@@ -1,5 +1,6 @@
 import type { CableConnection, Port, Project, SceneObject, Vec3 } from '@/types/project'
 import { validateCableConnection } from '@/scene/cables'
+import { bookPosePoint, bookPoseDirection } from '@/scene/bookPose'
 
 /**
  * 前台表面端口核心 + 全场景连接审计。
@@ -63,7 +64,7 @@ export function surfaceHit(object: SceneObject, worldPoint: Vec3, worldNormal: V
   const dx = worldPoint[0] - object.transform.position[0]
   const dy = worldPoint[1] - object.transform.position[1]
   const dz = worldPoint[2] - object.transform.position[2]
-  const offset: Vec3 = [dx * cos - dz * sin, dy, dx * sin + dz * cos]
+  const offset: Vec3 = bookPosePoint(object, [dx * cos - dz * sin, dy, dx * sin + dz * cos], true)
   if (!isFiniteVec3(offset)) return null
   const nx = worldNormal[0]
   const ny = worldNormal[1]
@@ -73,7 +74,7 @@ export function surfaceHit(object: SceneObject, worldPoint: Vec3, worldNormal: V
   const lz = nx * sin + nz * cos
   const len = Math.hypot(lx, ly, lz)
   if (!Number.isFinite(len) || len <= 0) return null
-  const localDirection: Vec3 = [lx / len, ly / len, lz / len]
+  const localDirection: Vec3 = bookPoseDirection(object, [lx / len, ly / len, lz / len], true)
   return { objectId: object.id, offset, localDirection }
 }
 

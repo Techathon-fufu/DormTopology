@@ -24,6 +24,8 @@ import { detectWebGL } from '@/lib/webgl'
 import { DeskModelNotice } from '@/ui/workspace/DeskModelNotice'
 import { useDrawerStore } from '@/state/drawerStore'
 import { drawerSlideX, DORM_DESK_DRAWERS } from '@/scene/dormDeskDrawers'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 
 /** 三维渲染错误边界：渲染失败时给出重试入口，不影响左右面板继续工作 */
 class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -139,7 +141,7 @@ export function Viewport({
     const targets = new Map(plan.assignments.map((a) => [a.objectId, a]))
     return validateScene(project.objects.map((o) => {
       const a = targets.get(o.id)
-      return a ? { ...o, transform: { position: a.position, rotationY: a.rotationY } } : o
+      return a ? { ...o, transform: { ...o.transform, position: a.position, rotationY: a.rotationY, bookPose: a.bookPose ?? o.transform.bookPose } } : o
     }), project.room, deskMetrics)
   }, [plan, compare, playbackStatus, project, issuesById, deskMetrics])
   const organizeZonesVisible = useOrganizeStore((s) => s.open && s.showZones)
@@ -164,30 +166,17 @@ export function Viewport({
       <SceneErrorBoundary>
         <Canvas
           shadows
-          dpr={[1, 2]}
-          camera={{ position: [1.9, 1.6, 2.6], fov: 42 }}
+          frameloop="demand"
+          gl={SCENE_GL_OPTIONS}
+          dpr={sceneDpr()}
+          camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+          onCreated={({ gl }) => configureSceneRenderer(gl)}
           onPointerMissed={() => {
             select(null)
             if (mode === 'cable') useCableStore.getState().selectCable(null)
           }}
         >
-          <color attach="background" args={['#F4F1EA']} />
-          <fog attach="fog" args={['#F4F1EA', 9, 20]} />
-          <ambientLight intensity={0.55} />
-          <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.45]} />
-          <directionalLight
-            position={[2.5, 4, 3]}
-            intensity={1.1}
-            castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
-            shadow-camera-left={-3}
-            shadow-camera-right={3}
-            shadow-camera-top={3}
-            shadow-camera-bottom={-3}
-            shadow-camera-near={0.5}
-            shadow-camera-far={14}
-          />
+          <SceneLighting />
           <Suspense fallback={null}>
             {/* 房间外壳与桌体分离：桌体加载正式模型（无抽屉桌体 + 三只抽屉分离件，抽屉可推拉），
                 失败 / 未就绪回退参数化几何；GLB 就绪后床架由模型自带，隐藏参数化床架并叠加逻辑出线孔标记 */}

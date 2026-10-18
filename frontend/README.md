@@ -12,6 +12,8 @@ React + TypeScript + Three.js（React Three Fiber + Drei）实现的宿舍桌面
 
 ## 运行与检查
 
+三维预览的 GPU 偏好、按需绘制、共面闪烁修复和日光配色见[场景显示与性能](docs/scene-rendering.md)。GPU 选择由浏览器与系统决定，自动化的软件渲染检查不代表真实显卡帧率。
+
 当前工作区的构建预览命令与固定提交 `6784dbc` 的历史独立实例见[本地实例部署](../docs/local_deployment.md)，两者能力范围分别记录。
 
 ```bash

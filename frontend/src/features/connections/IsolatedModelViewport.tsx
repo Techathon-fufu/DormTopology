@@ -7,6 +7,7 @@ import type { Project, SceneObject } from '@/types/project'
 import { ObjectModel } from '@/scene/ObjectModel'
 import { resolvePortOffset } from '@/scene/ports'
 import { detectWebGL } from '@/lib/webgl'
+import { configureSceneRenderer, sceneDpr, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 import { Button } from '@/ui/kit/button'
 import { useSurfacePortPick } from './useSurfacePortPick'
 import { SurfacePointOverlay } from './SurfacePointOverlay'
@@ -96,7 +97,8 @@ export function IsolatedModelViewport({ project, object }: { project: Project; o
   if (!supported) return <p role="alert" className="p-6 text-sm">当前环境不支持 WebGL，无法显示模型。请开启浏览器硬件加速后重试。</p>
   return <div className="relative h-full w-full" aria-label="单模型视图" onContextMenu={(event) => event.preventDefault()}>
     <ModelErrorBoundary>
-      <Canvas camera={{ position: [1, 1, 2], fov: 42 }} dpr={[1, 2]}>
+      <Canvas frameloop="demand" gl={SCENE_GL_OPTIONS} camera={{ position: [1, 1, 2], fov: 42 }} dpr={sceneDpr()}
+        onCreated={({ gl }) => configureSceneRenderer(gl)}>
         <ModelScene project={project} object={object} view={view} nonce={nonce} />
       </Canvas>
     </ModelErrorBoundary>

@@ -15,7 +15,7 @@ from ..domain.rules import validate_scene
 from .errors import Conflict, InvalidInput, NotFound
 from .ports import JobExecutor, OrganizationRepository, SceneRecord
 
-ALGORITHM_VERSION = "packing-1.1"
+ALGORITHM_VERSION = "packing-1.2"
 logger = logging.getLogger(__name__)
 
 
@@ -62,6 +62,7 @@ def _same_pose(item: dict, placement: dict) -> bool:
     return (
         item["position"] == placement["target_pos"]
         and item["rotation_y_rad"] == placement["target_rotation_y_rad"]
+        and item.get("book_pose", "original") == placement.get("target_book_pose", item.get("book_pose", "original"))
     )
 
 
@@ -106,6 +107,8 @@ def _apply_targets(scene: Scene, result: dict) -> Scene:
         has_unplaced |= status == "unplaced"
         item["position"] = copy.deepcopy(placement["target_pos"])
         item["rotation_y_rad"] = placement["target_rotation_y_rad"]
+        if "target_book_pose" in placement and ("book_pose" in item or placement["target_book_pose"] != "original"):
+            item["book_pose"] = placement["target_book_pose"]
     validate_scene(candidate)
     regions = {region["id"]: region for region in candidate["regions"]}
     for item in candidate["items"]:

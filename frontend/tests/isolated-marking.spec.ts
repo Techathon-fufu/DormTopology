@@ -28,7 +28,12 @@ async function setup(page: Page) {
 
 async function readProject(page: Page, id: string) {
   return page.evaluate(async (id) => {
-    const { useProjectsStore } = await import('/src/state/projectsStore.ts')
+    // Follow the UI's Vite module version; an unversioned import after HMR can
+    // create a second store and report stale state despite a successful save.
+    const url = performance.getEntriesByType('resource').map(entry => entry.name)
+      .filter(name => new URL(name).pathname === '/src/state/projectsStore.ts').at(-1)
+    if (!url) throw new Error('The page did not load projectsStore.ts')
+    const { useProjectsStore } = await import(url)
     return useProjectsStore.getState().projects[id]
   }, id)
 }

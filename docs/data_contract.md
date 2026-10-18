@@ -97,11 +97,16 @@
 | `allowed_region_ids` | 自动收纳的目标区域 ID，非固定物品必须非空；原位保留规则见第 3 节，固定墙面设备可为空 |
 | `preferred_region_ids` | 可选无重复数组，必须为 `allowed_region_ids` 的子集；同组区域等价且无顺序。几何可行时优先选择组内区域，再优化连续桌面面积和取用成本；组内不可行时回退到其余允许区域。缺省或空数组沿用原评分 |
 | `allowed_rotations_y_rad` | 自动推荐允许的朝向，采用 0 与 π/2 的非空子集；手动朝向可为任意有限弧度，固定物品保持输入朝向 |
+| `book_pose` | 可选，仅 `category: book/books`：`original`（缺省，资产原姿态）、`upright`（立放）、`flat`（平放）。不改变 `size_m` 或原始局部碰撞/接口；变换见下文 |
 | `collision` | `type: "box"` 使用 `size_m` 与物品变换；`type: "compound"` 使用局部凸体部件并集，定义见第 2.2 节 |
 | `ports` | 接口数组，字段见下文 |
 | `image_url`, `model_url` | 图片与已归一化模型 URL，无资产时为 `null` |
 | `generation` | `{task_id, status, source, error}`；无任务时 `task_id` 为 `null` |
 | `plug_mount` | 可选 `{socket_port_id, plug_port_id}`，固定直插适配器的插排连接，见第 2.6 节；不表示柔性线缆 |
+
+书本姿态先于水平朝向应用。按归一化资产尺寸 `[w,h,d]`，`original` 不翻转；`upright` 在 `h<d` 时翻转，`flat` 在 `h>=d` 时翻转，其余保持。翻转将原始局部点 `[x,y,z]` 变为 `[x,z+d/2,h/2-y]`，方向变为 `[x,z,-y]`，尺寸包络轴序为 `[w,d,h]`；随后再绕 Y 轴旋转并平移到底心 `position`。原始声明尺寸、原始局部凸体顶点和原始接口坐标保持不变，避免重复翻转。已有立式资产按原始轴序识别，不再次立起。该离散姿态不是通用三轴旋转或稳定性证明。
+
+整理结果的书本条目增加可选 `target_book_pose`（同枚举），缺省保留输入姿态；接受后写回物品 `book_pose` 并按现有规则递增场景版本。固定、`unchanged`、`unplaced` 和 `infeasible` 条目不得改变姿态。前端在 `ObjectTransform.bookPose` / 方案的 `bookPose` 保存同一值，旧数据缺省为 `original`。原始快照保存原姿态；翻转属于位姿改变，不视为尺寸校正。
 
 `generation.status` 为 `not_requested` / `queued` / `running` / `succeeded` / `failed`，表示当前内部任务状态；未请求时 `task_id` 为 `null`。`source` 为 `placeholder` / `live` / `cache`，描述当前显示外观的来源；没有可用资产时为 `placeholder`，内置或复用资产为 `cache`。`error` 为错误说明字符串或 `null`。重新生成期间和失败后保留已有可用外观及来源，没有旧资产才显示简化模型。同一任务状态只向终态前进，重提生成创建新 `task_id`；查询重试沿用原任务。供应商任务标识保留在后端适配器，不与内部 `task_id` 混用。模型替换不修改 `scene_revision`，因为规划几何不变；尺寸校正则必须修改版本。
 

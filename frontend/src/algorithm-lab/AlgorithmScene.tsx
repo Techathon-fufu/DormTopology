@@ -1,9 +1,11 @@
+import { bookLocalPoint, bookPoseRotation } from '@/scene/bookPose'
 import { Component, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Edges, Html, Line, OrbitControls } from '@react-three/drei'
 import { Box3, Vector3 } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { detectWebGL } from '@/lib/webgl'
+import { configureSceneRenderer, sceneDpr, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 import type { BoxZone, Item, Scene, RoutingResult, RoutingSupport, Vec3 } from './contract'
 
 export type Layers = { regions: boolean; collisions: boolean; network: boolean; cables: boolean; reserved: boolean; supports: boolean; trayCandidates: boolean }
@@ -189,7 +191,8 @@ export function AlgorithmScene({ scene, routing, layers, selected, onSelect, vie
   const mountedPorts = new Set(scene.items.flatMap(item => item.plug_mount ? [item.plug_mount.socket_port_id, item.plug_mount.plug_port_id] : []))
   if (!webgl) return <div className="lab-render-error" role="alert">WebGL 不可用，三维视图无法加载。</div>
   return <RenderBoundary>
-    <Canvas dpr={[1, 1.5]} camera={{ fov: 40 }} gl={{ preserveDrawingBuffer: true }}
+    <Canvas frameloop="demand" dpr={sceneDpr()} camera={{ fov: 40 }} gl={{ ...SCENE_GL_OPTIONS, preserveDrawingBuffer: true }}
+      onCreated={({ gl }) => configureSceneRenderer(gl)}
       onPointerMissed={() => onSelect(null)}>
       <color attach="background" args={['#f1f4f5']} />
       <ambientLight intensity={1.2} />
@@ -213,6 +216,7 @@ export function AlgorithmScene({ scene, routing, layers, selected, onSelect, vie
       })}
       {scene.items.map((item, index) => <group key={item.id} position={item.position} rotation={[0, item.rotation_y_rad, 0]}
         onClick={event => { event.stopPropagation(); onSelect(item.id) }}>
+        <group position={bookLocalPoint(item.size_m, item.book_pose, [0, 0, 0])} rotation={[bookPoseRotation(item.size_m, item.book_pose), 0, 0]}>
         <ItemGeometry item={item} color={itemColors[index % itemColors.length]} selected={selected === item.id || item.ports.some(port => port.id === selected)} showBounds={layers.collisions} />
         {item.ports.map(port => <group key={port.id}>
           <mesh position={port.local_position} onClick={event => { event.stopPropagation(); onSelect(port.id) }}>
@@ -221,6 +225,7 @@ export function AlgorithmScene({ scene, routing, layers, selected, onSelect, vie
           </mesh>
           <Line points={[port.local_position, port.local_position.map((v, i) => v + port.local_direction[i] * 0.04) as Vec3]} color="#202e3a" lineWidth={1.5} />
         </group>)}
+        </group>
         {(selected === item.id || item.ports.some(port => port.id === selected)) && <Html center position={[0, item.size_m[1] + 0.04, 0]} style={{ pointerEvents: 'none' }}>
           <span className="lab-object-label">{item.name}{selected !== item.id ? ` · ${selected}` : ''}</span>
         </Html>}

@@ -137,6 +137,7 @@ export function basicMaterial(color: string, opts: BasicMaterialOptions = {}): T
       color,
       wireframe: opts.wireframe ?? false,
       transparent: (opts.opacity ?? 1) < 1,
+      depthWrite: (opts.opacity ?? 1) >= 1,
       opacity: opts.opacity ?? 1,
       side: opts.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
     })

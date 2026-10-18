@@ -1,6 +1,8 @@
 """One deterministic greedy layout, followed by complete-scene verification."""
 
 import math
+
+from ..book_pose import BOOK_CATEGORIES, upright
 from itertools import product
 
 from ..geometry import (
@@ -36,7 +38,8 @@ def _pose(item: dict, position, angle: float) -> dict:
 
 
 def _same_pose(a: dict, b: dict) -> bool:
-    return a["position"] == b["position"] and a["rotation_y_rad"] == b["rotation_y_rad"]
+    return (a["position"] == b["position"] and a["rotation_y_rad"] == b["rotation_y_rad"]
+            and a.get("book_pose", "original") == b.get("book_pose", "original"))
 
 
 def _move_cost(original: dict, candidate: dict) -> float:
@@ -177,14 +180,23 @@ def _choose(
         choices.append(original)
     for region in sorted(scene["regions"], key=lambda r: r["id"]):
         if region["id"] in allowed:
-            choices.extend(_candidates(scene, original, region, placed))
+            variants = ([{**original, "book_pose": pose} for pose in ("upright", "flat")]
+                        if original["category"] in BOOK_CATEGORIES else [original])
+            for variant in variants:
+                choices.extend(_candidates(scene, variant, region, placed))
+    # Posture is ranked ahead of all soft costs; avoid scoring flat alternatives
+    # after any fully geometry-valid upright candidate has been found.
+    if original["category"] in BOOK_CATEGORIES:
+        standing = [candidate for candidate in choices if upright(candidate)]
+        if standing:
+            choices = standing
     occupied = grid.occupied(placed)
     placed_geometry = [_port_geometry(item) for item in placed]
     placed_leadouts = [leadout for item in placed for leadout in _port_leadouts(item)]
     scored = []
     seen = set()
     for candidate in choices:
-        pose_key = (tuple(candidate["position"]), candidate["rotation_y_rad"])
+        pose_key = (tuple(candidate["position"]), candidate["rotation_y_rad"], candidate.get("book_pose", "original"))
         if pose_key in seen:
             continue
         seen.add(pose_key)
@@ -198,10 +210,15 @@ def _choose(
         scored.append(
             (
                 (
+                    int(original["category"] in BOOK_CATEGORIES and not upright(candidate)),
                     int(bool(preferred_regions) and not any(
                         fits_region(candidate, region) for region in preferred_regions
                     )),
                     _port_access_cost(candidate, placed_geometry, placed_leadouts),
+                    int(original["category"] in BOOK_CATEGORIES and upright(candidate)
+                        and candidate["rotation_y_rad"] != (
+                            math.pi / 2 if original["size_m"][1] < original["size_m"][2] else 0
+                        )),
                     -free_cells,
                     cost,
                     move,
@@ -314,6 +331,8 @@ def plan_packing(scene: Scene) -> PackingResult:
                 "current_pos": list(original["position"]),
                 "target_pos": list(target["position"]),
                 "target_rotation_y_rad": target["rotation_y_rad"],
+                **({"target_book_pose": target.get("book_pose", "original")}
+                   if original["category"] in BOOK_CATEGORIES else {}),
                 "target_region_id": _region_id(
                     scene, target, target=not failed and not original["fixed"]
                 ),

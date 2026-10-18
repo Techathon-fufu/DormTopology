@@ -87,16 +87,17 @@ function CableMesh({ cable, project }: { cable: CableConnection; project: Projec
     return pts
   }, [cable, project.objects, showOriginal, drag])
 
+  const smooth = showOriginal || cable.route.smooth !== false
+  const targetSamples = useMemo(() => smooth ? sampleCurve(displayPoints) : displayPoints, [displayPoints, smooth])
+  // Sampling the unchanged target is independent of animation time.
+  const animationTarget = useMemo(() => animFrom ? resampleForAnim(displayPoints, smooth) : null,
+    [displayPoints, smooth, animFrom])
   const samples = useMemo(() => {
-    const smooth = showOriginal || cable.route.smooth !== false
-    const target = smooth ? sampleCurve(displayPoints) : displayPoints
     if ((animStatus === 'playing' || animStatus === 'paused') && animFrom) {
-      const from = animFrom
-      const to = resampleForAnim(displayPoints, smooth)
-      return lerpSamples(from, to, cableAnimEase(animT))
+      return lerpSamples(animFrom, animationTarget!, cableAnimEase(animT))
     }
-    return target
-  }, [displayPoints, animStatus, animFrom, animT, showOriginal, cable.route.smooth])
+    return targetSamples
+  }, [targetSamples, animationTarget, animStatus, animFrom, animT])
 
   const stale = cable.status === 'stale'
   const conflicted = cable.status === 'conflict'

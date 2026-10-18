@@ -69,6 +69,8 @@ class DomainBoundaryTests(unittest.TestCase):
                 target = targets[item["id"]]
                 item["position"] = target["target_pos"]
                 item["rotation_y_rad"] = target["target_rotation_y_rad"]
+                if "target_book_pose" in target:
+                    item["book_pose"] = target["target_book_pose"]
             preview["scene_revision"] += 1
             current = copy.deepcopy(preview)
             check = validate_layout(preview)

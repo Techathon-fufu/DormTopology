@@ -1,3 +1,4 @@
+import { bookLocalPoint } from '@/scene/bookPose'
 import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 import { CABLE_THICKNESS_META, type CableConnection, type LayoutPlan, type Project, type Vec3 } from '@/types/project'
 import type { CablePlanningResult } from '../types'
@@ -284,7 +285,7 @@ export function mapRoutingResult(raw: unknown, ctx: { scene: PackingScene; proje
   const pending = new Map(scene.cables.map((cable) => [cable.id, cable]))
   const position = (id: string): Vec3 => {
     const item = scene.items.find((i) => i.ports.some((p) => p.id === id))!
-    const port = item.ports.find((p) => p.id === id)!, [x, y, z] = port.local_position
+    const port = item.ports.find((p) => p.id === id)!, [x, y, z] = bookLocalPoint(item.size_m, item.book_pose, port.local_position)
     return [item.position[0] + Math.cos(item.rotation_y_rad) * x + Math.sin(item.rotation_y_rad) * z, item.position[1] + y, item.position[2] - Math.sin(item.rotation_y_rad) * x + Math.cos(item.rotation_y_rad) * z]
   }
   const same = (a: Vec3, b: Vec3) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6)

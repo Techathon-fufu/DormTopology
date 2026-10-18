@@ -1,3 +1,4 @@
+import { bookPosePoint, bookPoseDirection, bookTurned } from './bookPose'
 import { Euler, Matrix4, Vector3 } from 'three'
 import { ConvexHull } from 'three/examples/jsm/math/ConvexHull.js'
 import type { SceneObject, Vec3 } from '@/types/project'
@@ -133,14 +134,14 @@ export function exportCollision(object:SceneObject):CompoundCollision {
   return {type:'compound',parts:localCollision(object).parts.map(p=>({vertices_m:p.vertices_m.map(v=>[...v] as Vec3),faces:p.faces.map(f=>[...f])}))}
 }
 export function worldCollision(object:SceneObject,position:Vec3=object.transform.position):ObjectCollision {
-  const key=JSON.stringify([position,object.transform.rotationY,object.dimensions,object.model.shape,object.powerStrip?.socketCount,object.model.prefabId??''])
+  const key=JSON.stringify([position,object.transform.rotationY,object.transform.bookPose,object.dimensions,object.model.shape,object.powerStrip?.socketCount,object.model.prefabId??''])
   const cached=worldCache.get(object)
   if(cached?.key===key) return cached.value
   const angle=object.transform.rotationY,c=Math.cos(angle),s=Math.sin(angle)
   const rotate=(v:Vec3):Vec3=>[c*v[0]+s*v[2],v[1],-s*v[0]+c*v[2]]
   const parts=localCollision(object).parts.map(p=>({...p,
-    vertices_m:p.vertices_m.map(v=>{const r=rotate(v);return r.map((x,i)=>x+position[i]) as Vec3}),
-    normals:p.normals.map(rotate),edges:p.edges.map(rotate),
+    vertices_m:p.vertices_m.map(v=>{const r=rotate(bookPosePoint(object,v));return r.map((x,i)=>x+position[i]) as Vec3}),
+    normals:p.normals.map(v=>rotate(bookPoseDirection(object,v))),edges:p.edges.map(v=>rotate(bookPoseDirection(object,v))),
   })).map(p=>({...p,bounds:boundsOf(p.vertices_m)}))
   const value={parts,bounds:boundsOf(parts.flatMap(p=>p.vertices_m))}
   worldCache.set(object,{key,value})
@@ -201,7 +202,7 @@ export function objectExtent(object:SceneObject):ObjectExtent {
   }
   // Identity pose (no rotation, no translation) yields the rotated-about-origin local hull,
   // which is what the search needs to size gaps between neighbours.
-  const pose={...object,transform:{position:[0,0,0] as Vec3,rotationY:0}}
+  const pose={...object,transform:{...object.transform,position:[0,0,0] as Vec3,rotationY:0}}
   const bounds=worldCollision(pose,[0,0,0]).bounds
   return {
     min:bounds.min,max:bounds.max,
@@ -216,6 +217,7 @@ export function objectExtent(object:SceneObject):ObjectExtent {
  * ``size_m`` box is already exact and no hull arithmetic is needed.
  */
 function isExactBox(object:SceneObject):boolean {
+  if(bookTurned(object)) return false
   // 预制物品的碰撞体来自随包数据并按编辑尺寸缩放，与声明尺寸盒不等价——一律走凸体外包计算。
   if(object.model.prefabId && PREFAB_ITEM_COLLISIONS[object.model.prefabId]) return false
   const parts=describePrimitive(object.model.shape,object.dimensions).parts
@@ -226,7 +228,7 @@ function isExactBox(object:SceneObject):boolean {
  * ``position`` with ``rotationY``; the union over parts, so a rotated L-shape is covered.
  */
 export function objectFootprint(object:SceneObject,position:Vec3,rotationY=object.transform.rotationY) {
-  const pose={...object,transform:{position,rotationY}}
+  const pose={...object,transform:{...object.transform,position,rotationY}}
   const b=worldCollision(pose,position).bounds
   return {x0:b.min[0],x1:b.max[0],z0:b.min[2],z1:b.max[2]}
 }
@@ -283,9 +285,10 @@ function penetrationDepth(body:ObjectCollision,max:Vec3,min:Vec3):number {
 }
 export function worldToObject(point:Vec3,object:SceneObject,position=object.transform.position):Vec3 {
   const [x,y,z]=point.map((v,i)=>v-position[i]),a=object.transform.rotationY
-  return [Math.cos(a)*x-Math.sin(a)*z,y,Math.sin(a)*x+Math.cos(a)*z]
+  return bookPosePoint(object,[Math.cos(a)*x-Math.sin(a)*z,y,Math.sin(a)*x+Math.cos(a)*z],true)
 }
 export function objectToWorld(point:Vec3,object:SceneObject,position=object.transform.position):Vec3 {
+  point=bookPosePoint(object,point)
   const a=object.transform.rotationY
   return [Math.cos(a)*point[0]+Math.sin(a)*point[2]+position[0],point[1]+position[1],-Math.sin(a)*point[0]+Math.cos(a)*point[2]+position[2]]
 }

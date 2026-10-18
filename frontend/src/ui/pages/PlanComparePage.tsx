@@ -33,6 +33,8 @@ import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore, type ViewPreset } from '@/state/workspaceStore'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { CameraRig } from '@/scene/CameraRig'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 import { RoomShell } from '@/scene/RoomShell'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { CompareCables, CompareObjectMesh, DIFF_COLOR } from '@/scene/PlanCompareScene'
@@ -634,26 +636,13 @@ export function PlanComparePage() {
                       {webglOk ? (
                         <Canvas
                           shadows
-                          dpr={[1, 2]}
-                          camera={{ position: [1.9, 1.6, 2.6], fov: 42 }}
+                          frameloop="demand"
+                          gl={SCENE_GL_OPTIONS}
+                          dpr={sceneDpr()}
+                          camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+                          onCreated={({ gl }) => configureSceneRenderer(gl)}
                         >
-                          <color attach="background" args={['#F4F1EA']} />
-                          <fog attach="fog" args={['#F4F1EA', 9, 20]} />
-                          <ambientLight intensity={0.55} />
-                          <hemisphereLight args={['#FFF8EC', '#C9BFAC', 0.45]} />
-                          <directionalLight
-                            position={[2.5, 4, 3]}
-                            intensity={1.1}
-                            castShadow
-                            shadow-mapSize-width={2048}
-                            shadow-mapSize-height={2048}
-                            shadow-camera-left={-3}
-                            shadow-camera-right={3}
-                            shadow-camera-top={3}
-                            shadow-camera-bottom={-3}
-                            shadow-camera-near={0.5}
-                            shadow-camera-far={14}
-                          />
+                          <SceneLighting />
                           <Suspense fallback={null}>
                             {baselineRoom ? (
                               <>

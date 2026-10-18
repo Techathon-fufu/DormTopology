@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/state/workspaceStore'
 import { useDrawerStore } from '@/state/drawerStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useObjectResizeStore } from '@/state/objectResizeStore'
+import { bookPoseDimensions } from './bookPose'
 import {
   RESIZE_MAX,
   RESIZE_MIN,
@@ -177,7 +178,8 @@ export function ObjectResizeHandles({
 
   const handlesVisible = eligible && ctrlHeld
 
-  const corners = useMemo(() => cubeCorners(liveDims), [liveDims.width, liveDims.height, liveDims.depth])
+  const physicalDims = bookPoseDimensions({ ...object, dimensions: liveDims })
+  const corners = useMemo(() => cubeCorners(physicalDims), [physicalDims.width, physicalDims.height, physicalDims.depth])
   const radius = Math.min(
     HANDLE_RADIUS_MAX,
     Math.max(HANDLE_RADIUS_MIN, Math.max(liveDims.width, liveDims.height, liveDims.depth) * 0.025),
@@ -201,7 +203,7 @@ export function ObjectResizeHandles({
       const original = useProjectsStore.getState().projects[project.id]?.objects.find((item) => item.id === object.id)
       if (!original || useObjectResizeStore.getState().preview) return
       const originalSignature = JSON.stringify(original)
-      const diagonal = cornerDiagonal(source, corner)
+      const diagonal = cornerDiagonal(bookPoseDimensions({ ...object, dimensions: source }), corner)
 
       const toWorld = (local: Vec3): Vec3 => {
         const cos = Math.cos(rotY)
@@ -370,7 +372,7 @@ export function ObjectResizeHandles({
   if (!selected && !ownedPreview) return null
 
   return (
-    <group>
+    <group position={[0, (physicalDims.height - liveDims.height) / 2, 0]}>
       {handlesVisible
         ? corners.map(({ corner, position }) => (
             <mesh

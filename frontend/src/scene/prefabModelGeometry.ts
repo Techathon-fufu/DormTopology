@@ -6,6 +6,32 @@ export interface PrefabTemplate {
   size: Vector3
 }
 
+/** The closed-laptop export repeats the entire attribute range for each material. */
+export function removeDuplicatePrefabPrimitives(scene: Group): void {
+  scene.updateMatrixWorld(true)
+  const kept: Mesh[] = [], duplicates: Mesh[] = []
+  scene.traverse(node => {
+    if (!(node instanceof Mesh)) return
+    const duplicate = kept.some(other => {
+      if (!node.matrixWorld.equals(other.matrixWorld) || node.geometry.index !== other.geometry.index) return false
+      const keys = Object.keys(node.geometry.attributes)
+      return keys.length === Object.keys(other.geometry.attributes).length &&
+        keys.every(key => node.geometry.getAttribute(key) === other.geometry.getAttribute(key))
+    })
+    if (duplicate) duplicates.push(node)
+    else kept.push(node)
+  })
+  duplicates.forEach(node => node.removeFromParent())
+  const keptGeometry = new Set(kept.map(node => node.geometry))
+  const keptMaterial = new Set(kept.flatMap(node => Array.isArray(node.material) ? node.material : [node.material]))
+  duplicates.forEach(node => {
+    if (!keptGeometry.has(node.geometry)) node.geometry.dispose()
+    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+      if (!keptMaterial.has(material)) material.dispose()
+    }
+  })
+}
+
 /** Normalize through a parent so authored root transforms remain intact. */
 export function normalizePrefabTemplate(scene: Group): PrefabTemplate {
   scene.updateMatrixWorld(true)

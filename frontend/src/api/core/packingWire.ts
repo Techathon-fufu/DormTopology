@@ -1,3 +1,4 @@
+import { isBook, validBookPose } from '@/scene/bookPose'
 import { resolvePortLocalDirection } from '@/features/connections/portGeometry'
 import type { LayoutPlan, RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import type { OrganizationIssue, OrganizationPlan, OrganizationPreferences, OrganizationSceneRef, PlanAssignment, ZoneKind } from '@/types/organization'
@@ -28,6 +29,7 @@ export interface PackingItem {
   size_m: Vec3
   position: Vec3
   rotation_y_rad: number
+  book_pose?: 'original' | 'upright' | 'flat'
   dimensions_source: 'user' | 'template' | 'estimated'
   dimensions_confirmed: boolean
   fixed: boolean
@@ -200,6 +202,7 @@ export function toPackingScene(input: {
       id: object.id, name: object.name, category: category(object),
       size_m: [object.dimensions.width, object.dimensions.height, object.dimensions.depth],
       position: toPackingPosition(object.transform.position, room), rotation_y_rad: object.transform.rotationY,
+      ...(isBook(object) ? { book_pose: object.transform.bookPose ?? 'original' } : {}),
       dimensions_source: source, dimensions_confirmed: input.confirmed,
       fixed: object.fixed || object.locked, usage_frequency: object.frequent ? 'high' : 'medium',
       placement_priority: shape === 'monitor' ? 100 : shape === 'printer' ? 90 : object.frequent ? 60 : 20,
@@ -263,7 +266,7 @@ export function canonicalScene(raw: unknown, expected?: PackingScene, expectedRe
       if (typeof item.id !== 'string' || !expectedIds.delete(item.id) || !vector(item.position) || typeof item.rotation_y_rad !== 'number' || !Number.isFinite(item.rotation_y_rad)) fail('后端正式场景物品引用或位姿错误')
       const original = expected.items.find((i) => i.id === item.id)!
       if (!vector(item.size_m) || !item.size_m.every((v, i) => Math.abs(v - original.size_m[i]) < 1e-7) || !item.position.every((v, i) => Math.abs(v - original.position[i]) < 1e-7) || Math.abs(item.rotation_y_rad - original.rotation_y_rad) > 1e-7) fail('后端正式场景意外修改了提交的物品尺寸或位姿')
-      for (const key of ['name', 'category', 'fixed', 'dimensions_source', 'dimensions_confirmed', 'collision', 'ports', 'allowed_region_ids', 'preferred_region_ids', 'allowed_rotations_y_rad', 'placement_priority', 'socket_count', 'usage_frequency', 'image_url'] as const) {
+      for (const key of ['book_pose', 'name', 'category', 'fixed', 'dimensions_source', 'dimensions_confirmed', 'collision', 'ports', 'allowed_region_ids', 'preferred_region_ids', 'allowed_rotations_y_rad', 'placement_priority', 'socket_count', 'usage_frequency', 'image_url'] as const) {
         if (!sameStructure(item[key], original[key])) fail('后端正式场景意外修改了提交的物品约束')
       }
     }
@@ -306,19 +309,22 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
     if (!object) fail('整理结果引用未知或重复物品')
     pending.delete(object.id)
     if (!vector(item.current_pos) || !vector(item.target_pos) || typeof item.target_rotation_y_rad !== 'number' || !Number.isFinite(item.target_rotation_y_rad)) fail(`${object.name}：整理结果位姿无效`)
-    const position = fromPackingPosition(item.target_pos, ctx.room)
+    let position = fromPackingPosition(item.target_pos, ctx.room)
     const current = fromPackingPosition(item.current_pos, ctx.room)
     if (!current.every((v, i) => Math.abs(v - object.transform.position[i]) < 1e-7)) fail(`${object.name}：结果原始位置与当前场景不同`)
     const rotation = item.target_rotation_y_rad
+    const bookPose = item.target_book_pose ?? object.transform.bookPose ?? 'original'
+    if (!validBookPose(bookPose) || (!isBook(object) && item.target_book_pose !== undefined)) fail(`${object.name}：书本姿态无效`)
     const placement = item.placement_status
     if (!['placed', 'unchanged', 'unplaced'].includes(String(placement))) fail(`${object.name}：落位状态无效`)
-    if ((object.fixed || object.locked || placement !== 'placed' || status === 'infeasible') && !samePose(position, rotation, object)) fail(`${object.name}：固定、未移动或不可行结果不得修改变换`)
+    if ((object.fixed || object.locked || placement !== 'placed' || status === 'infeasible') && (!samePose(position, rotation, object) || bookPose !== (object.transform.bookPose ?? 'original'))) fail(`${object.name}：固定、未移动或不可行结果不得修改变换`)
+    if (object.fixed || object.locked || placement !== 'placed' || status === 'infeasible') position = [...object.transform.position]
     if (item.target_region_id !== null && (typeof item.target_region_id !== 'string' || !ctx.scene.regions.some((r) => r.id === item.target_region_id))) fail(`${object.name}：目标支撑区域未知`)
     const original = ctx.scene.items.find((i) => i.id === object.id)!
     if (placement === 'placed' && (!original.allowed_region_ids.includes(String(item.target_region_id)) || !original.allowed_rotations_y_rad.some((r) => Math.abs(r - rotation) < 1e-7))) fail(`${object.name}：目标区域或朝向不符合输入约束`)
     let reason = issues.filter((i) => i.entity_id === object.id).map((i) => i.message).join('；') || (typeof item.reason === 'string' ? item.reason : typeof item.reason_code === 'string' ? item.reason_code : '后端已复核的目标位置')
     const zone: ZoneKind = String(item.target_region_id).startsWith('support-drawer') ? 'shelf' : Math.abs(position[1] - ctx.room.desk.height) < 0.001 ? 'desk' : position[1] > ctx.room.desk.height ? 'shelf' : 'underDesk'
-    const target = { ...object, visible: true, transform: { position, rotationY: rotation } }
+    const target = { ...object, visible: true, transform: { position, rotationY: rotation, ...(isBook(object) ? { bookPose } : {}) } }
     if (object.model.shape === 'printer' && !object.fixed && !object.locked) {
       reason = placement === 'unplaced' ? `打印机未找到合法侧部设备位，保留原位；${reason}`
         : status !== 'infeasible' ? `打印机：桌面侧部设备区，避开中央主视位；${reason}` : reason
@@ -336,6 +342,10 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
         : `显示器：未采用中央主视位，${placement === 'unchanged' ? '保留原位' : '回退至其他可行桌面位置'}，请确认视线和朝向；${reason}`
       if (!inView) placementWarnings.push(`${object.name}：${reason}`)
     }
+    if (isBook(object) && !object.fixed && !object.locked && status !== 'infeasible' && placement !== 'unplaced') {
+      const physicallyUpright = bookPose === 'upright' || (bookPose === 'original' && object.dimensions.height >= object.dimensions.depth)
+      reason = `${physicallyUpright ? '书本优先立放' : '立放空间不足，保留或回退平放'}；${reason}`
+    }
     targets.push(target)
     if (placement === 'placed') {
       const region = ctx.scene.regions.find((r) => r.id === item.target_region_id)!
@@ -345,7 +355,7 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
       if (Math.abs(position[1] - region.surface_y_m) > 1e-7 || low[0] < x0 - 1e-7 || high[0] > x1 + 1e-7 || low[2] < z0 - 1e-7 || high[2] > z1 + 1e-7 || high[1] > region.surface_y_m + region.clearance_height_m + 1e-7) issues.push({ entity_id: object.id, code: 'target_region', message: '真实目标碰撞体未完整落在声明的支撑区域及净高内' })
     }
     if (placement === 'unplaced') unplaced.push({ objectId: object.id, name: object.name, reason })
-    assignments.push({ objectId: object.id, position, rotationY: rotation, zone, reason, targetRegionId: item.target_region_id as string | null, placementStatus: placement as 'placed' | 'unchanged' | 'unplaced' })
+    assignments.push({ objectId: object.id, position, rotationY: rotation, ...(isBook(object) ? { bookPose } : {}), zone, reason, targetRegionId: item.target_region_id as string | null, placementStatus: placement as 'placed' | 'unchanged' | 'unplaced' })
   }
   if (pending.size) fail('整理结果未覆盖所有输入物品')
   const localIssues: OrganizationIssue[] = targets.flatMap((object) => placementIssues(object, object.transform.position, targets, ctx.room).map((issue) => ({ entity_id: object.id, code: issue.type, message: issue.message })))

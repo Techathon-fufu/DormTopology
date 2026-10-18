@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { bookPoseDimensions } from './bookPose'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import type { Group } from 'three'
 import type { Project, SceneObject } from '@/types/project'
@@ -75,12 +76,17 @@ export function SceneObjectMesh({
   const pos = dragPreview?.position ?? organizePose?.position ?? t.position
   const rotationY = dragPreview ? t.rotationY : (organizePose?.rotationY ?? t.rotationY)
 
-  const drawerSlot = drawerSlotForObject(object, pos, project.room, rotationY)
+  const displayObject = { ...object, dimensions: dims, transform: { ...object.transform, bookPose: organizePose?.bookPose ?? object.transform.bookPose } }
+  const displayDims = bookPoseDimensions(displayObject)
+  const postureOffset = (displayDims.height - dims.height) / 2
+
+  const drawerSlot = useMemo(() => drawerSlotForObject(object, pos, project.room, rotationY),
+    [object, pos, project.room, rotationY])
+  const drawerSpec = DORM_DESK_DRAWERS.find((entry) => entry.id === drawerSlot)
   useFrame(() => {
-    if (!groupRef.current) return
-    const spec = DORM_DESK_DRAWERS.find((entry) => entry.id === drawerSlot)
-    const progress = drawerSlot ? useDrawerStore.getState().drawers[drawerSlot].progress : 0
-    groupRef.current.position.set(pos[0] + (spec ? drawerSlideX(spec.travelM, progress) : 0), pos[1] + dims.height / 2, pos[2])
+    if (!groupRef.current || !drawerSlot || !drawerSpec) return
+    const progress = useDrawerStore.getState().drawers[drawerSlot].progress
+    groupRef.current.position.x = pos[0] + drawerSlideX(drawerSpec.travelM, progress)
   })
 
   if (!object.visible) return null
@@ -120,7 +126,7 @@ export function SceneObjectMesh({
         onPointerOut={() => { setHovered(false); pick.onPointerOut() }}
       >
         <ObjectModel
-          object={resizePreview ? { ...object, dimensions: dims } : object}
+          object={displayObject}
           shape={modelDone ? object.model.shape : 'genericBox'}
           color={CATEGORY_COLORS[object.category]}
           sockets={object.powerStrip?.socketCount}
@@ -128,7 +134,8 @@ export function SceneObjectMesh({
       </group>
       {selected || hovered || dragging || activeOperation ? (
         <mesh
-          geometry={boxGeometry(dims.width, dims.height, dims.depth)}
+          position={[0, postureOffset, 0]}
+          geometry={boxGeometry(displayDims.width + 0.004, displayDims.height + 0.004, displayDims.depth + 0.004)}
           material={basicMaterial('#0F9D8A', {
             wireframe: true,
             opacity: selected || dragging || activeOperation ? 0.85 : 0.4,
@@ -138,7 +145,8 @@ export function SceneObjectMesh({
       <ObjectResizeHandles project={project} object={object} selected={selected} />
       {hasIssues || dragInvalid ? (
         <mesh
-          geometry={boxGeometry(dims.width * 1.1, dims.height * 1.1, dims.depth * 1.1)}
+          position={[0, postureOffset, 0]}
+          geometry={boxGeometry(displayDims.width * 1.1, displayDims.height * 1.1, displayDims.depth * 1.1)}
           material={basicMaterial('#D64545', { wireframe: true, opacity: dragInvalid ? 0.9 : 0.5 })}
         />
       ) : null}

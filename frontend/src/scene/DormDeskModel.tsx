@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import type { RoomConfig, Vec3 } from '@/types/project'
@@ -20,6 +20,7 @@ import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useDrawerStore } from '@/state/drawerStore'
 import { hasFixedFurniture } from './fixedFurniture'
+import { prepareFurnitureAppearance } from './furnitureAppearance'
 
 /**
  * 桌体渲染：加载 models/dormdesk_parts/dormdesk_body.glb（无抽屉桌体）与三只抽屉分离件
@@ -135,9 +136,11 @@ export function DormDeskModel({
       if (bodyResult.status !== 'fulfilled') return
       const bodyData = bodyResult.value
       const body = bodyData.scene
+      prepareFurnitureAppearance(body)
       const mounted = mountDeskModel(body, DORM_DESK_MODEL_CONFIG, room)
       const drawers = drawerResults.map((result, index) => {
         const scene = (result as PromiseFulfilledResult<{ scene: Group }>).value.scene
+        prepareFurnitureAppearance(scene)
         // 分离件与桌体同一建模坐标系（清单标注未施加平移）：套用桌体归一化的同一变换
         scene.applyMatrix4(body.matrix)
         return { spec: DORM_DESK_DRAWERS[index], scene }
@@ -156,7 +159,7 @@ export function DormDeskModel({
   }, [forceFallback, retryNonce, roomShapeKey])
 
   // 固定家具：隐藏模型自带 Desk_Top_* 面片（出线孔由 ParametricDesk desktopOnly 叠加）
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!parts) return
     if (!hasFixedFurniture(room)) return
     parts.body.traverse((node) => {
@@ -165,7 +168,7 @@ export function DormDeskModel({
   }, [parts, room])
 
   // 显示-only 剖切（俯视）：隐藏床体 / 护栏 / 爬梯，便于查看桌面与地面布局
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!parts) return
     applyBedCutaway(parts.body, hideBedParts)
   }, [parts, hideBedParts])
@@ -205,6 +208,7 @@ export function DormDeskModel({
 /** 单只抽屉：滑动组 + 交互 + 逐帧缓动（progress → target） */
 function DeskDrawerPart({ spec, scene }: { spec: DormDeskDrawerSpec; scene: Group }) {
   const pivotRef = useRef<Group>(null)
+  const wasMoving = useRef(false)
   const handlers = useDrawerInteraction(spec, scene)
 
   useFrame((_, delta) => {
@@ -212,8 +216,13 @@ function DeskDrawerPart({ spec, scene }: { spec: DormDeskDrawerSpec; scene: Grou
     const state = store.drawers[spec.id]
     // 拖拽中 progress 由交互直接写入；其余时间由缓动驱动（running toward target）
     if (store.draggingId !== spec.id) {
-      const next = advanceDrawerProgress(state.progress, state.target, delta)
+      // Ignore the idle gap on the first frame, then use real elapsed time so
+      // lower frame rates don't slow the animation down.
+      const next = advanceDrawerProgress(state.progress, state.target, wasMoving.current ? delta : 1 / 60)
+      wasMoving.current = next !== state.target
       if (next !== state.progress) store.setProgress(spec.id, next)
+    } else {
+      wasMoving.current = false
     }
     const pivot = pivotRef.current
     if (pivot) {

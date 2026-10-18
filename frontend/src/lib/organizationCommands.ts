@@ -3,6 +3,7 @@ import { ZONE_LABELS, type OrganizationPlan } from '@/types/organization'
 import { assertScenePlacement, objectsWithAssignments, organizationPlanFailure } from './organizationValidation'
 
 export interface OrganizationCommand {
+  bookPose?: SceneObject['transform']['bookPose']
   id: string
   objectId: string
   objectIds: string[]
@@ -27,10 +28,11 @@ export function compileOrganizationCommands(plan: OrganizationPlan, objects: Sce
     }
     const moved = a.position.some((v, i) => Math.abs(v - o.transform.position[i]) > 0.00001)
     const angle = Math.atan2(Math.sin(a.rotationY - o.transform.rotationY), Math.cos(a.rotationY - o.transform.rotationY))
-    if ((o.fixed || o.locked) && (moved || Math.abs(angle) > 0.00001)) throw new Error(`固定物品不能移动：${o.name}`)
-    if (!moved && Math.abs(angle) < 0.00001) return []
+    const postureChanged = (a.bookPose ?? o.transform.bookPose ?? 'original') !== (o.transform.bookPose ?? 'original')
+    if ((o.fixed || o.locked) && (postureChanged || moved || Math.abs(angle) > 0.00001)) throw new Error(`固定物品不能移动：${o.name}`)
+    if (!postureChanged && !moved && Math.abs(angle) < 0.00001) return []
     return [{ id: `operation-${o.id}`, objectId: o.id, objectIds: [o.id],
       label: `${o.name} → ${ZONE_LABELS[a.zone]}`, reason: a.reason,
-      durationMs: 1200, position: [...a.position] as Vec3, rotationY: a.rotationY }]
+      durationMs: 1200, position: [...a.position] as Vec3, rotationY: a.rotationY, bookPose: a.bookPose }]
   })
 }

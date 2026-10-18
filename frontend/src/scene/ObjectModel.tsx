@@ -1,10 +1,14 @@
+import { bookTurned, bookPoseDimensions } from './bookPose'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { PrimitiveShape, SceneObject } from '@/types/project'
 import { resolvePublicAssetUrl } from './deskModel'
 import { loadModelFromUrl } from './modelLoader'
 import { PrimitiveModel } from './models'
 import { prefabItemOf } from './prefabItems'
-import { createPrefabInstance, normalizePrefabTemplate, type PrefabTemplate } from './prefabModelGeometry'
+import { createPrefabInstance, normalizePrefabTemplate, removeDuplicatePrefabPrimitives, type PrefabTemplate } from './prefabModelGeometry'
+import { preparePrefabAppearance } from './prefabAppearance'
+import { batchStaticPrefab } from './batchPrefab'
+import { repairPrefabWinding } from './meshWinding'
 
 // Registry URLs are a fixed set. Templates own shared geometry and materials.
 const templateCache = new Map<string, Promise<PrefabTemplate>>()
@@ -12,7 +16,14 @@ const templateCache = new Map<string, Promise<PrefabTemplate>>()
 function loadPrefabTemplate(url: string): Promise<PrefabTemplate> {
   const cached = templateCache.get(url)
   if (cached) return cached
-  const promise = loadModelFromUrl(url).then(({ scene }) => normalizePrefabTemplate(scene))
+  const promise = loadModelFromUrl(url).then(({ scene }) => {
+    if (url.endsWith('/laptop_fold.glb')) removeDuplicatePrefabPrimitives(scene)
+    const id = url.split('/').pop()!.replace(/\.glb$/, '')
+    if (id === 'mousepad' || id === 'monitor' || id === 'phone') repairPrefabWinding(scene)
+    preparePrefabAppearance(scene, id)
+    if (id === 'keyboard' || id === 'mouse') batchStaticPrefab(scene)
+    return normalizePrefabTemplate(scene)
+  })
   templateCache.set(url, promise)
   void promise.catch(() => templateCache.delete(url))
   return promise
@@ -51,6 +62,7 @@ export function ObjectModel({ object, shape, color, sockets }: {
 }) {
   const def = prefabItemOf(object)
   const fallback = <PrimitiveModel shape={shape} dims={object.dimensions} color={color} sockets={sockets} />
-  if (!def) return fallback
-  return <PrefabItemModel url={def.url} dimensions={object.dimensions} fallback={fallback} />
+  const model = def ? <PrefabItemModel url={def.url} dimensions={object.dimensions} fallback={fallback} /> : fallback
+  if (!bookTurned(object)) return model
+  return <group position={[0, (bookPoseDimensions(object).height - object.dimensions.height) / 2, 0]} rotation={[-Math.PI / 2, 0, 0]}>{model}</group>
 }

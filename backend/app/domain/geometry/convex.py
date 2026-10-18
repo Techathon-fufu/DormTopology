@@ -1,5 +1,6 @@
 """Validated convex compound solids. Pure geometry, no vendor/runtime dependency."""
 import math
+from ..book_pose import pose_point
 from collections import Counter
 from functools import lru_cache
 
@@ -91,9 +92,9 @@ def prepare(vertices, faces):
 def local_parts(item):
     collision = item.get('collision', {'type':'box'})
     if collision['type'] == 'compound':
-        return tuple(prepare(tuple(map(tuple,p['vertices_m'])),tuple(map(tuple,p['faces']))) for p in collision['parts'])
+        return tuple(prepare(tuple(pose_point(item, v) for v in p['vertices_m']),tuple(map(tuple,p['faces']))) for p in collision['parts'])
     w,h,d = item['size_m']
-    vertices = tuple((x,y,z) for x in (-w/2,w/2) for y in (0,h) for z in (-d/2,d/2))
+    vertices = tuple(pose_point(item, (x,y,z)) for x in (-w/2,w/2) for y in (0,h) for z in (-d/2,d/2))
     return ((vertices,((1,0,0),(0,1,0),(0,0,1)),((1,0,0),(0,1,0),(0,0,1))),)
 
 
