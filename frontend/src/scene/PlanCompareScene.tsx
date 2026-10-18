@@ -7,6 +7,7 @@ import { hasUsableCableRoute, resolveCableThickness } from '@/scene/cables'
 import { cablePathSamples, createCableTube } from '@/scene/cableGeometry'
 import { CATEGORY_COLORS } from '@/scene/models'
 import { ObjectModel } from '@/scene/ObjectModel'
+import { bookPoseDimensions, bookTurned } from '@/scene/bookPose'
 import { basicMaterial, boxGeometry } from './resources'
 
 /**
@@ -36,6 +37,11 @@ export function CompareObjectMesh({
   if (!object.visible) return null
   const { transform: t, dimensions: dims } = object
   const color = zoneTint && zone ? ZONE_COLORS[zone] : CATEGORY_COLORS[object.category]
+  // 书本姿态：显示尺寸按 bookPose 交换，轮廓按同一姿态偏移/旋转。
+  // ObjectModel 自身已处理 bookPose 旋转，这里只负责中心对齐与线框，避免重复旋转。
+  const displayDims = bookPoseDimensions(object)
+  const postureOffset = (displayDims.height - dims.height) / 2
+  const postureRotation: [number, number, number] = [bookTurned(object) ? -Math.PI / 2 : 0, 0, 0]
   return (
     <group position={[t.position[0], t.position[1] + dims.height / 2, t.position[2]]} rotation={[0, t.rotationY, 0]}>
       <ObjectModel
@@ -45,10 +51,12 @@ export function CompareObjectMesh({
         sockets={object.powerStrip?.socketCount}
       />
       {diff ? (
-        <mesh
-          geometry={boxGeometry(dims.width * 1.12, dims.height * 1.12, dims.depth * 1.12)}
-          material={basicMaterial(DIFF_COLOR, { wireframe: true, opacity: 0.85 })}
-        />
+        <group position={[0, postureOffset, 0]} rotation={postureRotation}>
+          <mesh
+            geometry={boxGeometry(displayDims.width * 1.12, displayDims.height * 1.12, displayDims.depth * 1.12)}
+            material={basicMaterial(DIFF_COLOR, { wireframe: true, opacity: 0.85 })}
+          />
+        </group>
       ) : null}
     </group>
   )

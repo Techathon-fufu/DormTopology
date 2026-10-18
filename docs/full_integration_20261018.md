@@ -48,3 +48,23 @@
 原视觉分支交付公共主题、首页/普通页面日夜切换，但明确把全屏工作台/结果页接入留给整合者。本轮发现该接线漏项：全局暗色文字生效，而全屏面板仍为浅色。现通过共享 FullscreenThemeBoundary 为工作台、独立描点与结果页接入同一 .app-shell 和 useAppTheme；工作台/结果页头部提供共享日夜切换，偏好与首页共用。浅色辅助文字对比度加深，三维视口说明文字增加主题背景。
 
 14 项桌面主题及工作台回归通过，覆盖保存的日/夜偏好直接进入、跨页面切换、刷新、实际面板颜色和标题/物品名称对比度 >=4.5；已查看深夜工作台截图。新增测试工作由 deepseek-pro 返回，记录用量 7486 tokens；实现调用返回格式异常，无完整用量记录，其文件建议经本地审查后采用。证据位于 F:/DormTopology/.task-artifacts/workspace-theme-fix/。
+
+
+## 结果页回放与渲染补修 + 遗漏复查（2026-10-18）
+
+复查确认两处结果页接线遗漏并修复：
+
+- 回放模型 `replaySteps` 只比较位置/旋转/尺寸，未识别“书本平放↔立放”的姿态变化；`replayObjects` 中间态也未携带 `bookPose`。现补齐姿态参与逐步判定与中间插值（快照保持不可变）。
+- `CompareObjectMesh` 的差异线框未按 `bookPose` 交换显示尺寸，与 `SceneObjectMesh` 不一致；现用 `bookPoseDimensions`/`bookTurned` 对齐中心与线框，且不与 `ObjectModel` 自身姿态旋转重复。
+- `ResultPage` 仍使用旧的独立灯光与相机；现改用与工作台一致的 `SceneLighting` 与 `renderProfile`（`SCENE_GL_OPTIONS`/`sceneDpr`/`configureSceneRenderer`/`SCENE_CAMERA_CLIP`）。
+
+验证：类型检查与生产构建通过；新增 `result-integration.spec.ts` 覆盖姿态单步回放与快照不可变、结果路由直连时共享渲染挂载且无页面错误；桌面回归 24 项通过（含 `scene-rendering` 结果回放、`book-organization` 真实整理、主题、缩放、接口迁移）；后端全量 300 项及 367 子测试通过。
+
+### 审计发现分诊（未改动的部分）
+
+对识别/生成链路的静态审计逐条对照实际代码核实：
+
+- “85% 默认尺寸误伤已确认/测量物品”——**证伪**。`newObjectDefaultSkipReason` 对 `recognition.dimensionSource === 'user'` 返回 `measured` 跳过，`defaultedResults` 防重复缩小。
+- 预制与真实 Rodin 均回传 `source:'generated'`、仅 `note` 与 URL 前缀不同；`confirmItems` 未写入 `recognition.photoId`，生成按 `object_id` 精确匹配裁剪图；后台取消为尽力而为（付费调用未必即时中止、产物可能残留）。以上属远端识别/生成链路**既有设计**，只影响已明确延后的“真实 Rodin 付费验收”，**非本次整合造成的回归**，留待真实服务验收阶段单独核查，本轮不扩大改动。
+
+证据位于 F:/DormTopology/.task-artifacts/integration-audit/。

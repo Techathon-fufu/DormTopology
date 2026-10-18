@@ -8,6 +8,8 @@ import { CompareObjectMesh, CompareCables } from '@/scene/PlanCompareScene'
 import { CameraRig } from '@/scene/CameraRig'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
+import { SceneLighting } from '@/scene/SceneLighting'
+import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
 import { Button } from '@/ui/kit/button'
 import { HoldCompareButton } from '@/ui/workspace/HoldCompareButton'
 import { ThemeToggle } from '@/ui/theme/ThemeToggle'
@@ -53,10 +55,14 @@ export function ResultPage() {
       <ThemeToggle />
     </header>
     <main className="relative min-h-0 flex-1" aria-label="整理动画场景">
-      <Canvas shadows dpr={[1, 2]} camera={{ fov: 42 }}>
-        <color attach="background" args={['#F4F1EA']} />
-        <ambientLight intensity={.8} />
-        <directionalLight position={[2, 4, 3]} intensity={1.2} castShadow />
+      <Canvas
+        shadows
+        gl={SCENE_GL_OPTIONS}
+        dpr={sceneDpr()}
+        camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+        onCreated={({ gl }) => configureSceneRenderer(gl)}
+      >
+        <SceneLighting />
         <Suspense fallback={null}>
           <RoomShell room={room} deskMode="none" showBed={false} />
           <DormDeskModel room={room} hideBedParts respectToolbar={false} />
