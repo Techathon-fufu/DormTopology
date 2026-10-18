@@ -862,14 +862,23 @@ def _validate_curve(
     required_tolerance: float = EPSILON,
     corridors: Sequence[tuple[Point, Point, float | None]] = (),
     support_context: SupportContext | None = None,
+    orthogonal: bool = False,
 ) -> tuple[str | None, float]:
+    if orthogonal:
+        from .orthogonal import axis_aligned
+        for index, segment in enumerate(segments):
+            if any(distance(actual, expected) > 1e-9 for actual, expected in zip(segment, _line_control_points(segment[0], segment[3]))):
+                return "no_path", 0.0
+            if 0 < index < len(segments) - 1 and not axis_aligned(segment[0], segment[3]):
+                return "no_path", 0.0
     for previous, following in pairwise(segments):
         if distance(previous[3], following[0]) > 1e-9:
             return "no_path", 0.0
         incoming, outgoing = sub(previous[3], previous[2]), sub(following[1], following[0])
         if length(incoming) <= 1e-12 or length(outgoing) <= 1e-12:
             return "no_path", 0.0
-        if dot(normalize(incoming), normalize(outgoing)) < 1.0 - 1e-9:
+        alignment = dot(normalize(incoming), normalize(outgoing))
+        if (not orthogonal and alignment < 1.0 - 1e-9) or (orthogonal and alignment < -1.0 + 1e-9):
             return "no_path", 0.0
     if len(samples) < 2:
         return "no_path", 0.0
@@ -951,6 +960,10 @@ def _plan_one(
     support_context: SupportContext | None = None,
     leadout_extension_m: float | None = None,
 ) -> tuple[dict, tuple[Sequence[Point], float] | None]:
+    if scene.get("routing_graph", {}).get("path_style") == "orthogonal":
+        from .orthogonal import plan_orthogonal
+        return plan_orthogonal(scene, cable, endpoints, nodes, edges, obstacle_boxes,
+                               reserved_boxes, item_boxes, occupied, use_dijkstra, support_context)
     if cable["min_bend_radius_m"] == 0 and leadout_extension_m is None:
         for extension in (0.04, 0.02, 0.0):
             result, tube = _plan_one(

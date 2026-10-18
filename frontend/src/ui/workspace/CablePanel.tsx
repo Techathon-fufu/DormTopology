@@ -417,7 +417,7 @@ export function CablePanel({
           <div className="flex items-center justify-between gap-2">
             <Label>线材类型（可见线 / 隐藏线）</Label>
             <span className="min-w-0 truncate text-[11px] text-faint">
-              {visInfo.source === 'explicit'
+              {visInfo.source === 'policy' ? '电源 / 视频 / 网线固定走背线' : visInfo.source === 'explicit'
                 ? '已手动设置'
                 : visInfo.source === 'keyword'
                   ? `默认推断：命中「${visInfo.keyword}」`
@@ -428,14 +428,14 @@ export function CablePanel({
             size="sm"
             className="w-full"
             value={visInfo.visibility}
-            onChange={changeVisibility}
+            onChange={(value) => { if (visInfo.source !== 'policy') changeVisibility(value) }}
             options={[
-              { value: 'visible', label: '可见线', title: CABLE_VISIBILITY_META.visible.description },
+              { value: 'visible', label: '可见线', title: CABLE_VISIBILITY_META.visible.description, disabled: visInfo.source === 'policy' },
               { value: 'hidden', label: '隐藏线', title: CABLE_VISIBILITY_META.hidden.description },
             ]}
           />
           <p className="text-[11px] leading-relaxed text-faint">
-            {CABLE_VISIBILITY_META.visible.description}；{CABLE_VISIBILITY_META.hidden.description}。默认按两端设备名称推断（显示器 / 台灯 → 隐藏线；手机 / 笔记本 → 可见线），可手动修改。
+            {CABLE_VISIBILITY_META.visible.description}；{CABLE_VISIBILITY_META.hidden.description}。电源、视频和网线沿背板后走线，不经过桌面过线槽；其他线缆可选择策略。主路径沿边角直走，以直角转向。
           </p>
           {strategyMismatch && cable.route.strategy ? (
             <div className="space-y-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[11px] leading-relaxed text-warning">

@@ -51,6 +51,7 @@ export interface SceneBox {
 }
 
 export interface RoutingGraph {
+  path_style?: 'smooth' | 'orthogonal'
   nodes: Array<{ id: string; position: Vec3; kind: 'corner' | 'slot' | 'fixing_point' | 'endpoint' }>
   edges: Array<{ id: string; from_node_id: string; to_node_id: string; modes: Array<'slot' | 'backboard'>; clearance_radius_m: number; exposed: boolean }>
   support_policy?: { max_unsupported_span_m: number }

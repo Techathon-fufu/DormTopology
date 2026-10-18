@@ -192,7 +192,7 @@ const asymmetricRoom: RoomConfig = {
   desk: { ...room.desk, depth: 0.87 },
   shelf: { ...room.shelf, enabled: false },
 }
-const preferences = resolveOrganizationPreferences(demo)
+const preferences = { ...resolveOrganizationPreferences(demo), typingOffsetX: 0 }
 const asymmetricMonitor = obj('asymmetric-monitor', 'monitor', [0.54, 0.20, 0.70], [0, room.desk.height, 0.35])
 const typing = computeOrganizationZones(asymmetricRoom, preferences).typing.rect
 const originalFootprint = objectFootprint(asymmetricMonitor, asymmetricMonitor.transform.position)

@@ -400,6 +400,7 @@ export interface CableRoute {
   /** 真实后端沿已验证连续曲线积分得到的长度，不能重新平滑后沿用。 */
   pathLengthM?: number
   verification?: {
+    pathStyle?: 'smooth' | 'orthogonal'
     sceneId: string
     sceneRevision: number
     status: 'valid' | 'failed'
