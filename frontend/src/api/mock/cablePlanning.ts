@@ -17,7 +17,7 @@ import type { CablePlanningService, CablePlanningResult } from '../types'
  * 3. 首次规划时把规划前的走线留存为「原始走线」快照（用于对比与收拢动画）；
  * 4. 全部候选失败 → 标记 conflict 并附具体问题（用户可调整路径节点）。
  *
- * 线缆间距为界面上的咨询级检查（不参与规划通过判定，见 scene/cableRoute.ts）。
+ * 线缆之间允许共线 / 交叠，不做线径和间距检查。
  * 重要：结果为演示数据，未经过真实算法验证（algorithmVerified 恒为 false）。
  */
 export const mockCablePlanningService: CablePlanningService = {

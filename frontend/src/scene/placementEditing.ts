@@ -1,4 +1,7 @@
+import { constrainDesktopPose, desktopPlacementIssue } from './desktopBindings'
 import type { ObjectDimensions, RoomConfig, SceneObject, Vec3 } from '@/types/project'
+import { drawerIdForSurface, type DrawerOffsets } from './dormDeskDrawers'
+import { placePowerStripOnBackboard, orientPowerStrip, validBackboardMount } from './backboardMount'
 import { worldCollision } from './collisionGeometry'
 import { furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
 import { placementIssues, type SupportHit } from './sceneValidation'
@@ -33,12 +36,32 @@ export function snapPlacement(object: SceneObject, hit: SupportHit, room: RoomCo
     const nearest = targets.sort((a, b) => Math.abs(a - value) - Math.abs(b - value))[0]
     return nearest !== undefined && Math.abs(nearest - value) <= SNAP_DISTANCE ? nearest : Math.round(value * 100) / 100
   }
-  return [snap(hit.x, anchors.x), hit.y, snap(hit.z, anchors.z)]
+  const position: Vec3 = [snap(hit.x, anchors.x), hit.y, snap(hit.z, anchors.z)]
+  const cavity = furnitureSurfaces(room, false).find(s => s.id === hit.surfaceId && (s.kind === 'drawer' || s.id.startsWith('support-cabinet')))
+  if (cavity) {
+    const clamp = (v: number, lo: number, hi: number) => lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v))
+    position[0] = clamp(position[0], cavity.rect.x0 - bounds.min[0], cavity.rect.x1 - bounds.max[0])
+    position[2] = clamp(position[2], cavity.rect.z0 - bounds.min[2], cavity.rect.z1 - bounds.max[2])
+  }
+  try { return constrainDesktopPose({ ...object, transform: { ...object.transform, position } }, room, others).position }
+  catch { return object.transform.position }
+}
+
+/** Convert a hit on a moving drawer back into the saved, closed-drawer frame. */
+export function placementAtSupport(object: SceneObject, hit: SupportHit, room: RoomConfig, others: SceneObject[], offsets: DrawerOffsets = {}): SceneObject {
+  if (hit.kind === 'backboard') return placePowerStripOnBackboard(object, room, [hit.x, hit.y, hit.z])
+  const candidate = orientPowerStrip(object, false)
+  const drawer = hit.surfaceId ? drawerIdForSurface(hit.surfaceId) : undefined
+  const localHit = { ...hit, x: hit.x - (drawer ? offsets[drawer] ?? 0 : 0) }
+  return { ...candidate, transform: { ...candidate.transform, position: snapPlacement(candidate, localHit, room, others) } }
 }
 
 export function resizeIssue(object: SceneObject, dimensions: ObjectDimensions, room: RoomConfig, objects: SceneObject[]): string | null {
   if (Object.values(dimensions).some((n) => !Number.isFinite(n) || n <= 0 || n > 5)) return '尺寸必须大于 0 且不超过 5 米'
-  const candidate = { ...object, dimensions }
+  const candidate = { ...object, dimensions, transform: { ...object.transform, position: object.transform.position.map((v, i) => v + (i === 2 && object.powerStrip?.mount === 'backboard' ? (dimensions.depth - object.dimensions.depth) / 2 : 0)) as Vec3 } }
+  const bindingIssue = desktopPlacementIssue(candidate, room, objects)
+  if (bindingIssue) return bindingIssue
+  if (candidate.powerStrip?.mount === 'backboard' && !validBackboardMount(candidate, candidate.transform.position, room)) return '尺寸未改变：插排必须完整贴合桌下背板'
   const issues = placementIssues(candidate, candidate.transform.position, objects, room)
   const conflict = issues.find((issue) => ['overlap', 'roomCollision', 'outOfBounds'].includes(issue.type))
   return conflict ? `尺寸未改变：${conflict.message}` : null

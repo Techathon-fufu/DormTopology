@@ -11,6 +11,14 @@ import * as THREE from 'three'
  */
 
 export type DrawerSlotId = 'bot' | 'mid' | 'top'
+export type DrawerOffsets = Partial<Record<DrawerSlotId, number>>
+
+export function drawerIdForPart(name: string): DrawerSlotId | undefined {
+  return name.startsWith('drawer_bottom:') ? 'bot' : name.startsWith('drawer_middle:') ? 'mid' : name.startsWith('drawer_top:') ? 'top' : undefined
+}
+export function drawerIdForSurface(id: string): DrawerSlotId | undefined {
+  return id === 'support-drawer-bottom' ? 'bot' : id === 'support-drawer-middle' ? 'mid' : id === 'support-drawer-top' ? 'top' : undefined
+}
 
 export interface DormDeskDrawerSpec {
   id: DrawerSlotId

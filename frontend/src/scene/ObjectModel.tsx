@@ -50,7 +50,7 @@ export function ObjectModel({ object, shape, color, sockets }: {
   sockets?: number
 }) {
   const def = prefabItemOf(object)
-  const fallback = <PrimitiveModel shape={shape} dims={object.dimensions} color={color} sockets={sockets} />
+  const fallback = <PrimitiveModel shape={shape} dims={object.dimensions} color={color} sockets={sockets} backboard={object.powerStrip?.mount === 'backboard'} />
   if (!def) return fallback
   return <PrefabItemModel url={def.url} dimensions={object.dimensions} fallback={fallback} />
 }

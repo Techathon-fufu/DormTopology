@@ -184,6 +184,16 @@ export function DormDeskModel({
     [],
   )
 
+  useFrame((_, delta) => {
+    for (const spec of DORM_DESK_DRAWERS) {
+      const store = useDrawerStore.getState(), state = store.drawers[spec.id]
+      if (store.draggingId !== spec.id) {
+        const next = advanceDrawerProgress(state.progress, state.target, delta)
+        if (next !== state.progress) store.setProgress(spec.id, next)
+      }
+    }
+  })
+
   const useGlb = hasFixedFurniture(room) && !forceFallback && status === 'loaded' && parts !== null
   return (
     <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
@@ -207,14 +217,7 @@ function DeskDrawerPart({ spec, scene }: { spec: DormDeskDrawerSpec; scene: Grou
   const pivotRef = useRef<Group>(null)
   const handlers = useDrawerInteraction(spec, scene)
 
-  useFrame((_, delta) => {
-    const store = useDrawerStore.getState()
-    const state = store.drawers[spec.id]
-    // 拖拽中 progress 由交互直接写入；其余时间由缓动驱动（running toward target）
-    if (store.draggingId !== spec.id) {
-      const next = advanceDrawerProgress(state.progress, state.target, delta)
-      if (next !== state.progress) store.setProgress(spec.id, next)
-    }
+  useFrame(() => {
     const pivot = pivotRef.current
     if (pivot) {
       const current = useDrawerStore.getState().drawers[spec.id]

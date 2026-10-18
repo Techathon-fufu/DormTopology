@@ -4,6 +4,8 @@
 __pycache__/
 *.py[cod]
 *key*.txt
+!vlm/key.txt
+!vlm/rodin_key.txt
 *.env
 _temp_*
 *.blend1

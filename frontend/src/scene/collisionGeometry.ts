@@ -93,10 +93,10 @@ export function localCollision(object:SceneObject):ObjectCollision {
       return result
     }
   }
-  const key=JSON.stringify([object.model.shape,object.dimensions,object.powerStrip?.socketCount])
+  const key=JSON.stringify([object.model.shape,object.dimensions,object.powerStrip?.socketCount,object.powerStrip?.mount])
   const cached=localCache.get(key)
   if(cached) return cached
-  const description=describePrimitive(object.model.shape,object.dimensions,undefined,object.powerStrip?.socketCount)
+  const description=describePrimitive(object.model.shape,object.dimensions,undefined,object.powerStrip?.socketCount,object.powerStrip?.mount === 'backboard')
   const parts=description.parts.map(part=>{
     const geometry=primitivePartGeometry(part)
     const attr=geometry.getAttribute('position')
@@ -133,7 +133,7 @@ export function exportCollision(object:SceneObject):CompoundCollision {
   return {type:'compound',parts:localCollision(object).parts.map(p=>({vertices_m:p.vertices_m.map(v=>[...v] as Vec3),faces:p.faces.map(f=>[...f])}))}
 }
 export function worldCollision(object:SceneObject,position:Vec3=object.transform.position):ObjectCollision {
-  const key=JSON.stringify([position,object.transform.rotationY,object.dimensions,object.model.shape,object.powerStrip?.socketCount,object.model.prefabId??''])
+  const key=JSON.stringify([position,object.transform.rotationY,object.dimensions,object.model.shape,object.powerStrip?.socketCount,object.powerStrip?.mount,object.model.prefabId??''])
   const cached=worldCache.get(object)
   if(cached?.key===key) return cached.value
   const angle=object.transform.rotationY,c=Math.cos(angle),s=Math.sin(angle)

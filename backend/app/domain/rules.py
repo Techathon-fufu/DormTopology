@@ -174,6 +174,15 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             {"high", "medium", "low"},
             path + ".usage_frequency",
         )
+        if "surface_mount" in item:
+            mount_path = path + ".surface_mount"
+            mount = _object(item["surface_mount"], "obstacle_id face", mount_path)
+            obstacle_id = _string(mount["obstacle_id"], mount_path + ".obstacle_id")
+            if not any(o["id"] == obstacle_id for o in scene["obstacles"]):
+                _fail(mount_path + ".obstacle_id", "must reference an existing obstacle")
+            _enum(mount["face"], {"z_max"}, mount_path + ".face")
+            if item["category"] != "power_strip" or not item["fixed"] or "plug_mount" in item:
+                _fail(mount_path, "only a fixed power_strip may attach to a backboard")
         allowed = _array(item["allowed_region_ids"], path + ".allowed_region_ids")
         if not allowed and not item["fixed"]:
             _fail(path + ".allowed_region_ids", "movable items need a target region")

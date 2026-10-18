@@ -1,5 +1,6 @@
 import type { RoomConfig, Vec3 } from '@/types/project'
 import { furnitureBoxes, hasFixedFurniture } from './fixedFurniture'
+import type { DrawerOffsets } from './dormDeskDrawers'
 
 /**
  * 场地固定实体：版本化家具使用资产生成盒，历史房间使用参数化盒。
@@ -72,8 +73,8 @@ function centeredBox(center: Vec3, size: Vec3): { min: Vec3; max: Vec3 } {
  *
  * 固定家具包含床体、梯子、柜体和抽屉壳；参数化分支保留历史实体集合。
  */
-export function roomSolids(room: RoomConfig): RoomSolid[] {
-  if (hasFixedFurniture(room)) return furnitureBoxes(room).map((p) => ({
+export function roomSolids(room: RoomConfig, offsets: DrawerOffsets = {}): RoomSolid[] {
+  if (hasFixedFurniture(room)) return furnitureBoxes(room, offsets).map((p) => ({
     id: p.name, kind: p.name.startsWith('Desk_Top_') ? 'deskTop' : 'furniture',
     label: p.name.startsWith('Desk_Top_') ? '桌面板' : p.name.startsWith('Bookshelf') ? '书架' : p.name.startsWith('drawer_') || p.name.startsWith('Cabinet') ? '抽屉柜' : p.name.startsWith('Wardrobe') ? '衣柜' : p.name.startsWith('Ladder') ? '梯子' : '床架',
     min: p.min, max: p.max,

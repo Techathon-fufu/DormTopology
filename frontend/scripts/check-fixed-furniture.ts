@@ -67,7 +67,7 @@ const monitor = mapped.assignments.find((a) => a.objectId === 'demo-monitor')!
 const printer = mapped.assignments.find((a) => a.objectId === 'demo-printer')!
 const expectedMonitorX = zones.workstation?.slotCenterX ?? (zones.typing.rect.x0 + zones.typing.rect.x1) / 2
 assert.ok(Math.abs(monitor.position[0] - expectedMonitorX) < .002)
-assert.ok(zones.workstation ? printer.position[0] < 0 : printer.position[0] > .59)
+assert.ok(zones.workstation ? printer.position[0] < -.04 : printer.position[0] > .59, 'printer leaves the right return for daily items')
 assert.equal(monitor.rotationY, 0)
 assert.equal(printer.rotationY, 0)
 assert.ok(mapped.assignments.filter((a) => a.position[1] === 0).every((a) => a.objectId === 'demo-computer-tower'))

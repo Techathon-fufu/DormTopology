@@ -1,3 +1,5 @@
+import { useWorkspaceStore } from '@/state/workspaceStore'
+import { useOrganizeStore } from '@/state/organizeStore'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
@@ -62,7 +64,7 @@ export function useDrawerInteraction(
   }
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0) return
+    if (e.button !== 0 || useWorkspaceStore.getState().mode === 'cable' || useOrganizeStore.getState().isPreviewBlocking()) return
     e.stopPropagation()
     cleanupRef.current?.() // 取消上一次未完成的拖拽
 

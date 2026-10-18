@@ -108,7 +108,7 @@ export function CablePanel({
       objects: project.objects,
       room: project.room,
       avoidZones,
-      // 线缆间距（咨询级）：与同项目其它线缆比较，按各自线径计算最小净间隙
+      // 线缆之间允许共线 / 交叠；仅校验当前线缆自身与实体的碰撞。
       cables: project.cables,
       selfCableId: cable.id,
       smooth: routeView === 'original' || cable.route.smooth !== false,
@@ -660,7 +660,7 @@ export function CablePanel({
               : '当前曲线使用 Catmull-Rom 采样；本地检查不替代后端路径验证。'}
           </p>
           <p className="text-[11px] leading-relaxed text-faint">
-            线缆间距为咨询级提示（不阻断通过）：按「粗线 6.5mm / 细线 3.5mm 参考直径 + 8mm 净间隙」计算；与其它线缆共用路由节点的并排走线视为有意共槽，不作提示。
+            当前版本不校验线缆之间的线径和间距；每根线仍单独检查自身线径与家具、设备、障碍及通道的碰撞。
           </p>
         </section>
 

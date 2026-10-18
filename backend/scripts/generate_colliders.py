@@ -1,4 +1,4 @@
-"""从 Prefabmodel/*.glb 生成物品碰撞体，输出到 Prefabmodel/colliders/。
+"""从 Prefabmodel/*.glb 生成物品碰撞体，输出到 Prefabmodel/collisionsize/。
 
 范围：**物品（单品）**。桌体与抽屉属于场景固定结构，不在此脚本内表达
 （契约 2.2：`compound` 只描述物品自身凸体；固定家具按 `obstacles[]` 表达）。
@@ -12,19 +12,24 @@
   面外向一致定向、闭合流形、体积为正。
 
 提取策略（逐个模型经实测确定，不是猜测）：
-- `convex`（路线 A）：逐网格凸包。忠实于模型自身形状；对凸体网格（如纯盒）为精确值。
-  保留部件之间的空隙，符合契约「不允许看得见的是 A、算碰撞的是 B」。
+- `convex`（路线 A）：逐网格凸包。对凸体网格（如纯盒）为精确值；凹体或合并网格
+  不能直接使用此策略，否则会填实空隙，需要单独分解。
+- `monitor_components`：按三角形连通性拆出底座、支架、屏幕与后壳；屏幕再按原始
+  前表面分为五个凸体，保留边框斜面和面板凹陷，共八个实体，不使用整体凸包。
 - `aabb`（路线 B）：整体轴对齐包围盒。仅用于部件数过多、且单件物品场景够用的模型：
   `keyboard.glb`（93 个网格）、`mouse.glb`（31 个网格）—— 逐件凸包会让 SAT 代价升一个量级。
 
 用法：
+    pip install -r backend/requirements-geometry.txt        # 离线生成依赖
     python backend/scripts/generate_colliders.py            # 生成
+    python backend/scripts/generate_colliders.py --model monitor  # 只更新显示器
     python backend/scripts/generate_colliders.py --check    # 仅校验已生成结果
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import dataclass, field
@@ -55,6 +60,7 @@ EXCLUDED = {
 STRATEGY: dict[str, str] = {
     "keyboard.glb": "aabb",
     "mouse.glb": "aabb",
+    "monitor.glb": "monitor_components",
 }
 
 
@@ -164,6 +170,103 @@ def build_convex(name: str, scene) -> ModelCollider:
     return m
 
 
+def connected_meshes(mesh: trimesh.Trimesh) -> list[trimesh.Trimesh]:
+    """Split welded triangle connectivity, including open shells, without filling gaps."""
+    mesh = mesh.copy()
+    mesh.merge_vertices()
+    adjacent = [set() for _ in mesh.vertices]
+    for face in mesh.faces:
+        for vertex in face:
+            adjacent[vertex].update(face)
+    unseen = set(range(len(mesh.vertices)))
+    result = []
+    while unseen:
+        seed = min(unseen)
+        unseen.remove(seed)
+        pending, component = [seed], {seed}
+        while pending:
+            for vertex in sorted(adjacent[pending.pop()] & unseen):
+                unseen.remove(vertex)
+                component.add(vertex)
+                pending.append(vertex)
+        faces = [i for i, face in enumerate(mesh.faces) if face[0] in component]
+        if faces:
+            result.append(mesh.submesh([faces], append=True))
+    return result
+
+
+def monitor_screen_parts(mesh: trimesh.Trimesh) -> list[trimesh.Trimesh]:
+    """Extrude the actual five front surfaces to the back; preserve the recessed panel.
+
+    The supplied screen is a height field over XY. Each bezel side and the panel
+    is a planar quad. Their disjoint XY footprints exactly tile the screen, so
+    the union of these five convex prisms fills its solid interior, not its recess.
+    Reject a changed asset that no longer has this topology instead of using a box.
+    """
+    back = mesh.bounds[0, 2]
+    planes: list[tuple[np.ndarray, float, list[np.ndarray]]] = []
+    projected_area = 0.0
+    for face in mesh.faces:
+        triangle = mesh.vertices[face]
+        normal = np.cross(triangle[1] - triangle[0], triangle[2] - triangle[0])
+        if abs(normal[2]) < 1e-12 or np.all(np.abs(triangle[:, 2] - back) < TOLERANCE):
+            continue  # sides have zero XY area; back is the extrusion's common base
+        projected_area += abs(normal[2]) / 2
+        normal /= np.linalg.norm(normal)
+        if normal[2] < 0:
+            normal = -normal
+        offset = float(normal @ triangle[0])
+        group = next((g for g in planes if np.linalg.norm(g[0] - normal) < TOLERANCE
+                      and abs(g[1] - offset) < TOLERANCE), None)
+        if group is None:
+            group = (normal, offset, [])
+            planes.append(group)
+        group[2].extend(triangle)
+    if len(planes) != 5 or abs(projected_area - np.prod(mesh.extents[:2])) > 1e-9:
+        raise ValueError("monitor screen topology changed: expected four bezel faces and one recessed panel")
+    result = []
+    for _normal, _offset, points in planes:
+        front = np.unique(np.asarray(points), axis=0)
+        if len(front) != 4:
+            raise ValueError("monitor front surface is no longer a quad")
+        rear = front.copy()
+        rear[:, 2] = back
+        result.append(trimesh.Trimesh(vertices=np.vstack([front, rear]), process=False))
+    return result
+
+
+def build_monitor(name: str, scene) -> ModelCollider:
+    """Use this GLB's real convex structures, including its sloped base and screen recess."""
+    from backend.app.domain.geometry.convex import validate_compound
+
+    model = ModelCollider(name=name, strategy="monitor_components")
+    nodes = [(scene.graph[node][0], scene.geometry[scene.graph[node][1]])
+             for node in scene.graph.nodes_geometry] if isinstance(scene, trimesh.Scene) else [(np.eye(4), scene)]
+    model.source_parts = len(nodes)
+    components = [(matrix, component) for matrix, mesh in nodes for component in connected_meshes(mesh)]
+    if len(components) != 4:
+        raise ValueError("monitor topology changed: expected base, stand, screen and rear housing")
+    screen = max(range(len(components)), key=lambda i: components[i][1].extents[0])
+    for index, (matrix, mesh) in enumerate(components):
+        if not np.isfinite(mesh.vertices).all() or not np.isfinite(matrix).all():
+            raise ValueError("monitor contains non-finite geometry")
+        pieces = monitor_screen_parts(mesh) if index == screen else [mesh]
+        for piece in pieces:
+            transformed = piece.copy()
+            transformed.apply_transform(matrix)
+            part = convex_part(transformed)
+            if part is None:
+                raise ValueError("monitor component exceeds the convex collision contract")
+            model.parts.append(part)
+    validate_compound(collider_payload(model))
+    model.notes.extend([
+        "Split the welded source mesh into base, tilted stand, screen and rear housing; apply every node transform.",
+        "Screen is five convex prisms from the actual front triangles; the 3mm recessed panel remains empty in front.",
+        "Close stand/rear-housing attachment caps for solid collision; preserve all authored exterior surfaces.",
+    ])
+    return model
+
+
 def collider_payload(m: ModelCollider) -> dict:
     return {
         "type": "compound",
@@ -171,15 +274,20 @@ def collider_payload(m: ModelCollider) -> dict:
     }
 
 
-def generate() -> int:
+def generate(model_name: str | None = None) -> int:
     files = sorted(ASSET_DIR.glob("*.glb"))
+    if model_name:
+        files = [p for p in files if p.stem == model_name]
+        if not files:
+            raise ValueError(f"unknown model: {model_name}")
     models: list[ModelCollider] = []
     for p in files:
         if p.name in EXCLUDED:
             continue
         strat = STRATEGY.get(p.name, "convex")
         scene = trimesh.load(str(p))
-        m = build_aabb(p.name, scene) if strat == "aabb" else build_convex(p.name, scene)
+        m = (build_monitor(p.name, scene) if strat == "monitor_components" else
+             build_aabb(p.name, scene) if strat == "aabb" else build_convex(p.name, scene))
         models.append(m)
 
     COLLIDER_DIR.mkdir(parents=True, exist_ok=True)
@@ -192,12 +300,15 @@ def generate() -> int:
         "tolerance": TOLERANCE,
         "models": {},
     }
+    if model_name and (COLLIDER_DIR / "manifest.json").exists():
+        manifest = json.loads((COLLIDER_DIR / "manifest.json").read_text(encoding="utf-8"))
     for m in models:
         out = COLLIDER_DIR / f"{Path(m.name).stem}.collision.json"
         out.write_text(json.dumps(collider_payload(m), ensure_ascii=False, indent=1), encoding="utf-8")
         manifest["models"][m.name] = {
             "file": out.name,
             "source_glb": m.name,
+            "source_glb_sha256": hashlib.sha256((ASSET_DIR / m.name).read_bytes()).hexdigest(),
             "strategy": m.strategy,
             "source_parts": m.source_parts,
             "collider_parts": len(m.parts),
@@ -239,8 +350,9 @@ def check() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="生成物品碰撞体")
     ap.add_argument("--check", action="store_true", help="仅校验已生成结果")
+    ap.add_argument("--model", help="仅更新指定单品（不带 .glb），例如 monitor")
     args = ap.parse_args()
-    return check() if args.check else generate()
+    return check() if args.check else generate(args.model)
 
 
 if __name__ == "__main__":

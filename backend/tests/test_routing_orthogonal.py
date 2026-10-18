@@ -69,6 +69,26 @@ class OrthogonalRoutingTests(unittest.TestCase):
         scene = orthogonal_scene()
         self.assertEqual(plan_routing(scene), plan_routing(scene, use_dijkstra=True))
 
+    def test_shared_channel_keeps_each_independent_route(self):
+        scene = orthogonal_scene()
+        for item in scene["items"]:
+            port = copy.deepcopy(item["ports"][0])
+            port["id"] += "_second"
+            port["local_position"][1] += .02
+            item["ports"].append(port)
+        scene["cables"].append({**scene["cables"][0], "id": "cable_2",
+                                "start_port_id": "source_port_second",
+                                "end_port_id": "sink_port_second", "diameter_m": .0065})
+        result = plan_routing(scene)
+        self.assertEqual(result["status"], "success")
+        for route in result["cables"]:
+            single = copy.deepcopy(scene)
+            single["cables"] = [c for c in single["cables"] if c["id"] == route["id"]]
+            self.assertEqual(route, plan_routing(single)["cables"][0])
+        reversed_scene = copy.deepcopy(scene)
+        reversed_scene["cables"].reverse()
+        self.assertEqual(plan_routing(reversed_scene)["cables"], list(reversed(result["cables"])))
+
     def test_short_cable_has_no_geometry(self):
         scene = orthogonal_scene()
         scene["cables"][0]["length_m"] = .05

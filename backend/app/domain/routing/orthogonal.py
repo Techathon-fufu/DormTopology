@@ -134,8 +134,9 @@ def plan_orthogonal(scene, cable, endpoints, nodes, edges, obstacle_boxes,
             choices = []
             geometric_links[label] = False
             if _arc_clearance(endpoint.position, exit_point, spec.radius, connection_boxes):
-                # At most 48 nearby declared channel nodes, six axis orders each.
-                nearest = sorted(ids, key=lambda n: (distance(exit_point, nodes[n][0]), n))[:48]
+                # Bound both desk surfaces and their three rail levels without
+                # truncating the phone's connection to the actual slot branch.
+                nearest = sorted(ids, key=lambda n: (distance(exit_point, nodes[n][0]), n))[:96]
                 for node in nearest:
                     for connector in _connectors(exit_point, nodes[node][0], endpoint.direction):
                         if len(connector) < 2 or dot(normalize(sub(connector[1], connector[0])), endpoint.direction) < -1e-8:

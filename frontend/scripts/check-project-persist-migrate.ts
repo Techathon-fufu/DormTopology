@@ -82,11 +82,25 @@ legacyPorts.objects = legacyPorts.objects.map((o) => ({ ...o, ports: o.ports.map
 const surfacePorts = migrateDefaultDemoPorts(legacyPorts)
 const port = (p: typeof legacyPorts, id: string) => p.objects.flatMap((o) => o.ports).find((entry) => entry.id === id)!
 assert.deepEqual(port(surfacePorts, 'port-laptop-usbc').offset, [.175, .005, -.06])
-assert.deepEqual(port(surfacePorts, 'port-monitor-hdmi').offset, [-.12, .15, -.012])
+assert.deepEqual(port(surfacePorts, 'port-monitor-hdmi').offset, [-.12, .30, -.02])
 assert.deepEqual(port(surfacePorts, 'port-monitor-pwr').offset, [.12, .05, -.092], 'confirmed port measurements are preserved')
 assert.deepEqual(port(surfacePorts, 'port-laptop-hdmi').offset, [.173, .05, -.01], 'user-edited unconfirmed positions are preserved')
 assert.equal(port(surfacePorts, 'port-laptop-usbc').confirmed, false)
 assert.equal(migrateDefaultDemoPorts(surfacePorts), surfacePorts)
+
+const hullPorts = createDemoProject()
+const hullMonitor = hullPorts.objects.find((o) => o.id === 'demo-monitor')!
+hullMonitor.ports = hullMonitor.ports.map((p) => ({ ...p, confirmed: false,
+  offset: [p.id === 'port-monitor-pwr' ? .12 : -.12, .15, -.012] }))
+const corrected = migrateDefaultDemoPorts(hullPorts)
+assert.deepEqual(port(corrected, 'port-monitor-pwr').offset, [.12, .30, -.02])
+assert.deepEqual(port(corrected, 'port-monitor-hdmi').offset, [-.12, .30, -.02])
+assert.deepEqual(corrected.objects.map((o) => o.transform), hullPorts.objects.map((o) => o.transform))
+hullMonitor.ports = hullMonitor.ports.map((p) => ({ ...p, localDirection: [0, -.5, -.866] }))
+assert.equal(migrateDefaultDemoPorts(hullPorts), hullPorts, 'user-marked surface directions must retain their ports')
+hullMonitor.ports = hullMonitor.ports.map(({ localDirection: _direction, ...p }) => p)
+hullMonitor.model = { ...hullMonitor.model, prefabId: undefined }
+assert.equal(migrateDefaultDemoPorts(hullPorts), hullPorts, 'a replaced model must retain its ports')
 
 const oldWiring = createDemoProject()
 oldWiring.name = 'Saved placement'

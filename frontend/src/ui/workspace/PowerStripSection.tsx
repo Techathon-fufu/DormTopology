@@ -9,6 +9,7 @@ import {
   stripLengthFor,
 } from '@/scene/powerStrip'
 import { DESK_BEAM_INSET, DESK_BEAM_Z, deskBeamTopY } from '@/scene/sceneValidation'
+import { hasFixedFurniture } from '@/scene/fixedFurniture'
 import { useCableStore } from '@/state/cableStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { Button } from '@/ui/kit/button'
@@ -20,7 +21,7 @@ import { Segmented } from '@/ui/kit/segmented'
  * 插排规格面板（属性检查器中显示，仅排插类物品）：
  * - 4 / 6 / 8 位切换、孔距调整、最大建议负载：长度自动重算，插孔（接口）同步；
  * - 切换前预览影响：超出新容量的连接会提示确认，切换后标记「冲突」（不删除）；
- * - 负载估算按已连接设备的额定功率求和；位置推荐「桌面下方横梁」（一键放置）。
+ * - 负载估算按已连接设备的额定功率求和；实物桌推荐背板，旧参数化桌保留横梁入口。
  */
 
 /** 瓦特输入（失焦 / 回车提交，避免逐键提交大量历史记录） */
@@ -172,7 +173,9 @@ export function PowerStripSection({ project, object }: { project: Project; objec
 
       <Separator />
 
-      <div className="flex flex-wrap items-center gap-2">
+      {hasFixedFurniture(project.room) ? <p className="text-xs text-muted-foreground">
+        {object.powerStrip?.mount === 'backboard' ? '已吸附桌下背板，插孔朝向座位。' : '可拖到桌下背板，或使用下方的背板吸附按钮。'}
+      </p> : <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -186,7 +189,7 @@ export function PowerStripSection({ project, object }: { project: Project; objec
         <span className="text-[11px] leading-snug text-faint">
           推荐位置：桌面下方横梁（也可直接拖拽 / 用坐标输入移到任意位置）
         </span>
-      </div>
+      </div>}
     </section>
   )
 }

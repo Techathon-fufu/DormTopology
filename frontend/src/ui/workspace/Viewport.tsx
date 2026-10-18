@@ -58,10 +58,10 @@ class SceneErrorBoundary extends Component<{ children: ReactNode }, { error: str
 function DragIndicator() {
   const drag = useWorkspaceStore((s) => s.drag)
   if (!drag) return null
-  const [x, y, z] = drag.position
+  const [x, y, z] = drag.displayPosition ?? drag.position
   const size = Math.max(0.06, 0.13)
   return (
-    <group position={[x, y + 0.004, z]} rotation={[-Math.PI / 2, 0, 0]}>
+    <group position={[x, y + 0.004, z]} rotation={[drag.support === 'backboard' ? 0 : -Math.PI / 2, 0, 0]}>
       <mesh
         geometry={ringGeometry(size * 0.72, size, 32)}
         material={basicMaterial(drag.valid ? '#0F9D8A' : '#D64545', {
