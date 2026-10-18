@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
-import { rearCablePassage, baffleTopExclusion } from '../src/scene/fixedFurniture'
+import { rearCablePassage, baffleTopExclusion, furnitureSurfaces } from '../src/scene/fixedFurniture'
 import { fromPackingPosition, toPackingPosition } from '../src/api/core/packingWire'
 import { mapRoutingResult, toRoutingScene } from '../src/api/core/routingWire'
 import { checkCableRoute } from '../src/scene/cableRoute'
@@ -36,8 +36,12 @@ for (const cable of fixture.result.cables) {
     if ((a[1] - middleY) * (b[1] - middleY) < 0) {
       const t = (middleY - a[1]) / (b[1] - a[1])
       const p = a.map((v, k) => v + t * (b[k] - v))
-      assert.ok([0, 2].every(k => p[k] - radius > passage.min[k] && p[k] + radius < passage.max[k]), `${cable.id}: crosses only the real notch with clearance`)
-      crossings++
+      const insidePassage = [0, 2].every(k => p[k] - radius > passage.min[k] && p[k] + radius < passage.max[k])
+      const hitsDesktop = furnitureSurfaces(project.room, false).filter(s => s.kind === 'desk').some(s =>
+        p[0] + radius >= s.rect.x0 && p[0] - radius <= s.rect.x1 && p[2] + radius >= s.rect.z0 && p[2] - radius <= s.rect.z1)
+      // Going around the baffle's side may descend BEHIND the slab; it is not a hole.
+      assert.ok(insidePassage || !hitsDesktop, `${cable.id}: any desktop crossing must use the real notch`)
+      if (insidePassage) crossings++
     }
     // Independent slab intersection checks every segment, including endpoint connectors.
     let low = 0, high = 1

@@ -1,4 +1,5 @@
-import { baffleTopExclusion, effectiveCableHoles, furnitureBoxes, hasFixedFurniture } from './fixedFurniture'
+import { effectiveCableHoles, furnitureBoxes, hasFixedFurniture } from './fixedFurniture'
+import { routingExclusions } from './routingPolicy'
 import { segmentHitsObject } from './collisionGeometry'
 import * as THREE from 'three'
 import type {
@@ -149,7 +150,7 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
   }
 
   const testObjects = objects.filter((o) => o.visible)
-  const furniture = hasFixedFurniture(room) ? [...furnitureBoxes(room), baffleTopExclusion(room)].map(b => ({
+  const furniture = hasFixedFurniture(room) ? [...furnitureBoxes(room), ...routingExclusions(room, objects)].map(b => ({
     name: b.name, box: new THREE.Box3(new THREE.Vector3(...b.min), new THREE.Vector3(...b.max)).expandByScalar(radius + .0005),
   })) : []
 
@@ -162,7 +163,10 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
     for (const solid of furniture) {
       const hit = length > 0 ? ray.intersectBox(solid.box, new THREE.Vector3()) : null
       if (solid.box.containsPoint(start) || solid.box.containsPoint(end) || (hit && start.distanceTo(hit) <= length)) {
-        addIssue('slab', p, solid.name === 'routing:no-baffle-top' ? '禁止沿背板顶沿走线，请从后沿长槽进入桌下' : '路径与正式桌体相交（含线径净空）')
+        addIssue('slab', p, solid.name === 'routing:no-baffle-top' ? '禁止沿背板顶沿走线，请从后沿长槽进入桌下'
+          : solid.name === 'routing:no-mouse-area' ? '路径进入鼠标活动区'
+          : solid.name.startsWith('routing:no-laptop-overhead:') ? '禁止从笔记本上方走线'
+          : '路径与正式桌体相交（含线径净空）')
       }
     }
     // 1) 房间边界

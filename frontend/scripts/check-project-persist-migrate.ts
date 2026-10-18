@@ -38,7 +38,7 @@ assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id], JSON.parse(J
 useProjectsStore.getState().upsert(fixedOld)
 assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id].room.cableHoles, [], 'imports cannot restore phantom apertures')
 
-for (const version of [1, 2, 3, 4]) {
+for (const version of [1, 2, 3, 4, 5]) {
   const old = createLegacyDemoProject()
   old.demoSeedVersion = 3
   old.name = 'Edited previous furniture'
@@ -188,5 +188,5 @@ const occupied = { ...oldWiring, cables: [...oldWiring.cables, { ...oldWiring.ca
 const repairedOccupied = migrateDefaultDemoWiring(occupied)
 assert.ok(repairedOccupied.cables.some((c) => c.id === 'custom-strip-connection'))
 assert.equal(repairedOccupied.cables.filter((c) => c.id === 'demo-cable-adapter-ac').length, 0, 'do not duplicate an existing AC input connection')
-console.log('Actual project-store hydration v1-v4, fixed-model enforcement, retained edits and idempotence passed.')
+console.log('Actual project-store hydration v1-v5, fixed-model enforcement, retained edits and idempotence passed.')
 console.log('Saved default wiring repair passed: placement retained, separate USB outputs, AC input, confirmations and custom connections preserved.')

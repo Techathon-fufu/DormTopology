@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from itertools import count, pairwise, permutations
 
 from .geometry import AABB, EPSILON, distance, dot, normalize, sub
+from .spatial_cost import segment_penalty
 
 
 def axis_aligned(a, b):
@@ -34,18 +35,37 @@ def _manhattan(a, b):
             yield key
 
 
-def _connectors(exit_point, target, direction):
+def _escape_waypoints(exit_point, boxes, radius):
+    """Allow low side sockets to leave an overhead exclusion before rising.
+
+    Finite four-side detours; every segment still undergoes normal collision
+    checks. This does not exempt the owning device or its overhead volume.
+    """
+    candidates = set()
+    for box in boxes:
+        if (0 <= box.minimum[1] - exit_point[1] <= .05
+                and all(box.minimum[k] - radius <= exit_point[k] <= box.maximum[k] + radius for k in (0, 2))):
+            for axis in (0, 2):
+                for bound in (box.minimum[axis] - radius - .002, box.maximum[axis] + radius + .002):
+                    p = list(exit_point)
+                    p[axis] = bound
+                    candidates.add(tuple(p))
+    return sorted(candidates, key=lambda p: (distance(p, exit_point), p))[:8]
+
+
+def _connectors(exit_point, target, direction, waypoints=()):
     # A small, finite set of vertical clearance levels lets neighboring ports
     # reach different lanes without crossing previously connected cables.
-    for rise in (0.0, .012, .024, .036):
-        raised = (exit_point[0], exit_point[1] + rise * (-1 if direction[1] < -.5 else 1), exit_point[2])
-        prefix = (exit_point,) if rise else ()
-        for points in _manhattan(raised, target):
-            candidate = prefix + points
-            if any(dot(normalize(sub(b, a)), normalize(sub(c, b))) < -1 + 1e-8
-                   for a, b, c in zip(candidate, candidate[1:], candidate[2:])):
-                continue
-            yield candidate
+    for origin in (exit_point, *waypoints):
+        for rise in (0.0, .012, .024, .036):
+            raised = (origin[0], origin[1] + rise * (-1 if direction[1] < -.5 else 1), origin[2])
+            prefix = (() if origin == exit_point else (exit_point,)) + ((origin,) if rise else ())
+            for points in _manhattan(raised, target):
+                candidate = prefix + points
+                if any(dot(normalize(sub(b, a)), normalize(sub(c, b))) < -1 + 1e-8
+                       for a, b, c in zip(candidate, candidate[1:], candidate[2:])):
+                    continue
+                yield candidate
 
 
 @dataclass(frozen=True)
@@ -74,6 +94,7 @@ def plan_orthogonal(scene, cable, endpoints, nodes, edges, obstacle_boxes,
     from .support import analyze_support
 
     spec = CableSpec(cable, cable["diameter_m"] / 2, cable["mode"], 0)
+    spatial_policy = scene["routing_graph"].get("spatial_cost_policy")
     start, end = (endpoints[cable[key]] for key in ("start_port_id", "end_port_id"))
     ports = {p["id"]: p for item in scene["items"] for p in item["ports"]}
     if not _compatible(ports[start.port_id]["type"], ports[end.port_id]["type"], cable["cable_type"]):
@@ -117,7 +138,7 @@ def plan_orthogonal(scene, cable, endpoints, nodes, edges, obstacle_boxes,
         penalty = unsupported((a, b))
         if not math.isfinite(penalty):
             continue
-        cost = distance(a, b) * (4 if edge["exposed"] else 1) + 3 * penalty
+        cost = distance(a, b) * (4 if edge["exposed"] else 1) + segment_penalty(a, b, spatial_policy) + 3 * penalty
         adjacency[a_id].append(Leg(b_id, (a, b), cost, True))
         adjacency[b_id].append(Leg(a_id, (b, a), cost, True))
 
@@ -137,8 +158,9 @@ def plan_orthogonal(scene, cable, endpoints, nodes, edges, obstacle_boxes,
                 # Bound both desk surfaces and their three rail levels without
                 # truncating the phone's connection to the actual slot branch.
                 nearest = sorted(ids, key=lambda n: (distance(exit_point, nodes[n][0]), n))[:96]
+                waypoints = _escape_waypoints(exit_point, forbidden, spec.radius)
                 for node in nearest:
-                    for connector in _connectors(exit_point, nodes[node][0], endpoint.direction):
+                    for connector in _connectors(exit_point, nodes[node][0], endpoint.direction, waypoints):
                         if len(connector) < 2 or dot(normalize(sub(connector[1], connector[0])), endpoint.direction) < -1e-8:
                             continue
                         points = (endpoint.position,) + connector
@@ -152,7 +174,7 @@ def plan_orthogonal(scene, cable, endpoints, nodes, edges, obstacle_boxes,
                             continue
                         # Prefer entering the edge network early over a long
                         # open-space connector that cuts across the desktop.
-                        cost = 4 * sum(distance(a, b) for a, b in pairwise(points)) + .05 * (len(points) - 2) + 3 * penalty
+                        cost = sum(4 * distance(a, b) + segment_penalty(a, b, spatial_policy) for a, b in pairwise(points)) + .05 * (len(points) - 2) + 3 * penalty
                         choices.append(Leg(node, points, cost))
             links[label] = choices
         if not links["start"] or not links["end"]:

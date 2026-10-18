@@ -18,7 +18,7 @@ import { normalizeProductRoom } from '@/data/fixedRoom'
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
-const PROJECTS_PERSIST_VERSION = 5
+const PROJECTS_PERSIST_VERSION = 6
 
 /** Drop unsupported saved apertures without moving any objects or rewriting baselines. */
 export function migratePrefabDesktop(project: Project, invalidate = false): Project {
@@ -211,7 +211,7 @@ export const useProjectsStore = create<ProjectsState>()(
             }
           }
         }
-        if (from < 5) for (const [id, p] of Object.entries(projects)) {
+        if (from < 6) for (const [id, p] of Object.entries(projects)) {
           if (p?.room) projects[id] = migratePrefabDesktop(p, true)
         }
         // ensureDemo archives the previous seed after hydration, including schema migrations.

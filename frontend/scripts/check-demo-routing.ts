@@ -70,12 +70,12 @@ assert.ok(organized.objects.every((object) => objectRoomHits(object, object.tran
   'all organized real collision parts must leave the cable hole top clearance free')
 const originalScene = { ...toRoutingScene({ project: demo, confirmed: true }), baseline_id: packingScene.baseline_id }
 const organizedScene = { ...toRoutingScene({ project: organized, confirmed: true }), baseline_id: packingScene.baseline_id }
-assert.deepEqual(originalScene.reserved_zones.map(z => z.id), ['routing:no-baffle-top'])
+assert.deepEqual(originalScene.reserved_zones.map(z => z.id), ['routing:no-baffle-top', 'routing:no-mouse-area', 'routing:no-laptop-overhead:demo-laptop'])
 assert.ok(organizedScene.items.every((o) => o.ports.every((p) => p.capacity === 1)))
 assert.ok(organizedScene.cables.every((c) => c.length_m === null))
 assert.ok(organizedScene.cables.every((c) => c.min_bend_radius_m === 0 && c.diameter_m > 0),
   'product routing ignores bend-radius limits while preserving cable volume')
-assert.deepEqual(organizedScene.reserved_zones.map(z => z.id), ['routing:no-baffle-top'], 'only the baffle crest is excluded for routing')
+assert.deepEqual(organizedScene.reserved_zones.map(z => z.id), originalScene.reserved_zones.map(z => z.id))
 if (process.argv.includes('--export-original')) {
   process.stdout.write(JSON.stringify(originalScene)); process.exit(0)
 }
