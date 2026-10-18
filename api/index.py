@@ -13,6 +13,20 @@ backend_dir = Path(__file__).parent.parent / "backend"
 sys.path.insert(0, str(backend_dir))
 
 from app.main import app
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+# Vercel Python runtime 去掉 /api 前缀，需要加回来
+class AddApiPrefixMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Vercel 传递的路径是相对于 api/ 目录的，需要加上 /api 前缀
+        if not request.url.path.startswith("/api"):
+            scope = request.scope
+            scope["path"] = "/api" + request.url.path
+            request = Request(scope, request.receive)
+        return await call_next(request)
+
+app.add_middleware(AddApiPrefixMiddleware)
 
 # Vercel Python runtime 直接支持 ASGI app
 handler = app
