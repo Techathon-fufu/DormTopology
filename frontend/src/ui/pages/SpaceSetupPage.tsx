@@ -257,7 +257,7 @@ export function SpaceSetupPage() {
             <h2 className="mb-2 text-sm font-semibold">三维预览</h2>
             <SpacePreview3D room={previewRoom} />
             <p className="mt-2 text-xs leading-relaxed text-faint">
-              {form.furnitureModel ? 'L 形床桌' : '标准床桌'}
+              固定 L 形床桌；线缆经后沿长槽进入桌下，不翻越背板顶沿。
             </p>
           </div>
 

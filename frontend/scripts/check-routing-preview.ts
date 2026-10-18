@@ -5,6 +5,7 @@ import { usePlansStore } from '@/state/plansStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
 import { useRoutingPreviewStore, acceptRoutingPreview } from '@/features/connections/routingPreview'
 import { toRoutingScene } from '@/api/core/routingWire'
+import { remoteOrganizationProjectId } from '@/api/core/organizationScenes'
 import type { CablePlanningResult } from '@/api/types'
 
 // Transport/state race fixtures only; these do not assert algorithm feasibility.
@@ -53,7 +54,7 @@ async function heldAcceptance(change:()=>void, badRevision=false) {
   if(badRevision)scene.scene_revision++
   let release!:()=>void, reached!:()=>void
   const hold=new Promise<void>(r=>release=r), requested=new Promise<void>(r=>reached=r)
-  globalThis.fetch=async(_url,init)=>{assert.equal(init?.method,'GET');reached();await hold;return new Response(JSON.stringify(scene),{headers:{'Content-Type':'application/json'}})}
+  globalThis.fetch=async(url,init)=>{assert.equal(String(url), `/api/v1/projects/${encodeURIComponent(remoteOrganizationProjectId(project.id, baselineId))}/scene`);assert.equal(init?.credentials,'omit');assert.equal(init?.method,'GET');reached();await hold;return new Response(JSON.stringify(scene),{headers:{'Content-Type':'application/json'}})}
   const accepting=acceptRoutingPreview(project,baselineId)
   await requested;change();const editedCables=JSON.stringify(useProjectsStore.getState().projects[project.id].cables);release()
   await assert.rejects(accepting)
@@ -84,5 +85,21 @@ try {
   assert.equal(useWorkspaceStore.getState().past.length,1,'acceptance records one undo step')
   useWorkspaceStore.getState().undo(project.id)
   assert.equal(useProjectsStore.getState().projects[project.id].cables[0].route.verification,undefined)
+
+  // Built-in demo synchronization namespaces the remote project by LOCAL baseline.
+  // A backend with only that namespaced record must still accept the preview.
+  const demo = structuredClone(project)
+  demo.id = 'demo-dorm-101'
+  useProjectsStore.setState({ projects: { [demo.id]: demo } })
+  usePlansStore.getState().captureBaseline(demo)
+  const localBaseline = usePlansStore.getState().baselines[demo.id].id
+  preview.stage(demo, result, localBaseline)
+  const expectedPath = `/api/v1/projects/${encodeURIComponent(`${demo.id}:${localBaseline}`)}/scene`
+  globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), expectedPath, 'accept uses the same remote project key as save/plan')
+    assert.equal(init?.credentials, 'omit')
+    return new Response(JSON.stringify(toRoutingScene({ project: demo, confirmed: true, ref })))
+  }
+  assert.deepEqual(await acceptRoutingPreview(demo, localBaseline), { applied: 1, skipped: 1 })
 } finally {globalThis.fetch=originalFetch;preview.discard()}
 console.log('Routing preview: full coverage, no eager writes, cancel/replace/edit/version races, verified-only acceptance and one-step undo passed.')

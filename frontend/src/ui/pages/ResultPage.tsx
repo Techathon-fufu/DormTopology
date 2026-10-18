@@ -13,6 +13,7 @@ import { HoldCompareButton } from '@/ui/workspace/HoldCompareButton'
 import { validateScene } from '@/scene/sceneValidation'
 import { hasUsableCableRoute } from '@/scene/cables'
 import { replayObjects, replaySteps } from '@/features/replay/model'
+import { normalizeProductRoom } from '@/data/fixedRoom'
 
 export function ResultPage() {
   const { id } = useParams()
@@ -40,7 +41,7 @@ export function ResultPage() {
   if (!project) return <div className="p-8"><Link to="/">项目不存在，返回首页</Link></div>
   const done = cursor >= steps.length
   const objects = held && before ? before.objects : started && before ? replayObjects(before.objects, steps, cursor) : project.objects
-  const room = held && before ? before.room : project.room
+  const room = normalizeProductRoom(held && before ? before.room : project.room)
   const cables = held && before ? before.cables : !started || done ? project.cables : []
   const active = started && !done ? steps[Math.floor(cursor)] : undefined
   const play = () => { setStarted(true); if (done) setCursor(0); setPlaying(!playing || done) }

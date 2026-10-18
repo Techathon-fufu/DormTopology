@@ -1,5 +1,6 @@
 import { OUTLET_FIXED_Y_M, type RoomConfig, type Vec3 } from '@/types/project'
 import { createStandardRoom } from '@/data/demoProject'
+import { normalizeProductRoom } from '@/data/fixedRoom'
 import { mmToM, mToMm } from '@/lib/units'
 
 /**
@@ -66,11 +67,6 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
   const push = (id: string, level: ValidationIssue['level'], message: string) =>
     issues.push({ id, level, message })
 
-  // 出线孔位置校验（深度与直径固定，仅调节左右 X）
-  if (Math.abs(f.hole.x) > f.deskW / 2 - 40) {
-    push('hole-position', 'error', '出线孔需位于桌面范围内，且距桌面边缘 ≥ 40 mm')
-  }
-
   // 插座（固定模型：一块双插孔 ×2 面板，仅可沿后墙左右移动，高度固定）
   f.outlets.forEach((o, i) => {
     const xMax = f.roomL / 2 - OUTLET_EDGE_MARGIN_MM
@@ -87,6 +83,7 @@ export function validateSpace(f: SpaceForm): ValidationIssue[] {
 }
 
 export function roomToForm(room: RoomConfig): SpaceForm {
+  room = normalizeProductRoom(room)
   const hole = room.cableHoles[0]
   return {
     furnitureModel: room.furnitureModel,
@@ -123,7 +120,7 @@ export function roomToForm(room: RoomConfig): SpaceForm {
 }
 
 export function formToRoom(f: SpaceForm): RoomConfig {
-  return {
+  return normalizeProductRoom({
     template: 'loft-standard',
     furnitureModel: f.furnitureModel,
     length: mmToM(f.roomL),
@@ -146,13 +143,7 @@ export function formToRoom(f: SpaceForm): RoomConfig {
       position: [mmToM(p.x), 0, mmToM(p.z)] as Vec3,
       section: mmToM(p.section),
     })),
-    cableHoles: [
-      {
-        id: 'hole-1',
-        position: [mmToM(f.hole.x), mmToM(f.deskH), mmToM(f.hole.z)] as Vec3,
-        diameter: mmToM(f.hole.diameter),
-      },
-    ],
+    cableHoles: [],
     outlets: [
       {
         id: f.outlets[0]?.id || 'outlet-1',
@@ -161,8 +152,8 @@ export function formToRoom(f: SpaceForm): RoomConfig {
         slots: 2,
       },
     ],
-    note: '固定标准空间：床桌 / 房间 / 立柱 / 书架 / 出线孔为预设固定模型（不可编辑）；插座可在「空间配置」中调整',
-  }
+    note: '固定正式床桌及后沿长槽；仅墙面插座位置可调整',
+  })
 }
 
 /** 标准空间默认值（上床下桌标准款：床桌 / 房间 / 立柱为固定模型数值） */

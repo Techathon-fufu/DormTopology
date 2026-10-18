@@ -8,7 +8,6 @@ export function DeskModelNotice() {
   const error = useDeskModelStore((s) => s.error)
   const showDesk = useDeskModelStore((s) => s.showDesk)
   const retry = useDeskModelStore((s) => s.retry)
-  const useSimplifiedDesk = useDeskModelStore((s) => s.useSimplifiedDesk)
   if (!showDesk || status === 'idle' || status === 'loaded') return null
   if (status === 'loading') return <div role="status" className="pointer-events-none absolute right-3 top-3 flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-2 text-xs shadow-xs"><Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />正在载入桌体</div>
   return (
@@ -17,9 +16,9 @@ export function DeskModelNotice() {
         <AlertTriangle className="h-3.5 w-3.5 text-warning" />简化桌体<ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
       </summary>
       <div className="absolute right-0 top-11 w-72 max-w-[calc(100vw-32px)] space-y-3 rounded-xl border border-border bg-surface p-4 shadow-overlay">
-        <div><p className="font-semibold text-foreground">正在使用简化外观</p><p className="mt-1.5 leading-relaxed text-muted-foreground">{status === 'skipped' ? '已跳过桌体模型加载，仍可继续整理与查看方案。' : '桌体模型暂不可用，已保留可操作的简化场景。'}</p></div>
+        <div><p className="font-semibold text-foreground">正在使用简化外观</p><p className="mt-1.5 leading-relaxed text-muted-foreground">桌体模型暂不可用，临时显示同一模型的简化外观，请重新加载。</p></div>
         {error && status === 'failed' ? <details className="rounded-lg bg-muted/60 p-2"><summary className="cursor-pointer text-muted-foreground">查看加载原因</summary><p className="mt-2 break-words leading-relaxed">{error}</p></details> : null}
-        <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={retry}><RotateCcw className="h-3.5 w-3.5" />重新加载</Button>{status === 'failed' ? <Button size="sm" variant="ghost" onClick={useSimplifiedDesk}>保留简化桌体</Button> : null}</div>
+        <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={retry}><RotateCcw className="h-3.5 w-3.5" />重新加载</Button></div>
       </div>
     </details>
   )

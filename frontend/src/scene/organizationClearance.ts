@@ -2,7 +2,7 @@ import { desktopPlacementIssue } from './desktopBindings'
 import type { OrganizationIssue } from '@/types/organization'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import { objectRoomHits } from './collisionGeometry'
-import { effectiveCableHoles, hasFixedFurniture, validFurnitureHole } from './fixedFurniture'
+import { effectiveCableHoles, hasFixedFurniture, validFurnitureHole, rearCablePassage } from './fixedFurniture'
 import { itemSpacingViolations } from './itemSpacing'
 import { DESK_GAP } from './sceneValidation'
 import { computeOrganizationZones } from './organizationZones'
@@ -14,7 +14,7 @@ export interface OrganizationReservedZone { id: string; label: string; min: Vec3
 
 /** Product coordinates: hole lead-outs plus hands and seated operation volumes. */
 export function organizationReservedZones(room: RoomConfig): OrganizationReservedZone[] {
-  const holes = effectiveCableHoles(room).map((hole) => {
+  const holes: OrganizationReservedZone[] = effectiveCableHoles(room).map((hole) => {
     const radius = hole.diameter / 2
     const positionValid = Array.isArray(hole.position) && hole.position.length === 3 && hole.position.every(Number.isFinite)
     const valid = positionValid && Number.isFinite(radius) && radius > 0 && Number.isFinite(room.desk.height) && room.desk.height > 0
@@ -28,6 +28,9 @@ export function organizationReservedZones(room: RoomConfig): OrganizationReserve
       min: [hole.position[0] - half, room.desk.height, hole.position[2] - half] as Vec3,
       max: [hole.position[0] + half, room.desk.height + .05, hole.position[2] + half] as Vec3 }
   })
+  if (hasFixedFurniture(room)) holes.push({ id: 'packing:rear-passage', label: '后沿长槽出线空间',
+    min: [rearCablePassage.min[0], rearCablePassage.max[1], rearCablePassage.min[2]],
+    max: [rearCablePassage.max[0], rearCablePassage.max[1] + .05, rearCablePassage.max[2]] })
   const workstation = computeOrganizationZones(room, DEFAULT_ORGANIZATION_PREFERENCES).workstation
   if (!workstation) return holes
   const hands = workstation.operation.rect, seated = workstation.seated.rect

@@ -17,6 +17,11 @@ export default defineConfig(({ mode }) => {
         '/api/v1': {
           target: env.VITE_DEV_API_TARGET || 'http://127.0.0.1:8000',
           changeOrigin: true,
+          configure(proxy) {
+            // Also protect direct API navigation and callers outside our fetch client.
+            proxy.on('proxyReq', request => request.removeHeader('cookie'))
+            proxy.on('proxyRes', response => { delete response.headers['set-cookie'] })
+          },
         },
       },
     },

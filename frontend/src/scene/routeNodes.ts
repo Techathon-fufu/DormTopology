@@ -3,7 +3,7 @@ import { DESK_GAP } from '@/scene/sceneValidation'
 import { computeOrganizationZones } from '@/scene/organizationZones'
 import type { OrganizationPreferences } from '@/types/organization'
 import type { CableAvoidZone, RouteNode } from '@/types/cable'
-import { effectiveCableHoles, furnitureBoxes, furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
+import { effectiveCableHoles, furnitureBoxes, furnitureSurfaces, hasFixedFurniture, rearCablePassage } from './fixedFurniture'
 
 /**
  * 场景路由节点与走线避让区（演示用「规则式」参考）。
@@ -133,7 +133,11 @@ function fixedRouteNodes(room: RoomConfig): RouteNode[] {
   const main = desks.find((s) => s.id.includes('Main'))!
   for (const x of [main.rect.x0 + .07, main.rect.x1 - .07]) {
     push(`back-${x}`, 'backboard', '背板·后侧', [x, .762, DESK_GAP / 2])
-    push(`over-${x}`, 'backboard', '背板·上沿', [x, .932, .09])
+  }
+  const passage = rearCablePassage, z = (passage.min[2] + passage.max[2]) / 2
+  for (const x of [passage.min[0] + .02, (passage.min[0] + passage.max[0]) / 2, passage.max[0] - .02]) {
+    push(`rear-passage-${x}-entry`, 'backboard', '后沿长槽·入口', [x, passage.max[1] + .012, z])
+    push(`rear-passage-${x}-exit`, 'backboard', '后沿长槽·桌下', [x, passage.min[1] - .025, z])
   }
   for (const hole of effectiveCableHoles(room)) {
     push(`hole-${hole.id}-top`, 'hole', '出线孔·入口', [hole.position[0], .762, hole.position[2]])

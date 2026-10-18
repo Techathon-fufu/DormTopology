@@ -319,6 +319,22 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
     graph = _object(scene["routing_graph"], "nodes edges", "routing_graph")
     if "path_style" in graph:
         _enum(graph["path_style"], {"smooth", "orthogonal"}, "routing_graph.path_style")
+    if "spatial_cost_policy" in graph:
+        path = "routing_graph.spatial_cost_policy"
+        if graph.get("path_style") != "orthogonal":
+            _fail(path, "spatial cost requires orthogonal routing")
+        policy = _object(graph["spatial_cost_policy"],
+                         "desktop_min desktop_max corner_start corner_end seat_position distance_scale_m corner_weight seat_weight", path)
+        for key in ("desktop_min", "desktop_max", "corner_start", "corner_end", "seat_position"):
+            _vector(policy[key], 3, path + "." + key)
+        if any(a >= b for a, b in zip(policy["desktop_min"], policy["desktop_max"])):
+            _fail(path, "desktop bounds must be strictly increasing")
+        if math.dist(policy["corner_start"], policy["corner_end"]) <= 1e-9:
+            _fail(path, "corner segment must have nonzero length")
+        _number(policy["distance_scale_m"], path + ".distance_scale_m", positive=True)
+        for key in ("corner_weight", "seat_weight"):
+            if _number(policy[key], path + "." + key) < 0:
+                _fail(path + "." + key, "must be nonnegative")
     nodes = {}
     for i, value in enumerate(_array(graph["nodes"], "routing_graph.nodes")):
         path = f"routing_graph.nodes[{i}]"

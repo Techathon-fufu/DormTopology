@@ -24,12 +24,20 @@ for (const path of FIXED_MODEL_URLS) {
 const mounted = mountDeskModel(group, DORM_DESK_MODEL_CONFIG, room)
 assert.ok(Math.abs(mounted.metrics.deskTopY - .75) < 1e-6)
 for (const p of fixedFurnitureBoxes) {
+  if (p.name.startsWith('Desk_Top_Main')) continue // Its concave mesh is checked cell-by-cell below.
   const name = p.name.includes(':') ? p.name.split(':')[1] : p.name
   let node = group.getObjectByName(`${name}_Mesh`) ?? group.getObjectByName(name)
   if (p.name.startsWith('drawer_')) node = group.children[FIXED_MODEL_URLS.findIndex((u) => u.includes(p.name.split(':')[0]))].getObjectByName(name)
   assert.ok(node, p.name)
   const box = new Box3().setFromObject(node)
   assert.ok([...p.min, ...p.max].every((v, i) => Math.abs(v - [...box.min.toArray(), ...box.max.toArray()][i]) < 1e-5), `${p.name}: one common render/collision transform`)
+}
+const mainMesh = group.getObjectByName('Desk_Top_Main_Mesh')!
+for (const x of [-.44, -.14, -.12, 0, .41, .43, .58]) for (const z of [.061, .0725, .084, .086, .2, .6]) {
+  const actual = new Raycaster(new Vector3(x, .8, z), new Vector3(0, -1, 0)).intersectObject(mainMesh).length > 0
+  const solid = fixedFurnitureBoxes.some(p => p.name.startsWith('Desk_Top_Main') && x > p.min[0] && x < p.max[0] && z > p.min[2] && z < p.max[2])
+  assert.equal(solid, actual, `authored long notch and solid strips agree at ${x},${z}`)
+  assert.equal(supportsContaining(room, x, z).some(s => s.kind === 'desk'), actual)
 }
 assert.ok(!supportsContaining(room, 0, .75).some((s) => s.kind === 'desk'), 'L gap has no desk support')
 assert.ok(supportsContaining(room, 0, .2).some((s) => s.kind === 'desk'))
