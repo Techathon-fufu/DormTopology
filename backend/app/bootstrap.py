@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,6 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from .adapters.organization_strategy_adapter import (
+    ChatCompletionsOrganizationStrategyProvider,
+)
 from .api.errors import register_error_handlers
 from .api.routes import create_router
 from .api.scenes import build_router as build_workflow_router
@@ -36,6 +39,11 @@ class Settings:
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     workflow_database_path: str | Path | None = None
     workflow_data_dir: str | Path | None = None
+    # An explicit Chat Completions base URL (including any required /v1).
+    # All three fields are required; no provider/key/model discovery is used.
+    org_llm_base_url: str | None = None
+    org_llm_api_key: str | None = field(default=None, repr=False)
+    org_llm_model: str | None = None
 
     @classmethod
     def from_environment(cls):
@@ -56,6 +64,9 @@ class Settings:
             ),
             workflow_database_path=os.environ.get("DORMTOPOLOGY_WORKFLOW_DB_PATH"),
             workflow_data_dir=os.environ.get("DORMTOPOLOGY_WORKFLOW_DATA_DIR"),
+            org_llm_base_url=os.environ.get("DORMTOPOLOGY_ORG_LLM_BASE_URL"),
+            org_llm_api_key=os.environ.get("DORMTOPOLOGY_ORG_LLM_API_KEY"),
+            org_llm_model=os.environ.get("DORMTOPOLOGY_ORG_LLM_MODEL"),
         )
 
 
@@ -93,11 +104,8 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings.from_environment()
     if db_path is not None or data_dir is not None:
-        settings = Settings(
-            database_path=settings.database_path,
-            max_workers=settings.max_workers,
-            max_pending=settings.max_pending,
-            cors_origins=settings.cors_origins,
+        settings = replace(
+            settings,
             workflow_database_path=db_path
             if db_path is not None
             else settings.workflow_database_path,
@@ -122,7 +130,23 @@ def create_app(
             )
             await run_in_threadpool(repository.recover_incomplete_jobs)
 
-            organization_service = OrganizationService(repository, executor)
+            strategy_provider = None
+            if all(
+                isinstance(value, str) and value.strip()
+                for value in (
+                    settings.org_llm_base_url,
+                    settings.org_llm_api_key,
+                    settings.org_llm_model,
+                )
+            ):
+                strategy_provider = ChatCompletionsOrganizationStrategyProvider(
+                    base_url=settings.org_llm_base_url,
+                    api_key=settings.org_llm_api_key,
+                    model=settings.org_llm_model,
+                )
+            organization_service = OrganizationService(
+                repository, executor, strategy_provider=strategy_provider
+            )
             routing_service = RoutingService(repository, executor)
             recognition_service = RecognitionService(repository, executor, data_dir=workflow_data)
             model_service = ModelGenerationService(repository, executor, data_dir=workflow_data)
