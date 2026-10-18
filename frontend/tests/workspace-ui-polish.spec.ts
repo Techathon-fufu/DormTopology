@@ -27,7 +27,7 @@ async function attachViewport(page: Page, testInfo: TestInfo, name: string, widt
 }
 
 function leftRegion(page: Page) { return page.getByRole('complementary', { name: '物体与连线', exact: true }) }
-function rightRegion(page: Page) { return page.getByRole('complementary', { name: '引导与生成', exact: true }) }
+function rightRegion(page: Page) { return page.getByRole('complementary', { name: '整理与理线', exact: true }) }
 async function openTools(page: Page) {
   await expect(leftRegion(page)).toBeVisible()
   return leftRegion(page)
@@ -69,11 +69,11 @@ test('selecting an object from the left list keeps the right guide visible', asy
   const tools = await openTools(page)
   await tools.getByRole('button', { name: /笔记本电脑/ }).first().click()
   await expect(tools.getByRole('heading', { name: '对象属性' })).toBeVisible()
-  if (await rightRegion(page).isVisible()) await expect(rightRegion(page).getByRole('heading', { name: '引导与生成' })).toBeVisible()
+  if (await rightRegion(page).isVisible()) await expect(rightRegion(page).getByRole('heading', { name: '整理与理线' })).toBeVisible()
   await tools.getByRole('button', { name: /返回物体清单/ }).click()
   await expect(tools.getByRole('heading', { name: '场景物体' })).toBeVisible()
   const guide = await openGuide(page)
-  await expect(guide.getByRole('heading', { name: '引导与生成' })).toBeVisible()
+  await expect(guide.getByRole('heading', { name: '整理与理线' })).toBeVisible()
   expect(failures).toEqual([])
 })
 
@@ -88,7 +88,7 @@ test('cable tab switches the left panel into cable mode without fake features', 
   const guide = await openGuide(page)
   const confirm = guide.getByRole('checkbox', { name: '已核对尺寸、位置与接口', exact: true })
   await expect(confirm).toBeVisible()
-  const plan = guide.getByRole('button', { name: '规划全部走线（真实后端）', exact: true })
+  const plan = guide.getByRole('button', { name: '生成走线', exact: true })
   await expect(plan).toBeDisabled()
   await confirm.check()
   await expect(plan).toBeEnabled()

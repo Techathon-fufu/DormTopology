@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Html } from '@react-three/drei'
+import { Html, Line } from '@react-three/drei'
 import type { RoomConfig } from '@/types/project'
 import { computeOrganizationZones, type ZoneRect } from '@/scene/organizationZones'
 import { ZONE_COLORS, type OrganizationPreferences } from '@/types/organization'
@@ -74,11 +74,33 @@ export function ZoneOverlay({
 }) {
   const zones = useMemo(() => computeOrganizationZones(room, preferences), [room, preferences])
   const deskColor = ZONE_COLORS.desk
+  const workstation = zones.workstation
+  const marked = workstation ? [
+    { ...workstation.monitor, label: '显示器 · 长槽正中', color: '#4F70B5' },
+    { ...workstation.laptop, label: '笔记本 ↙ 朝座位 20°', color: '#7C62B5' },
+    { ...workstation.keyboard, label: '键盘', color: '#0F9D8A' },
+    { ...workstation.mouse, label: '鼠标垫 / 鼠标', color: '#369FBA' },
+    { ...workstation.miscellaneous, label: '常用杂物', color: '#D97706' },
+    { ...workstation.operation, label: '操作留空 · 禁放', color: '#C85555' },
+    { ...workstation.seated, label: '座位活动区 · 禁放', color: '#C85555' },
+  ] : []
 
   return (
     <group>
       {/* 桌面常用区：整个桌面淡底 + 打字 / 水杯活动区 */}
       {(zones.deskSurfaces ?? [zones.deskSurface]).map((s, i) => <ZonePlane key={i} rect={s.rect} y={s.y + .002} color={deskColor} opacity={.05} />)}
+      {marked.map((area) => <group key={area.label}>
+        <ZonePlane rect={area.rect} y={area.y + .004} color={area.color} opacity={.18} />
+        <ZoneLabel x={(area.rect.x0 + area.rect.x1) / 2} y={area.y + .03} z={(area.rect.z0 + area.rect.z1) / 2} text={area.label} color={area.color} />
+      </group>)}
+      {workstation && <group
+        position={[(workstation.laptop.rect.x0 + workstation.laptop.rect.x1) / 2, workstation.laptop.y + .006, (workstation.laptop.rect.z0 + workstation.laptop.rect.z1) / 2]}
+        rotation={[0, workstation.laptop.rotationY, 0]}
+      >
+        <Line points={[[-.175, 0, -.173], [.175, 0, -.173], [.175, 0, .173], [-.175, 0, .173], [-.175, 0, -.173]]} color="#7C62B5" lineWidth={1.5} />
+        <Line points={[[0, 0, .04], [0, 0, .14], [-.025, 0, .11], [0, 0, .14], [.025, 0, .11]]} color="#7C62B5" lineWidth={2} />
+      </group>}
+      {!workstation && <>
       <ZonePlane rect={zones.typing.rect} y={zones.deskSurface.y + 0.003} color={deskColor} opacity={0.16} />
       <ZoneLabel
         x={(zones.typing.rect.x0 + zones.typing.rect.x1) / 2}
@@ -95,6 +117,7 @@ export function ZoneOverlay({
         text="水杯活动区"
         color="#F59E0B"
       />
+      </>}
 
       {/* 书架收纳区 */}
       {(zones.storageSurfaces ?? (zones.shelf ? [zones.shelf] : [])).map((s, index) => (
@@ -109,7 +132,7 @@ export function ZoneOverlay({
             x={(s.rect.x0 + s.rect.x1) / 2}
             y={s.y + 0.05}
             z={(s.rect.z0 + s.rect.z1) / 2}
-            text={'label' in s ? String(s.label) : '书架收纳区'}
+            text={'id' in s && s.id === workstation?.study.id ? '第二格 · 学习用品专用' : 'label' in s ? String(s.label) : '书架收纳区'}
             color={ZONE_COLORS.shelf}
           />
         </group>

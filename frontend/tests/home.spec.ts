@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 /**
- * 首页（/）验收：真实渲染、日夜外观、最近空间的紧凑单行条、全部空间与管理入口。
+ * 首页（/）验收：真实渲染、日夜外观、最近空间的紧凑单行条、全部项目与管理入口。
  * 只依赖前端本身，不需要后端服务；项目夹具全部由页面内 store 动态写入，不动内置示例。
  */
 
@@ -74,7 +74,7 @@ test('renders hero, real scene image and both primary entries', async ({ page })
   expect(await image.evaluate((img: HTMLImageElement) => getComputedStyle(img).opacity)).toBe('1')
 
   await expect(page.getByRole('button', { name: '体验示例' })).toBeVisible()
-  await expect(page.getByRole('link', { name: '新建空间' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '创建项目' })).toBeVisible()
   await expect(page.getByText('场景示意 · 非项目截图')).toBeVisible()
   await expectNoHorizontalOverflow(page)
   expect(errors).toEqual([])
@@ -119,7 +119,7 @@ test('keeps theme in memory when storage is blocked', async ({ page }) => {
   await page.getByRole('button', { name: '深夜模式' }).click()
   await expect(page.locator('.home-shell')).toHaveAttribute('data-theme', 'dark')
   // 客户端路由离开首页再返回（不是整页刷新）：存储不可用时仍保留手动选择
-  await page.getByRole('link', { name: '新建空间' }).click()
+  await page.getByRole('link', { name: '创建项目' }).click()
   await expect(page).toHaveURL(/\/projects\/new$/)
   await page.goBack()
   await expect(page.locator('.home-shell')).toHaveAttribute('data-theme', 'dark')
@@ -158,7 +158,7 @@ test('syncs appearance from another tab and after leaving the homepage', async (
   await expect(page.locator('.home-shell')).toHaveAttribute('data-theme', 'dark')
 
   // 离开首页期间其他标签页改动：客户端路由返回首页必须重新对齐（整页刷新不算）
-  await page.getByRole('link', { name: '新建空间' }).click()
+  await page.getByRole('link', { name: '创建项目' }).click()
   await expect(page).toHaveURL(/\/projects\/new$/)
   await other.evaluate(([key]) => localStorage.setItem(key, 'light'), [THEME_KEY])
   await page.goBack()
@@ -185,7 +185,7 @@ test('keeps the recent bar compact and expands every space', async ({ page }) =>
   expect(names.every((name) => name.text.length > 0)).toBe(true)
   expect(names.every((name) => name.shown <= 171)).toBe(true)
 
-  const toggle = page.getByRole('button', { name: '全部空间' })
+  const toggle = page.getByRole('button', { name: '全部项目' })
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
@@ -194,17 +194,17 @@ test('keeps the recent bar compact and expands every space', async ({ page }) =>
 })
 
 test('honours the spaces query for direct links and header navigation', async ({ page }) => {
-  // 桌面宽度才有头部“我的空间”入口（窄屏改由底部“全部空间”进入）
+  // 桌面宽度才有头部“我的项目”入口（窄屏改由底部“全部项目”进入）
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto('/?spaces=all#all-spaces')
   await expect(page.locator('#all-spaces')).toBeVisible()
-  await expect(page.getByRole('button', { name: '全部空间' })).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('button', { name: '全部项目' })).toHaveAttribute('aria-expanded', 'true')
 
-  await page.getByRole('link', { name: '我的空间' }).click()
+  await page.getByRole('link', { name: '我的项目' }).click()
   await expect(page.locator('#all-spaces')).toBeVisible()
 
   // 收起后 URL 同步清掉 spaces，浏览器后退可继续展开
-  await page.getByRole('button', { name: '全部空间' }).click()
+  await page.getByRole('button', { name: '全部项目' }).click()
   await expect(page).not.toHaveURL(/spaces=all/)
   await page.goBack()
   await expect(page.locator('#all-spaces')).toBeVisible()
@@ -218,7 +218,7 @@ test('keeps project management entries and demo protection', async ({ page }) =>
   const menu = demoRow.locator('.home-space-menu')
   await expect(menu.getByRole('button', { name: '空间配置' })).toBeVisible()
   await expect(menu.getByRole('button', { name: '照片与物品' })).toBeVisible()
-  await expect(menu.getByRole('button', { name: '查看执行指南' })).toBeVisible()
+  await expect(menu.getByRole('button', { name: '查看整理动画' })).toBeVisible()
   await expect(menu.getByRole('button', { name: '删除项目' })).toHaveCount(0)
 
   await menu.getByRole('button', { name: '空间配置' }).click()
@@ -249,17 +249,17 @@ test('delete asks for confirmation and only removes the chosen project', async (
 
 test('new space entry opens the creation page', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('link', { name: '新建空间' }).click()
+  await page.getByRole('link', { name: '创建项目' }).click()
   await expect(page).toHaveURL(/\/projects\/new$/)
 })
 
-test('takes day and night screenshots at desktop and mobile widths', async ({ page }, testInfo) => {
+test('takes day and night screenshots at desktop widths', async ({ page }, testInfo) => {
   test.setTimeout(120_000)
+  // 仅桌面浏览器；768 及以下的小屏/手机视口已按产品范围废除。
   const viewports = [
+    { name: '1440x1000', width: 1440, height: 1000 },
     { name: '1440x900', width: 1440, height: 900 },
     { name: '1366x768', width: 1366, height: 768 },
-    { name: '768x1024', width: 768, height: 1024 },
-    { name: '390x844', width: 390, height: 844 },
   ]
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
@@ -288,44 +288,12 @@ test('help panel closes with Escape and returns focus', async ({ page }) => {
   const trigger = page.locator('.home-help > summary')
   await trigger.click()
   await expect(page.locator('.home-help-panel')).toBeVisible()
-  await expect(page.locator('.home-help-panel').getByRole('link', { name: '算法实验' })).toBeVisible()
+  // 执行指南已退场：帮助面板改为四步说明，不再挂指南/实验导出链接。
+  await expect(page.locator('.home-help-panel').getByRole('heading', { name: '从照片到整洁桌面', exact: true })).toBeVisible()
+  await expect(page.locator('.home-help-panel')).toContainText('4. 接受方案，跟着动画整理。')
   await page.keyboard.press('Escape')
   await expect(page.locator('.home-help-panel')).toBeHidden()
   await expect(trigger).toBeFocused()
 })
 
-test('help panel stays inside the viewport on narrow screens', async ({ page }, testInfo) => {
-  for (const width of [390, 320]) {
-    await page.setViewportSize({ width, height: 800 })
-    await page.goto('/')
-    await page.locator('.home-help > summary').click()
-    const panel = page.locator('.home-help-panel')
-    await expect(panel).toBeVisible()
-    const box = await panel.boundingBox()
-    expect(box).not.toBeNull()
-    expect(box!.x).toBeGreaterThanOrEqual(8)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(width - 8)
-    await expectNoHorizontalOverflow(page)
-    if (width === 390) {
-      await page.screenshot({ path: `${SHOT_DIR}/${testInfo.project.name}-help-390x844.png`, animations: 'disabled' })
-    }
-  }
-})
-
-test('supports keyboard focus on the compact layout', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/')
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName(/寝空拓扑首页/)
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName('使用帮助')
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName('日间模式')
-  await page.keyboard.press('Tab')
-  await expect(page.locator(':focus')).toHaveAccessibleName('深夜模式')
-  await page.screenshot({
-    path: `${SHOT_DIR}/${testInfo.project.name}-focus-390x844.png`,
-    animations: 'disabled',
-  })
-  await expectNoHorizontalOverflow(page)
-})
+// 移动端与小屏布局已按产品范围废除，相关手机视口用例一并退役（仅保留桌面 1440×1000 及以上）。

@@ -1,3 +1,4 @@
+import { effectiveCableHoles } from './fixedFurniture'
 import { segmentHitsObject } from './collisionGeometry'
 import * as THREE from 'three'
 import type {
@@ -11,11 +12,10 @@ import type {
   SceneObject,
   Vec3,
 } from '@/types/project'
-import { CABLE_CLEARANCE_M, CABLE_THICKNESS_META, CABLE_VISIBILITY_META } from '@/types/project'
+import { CABLE_THICKNESS_META, CABLE_VISIBILITY_META } from '@/types/project'
 import type { CableAvoidZone, CableCheckIssue, CableCheckResult, RouteNode } from '@/types/cable'
 import { computeRouteNodes, deskUnderY, nearestRouteNode, routeNodeMap } from '@/scene/routeNodes'
 import {
-  cableDisplayPoints,
   resolveCableThickness,
   resolveCableVisibility,
   resolveEndpointDirection,
@@ -88,10 +88,7 @@ export interface CableCheckInput {
   objects: SceneObject[]
   room: RoomConfig
   avoidZones: CableAvoidZone[]
-  /**
-   * 参与「线缆间距」咨询级检查的其它线缆（同一项目）。缺省 = 不检查。
-   * 间距检查不参与 passed / 失败的硬性判定（规划器只看 issues）。
-   */
+  /** 同项目线缆，用于接口占用和当前线缆查找；不比较线间距。 */
   cables?: CableConnection[]
   /** 当前线缆 id（用于从 cables 中排除自身） */
   selfCableId?: string
@@ -171,7 +168,7 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
       p[1] > y - desk.thickness - 0.003 &&
       p[1] < y + 0.002
     ) {
-      const nearHole = room.cableHoles.some(
+      const nearHole = effectiveCableHoles(room).some(
         (h) => Math.hypot(p[0] - h.position[0], p[2] - h.position[2]) + radius + 0.001 < h.diameter / 2,
       )
       if (!nearHole) addIssue('slab', p, '路径穿过桌板（可从出线孔走线）')
@@ -198,76 +195,8 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
     addIssue('endpoint', toPos, `终点接口缺失（${toObject.name}）`)
   }
 
-  // 6) 线缆间距（咨询级）：不参与硬性通过判定，仅提示
-  const advisories = checkCableSpacing(input, samples, fromPos, toPos)
-
-  return { samples, lengthM, issues, advisories, ok: issues.length === 0 }
-}
-
-/**
- * 线缆间最小净间隙检查（咨询级）：
- * - 要求两线表面间距 ≥ CABLE_CLEARANCE_M（按各自线径折算中心距）；
- * - 豁免：共用路由节点（视为有意并排 / 共用走线槽）与端点 80mm 范围内的出线空间；
- * - 不参与「无碰撞路径」判定（规划器只看硬性问题）。
- */
-function checkCableSpacing(
-  input: CableCheckInput,
-  samples: Vec3[],
-  fromPos: Vec3,
-  toPos: Vec3,
-): CableCheckIssue[] {
-  const { cables, objects, selfCableId } = input
-  if (!cables || cables.length === 0 || samples.length === 0) return []
-  const self = selfCableId ? cables.find((c) => c.id === selfCableId) : undefined
-  const selfThickness = self ? resolveCableThickness(self) : input.thickness ?? 'thick'
-  const selfDiameter = CABLE_THICKNESS_META[selfThickness].diameterM
-  const selfNodes = new Set((self?.route.nodeIds ?? []).filter((id): id is string => Boolean(id)))
-
-  const advisories: CableCheckIssue[] = []
-  const seen = new Set<string>()
-  for (const other of cables) {
-    if (other.id === selfCableId) continue
-    // 共用路由节点：按并排 / 共用走线槽处理，豁免
-    if ((other.route.nodeIds ?? []).some((id) => id && selfNodes.has(id))) continue
-
-    const otherPts = cableDisplayPoints(other, objects, 'suggested')
-    if (otherPts.length < 2) continue
-    const otherSamples = sampleCurve(otherPts, 48)
-    const otherDiameter = CABLE_THICKNESS_META[resolveCableThickness(other)].diameterM
-    const required = (selfDiameter + otherDiameter) / 2 + CABLE_CLEARANCE_M
-
-    const oFrom = resolveEndpointPosition(objects, other.from)
-    const oTo = resolveEndpointPosition(objects, other.to)
-    const nearEndpoint = (p: Vec3) =>
-      dist3(p, fromPos) < 0.08 ||
-      dist3(p, toPos) < 0.08 ||
-      dist3(p, oFrom) < 0.08 ||
-      dist3(p, oTo) < 0.08
-
-    let bestD = Number.POSITIVE_INFINITY
-    let bestP: Vec3 | null = null
-    for (const p of samples) {
-      for (const q of otherSamples) {
-        const d = dist3(p, q)
-        // 仅在「已经过近」时才做端点豁免判断（性能）
-        if (d < required && (nearEndpoint(p) || nearEndpoint(q))) continue
-        if (d < bestD) {
-          bestD = d
-          bestP = p
-        }
-      }
-    }
-    if (bestP && bestD < required) {
-      const aName = objects.find((o) => o.id === other.from.objectId)?.name ?? '（已删除）'
-      const bName = objects.find((o) => o.id === other.to.objectId)?.name ?? '（已删除）'
-      const message = `与「${aName} → ${bName}」的走线最近约 ${Math.round(bestD * 1000)}mm，小于按线径要求的 ${Math.round(required * 1000)}mm（可并排共槽 / 加理线扣，或分开走线）`
-      if (!seen.has(message)) {
-        seen.add(message)
-        advisories.push({ kind: 'cable', position: bestP, message })
-      }
-    }
-  }
-  return advisories
+  // 6) 线缆之间允许共线 / 交叠；线径仍用于当前线缆自身的障碍扫掠。
+  return { samples, lengthM, issues, advisories: [], ok: issues.length === 0 }
 }
 
 // ───────────────────────────── 规则式演示规划 ─────────────────────────────
@@ -722,7 +651,7 @@ export function planCableRoute(
 ): PlanCableResult {
   const nodes = computeRouteNodes(room)
   const map = routeNodeMap(nodes)
-  const visibility = resolveCableVisibility(cable, objects).visibility
+  const visibility = resolveCableVisibility(cable, objects, room).visibility
   const strategy = CABLE_VISIBILITY_META[visibility].strategy
   const chains = buildChains(cable, objects, room, nodes, strategy)
   const triedChains = chains.map((c) => c.name)

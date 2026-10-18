@@ -1,13 +1,7 @@
-# 桌体 GLB 资产放置目录
+# 运行时模型
 
-把导出的 `dorm_desk_assembled.glb` 放在本目录：
+正式桌体来源为 `Prefabmodel/dormdesk_parts/dormdesk_body.glb`，三个抽屉同目录；通过 `frontend/scripts/sync-desk-parts.ts` 同步至本目录的 `dormdesk_parts/`。物品来源为 `Prefabmodel/*.glb`，通过 `sync-prefab-items.ts` 同步至 `items/`。
 
-    frontend/public/models/dorm_desk_assembled.glb
+禁止读取或从 `objects/` 导出资产。原桌板直接显示，不生成额外桌面或穿线孔；加载失败使用同源碰撞几何回退。
 
-- **当前来源**：仓库根 `Prefabmodel/dormdesk.glb`（上床下桌整组固定家具，Blender 源 `objects/dormdesk.blend` 导出）。
-  更新资产时从 `Prefabmodel/` 复制到本目录，并运行 `npx tsx scripts/check-desk-model.ts` 校验命名与尺寸契约。
-- 开发环境访问路径：`/models/dorm_desk_assembled.glb`；生产构建会原样复制到 `dist/models/`，
-  代码通过 `import.meta.env.BASE_URL` 解析（子路径部署同样正确）。
-- 单位 / 朝向 / 命名锚点建议与归一化配置：见 `frontend/docs/desk-model.md`。
-- 文件缺失时工作台会自动回退到参数化简化桌体（ParametricDesk），并在视口右下角给出
-  可读提示与「重试」入口——不会中断演示与其余功能。
+资产处理和验证命令见 [桌体接入说明](../../docs/desk-model.md)。

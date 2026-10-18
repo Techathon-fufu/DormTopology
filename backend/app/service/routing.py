@@ -10,7 +10,7 @@ from ..domain.routing import plan_routing, validate_scene
 from .errors import Conflict, InvalidInput, NotFound
 from .ports import JobExecutor, OrganizationRepository
 
-ALGORITHM_VERSION = "routing-1.0"
+ALGORITHM_VERSION = "routing-1.1"
 logger = logging.getLogger(__name__)
 
 

@@ -1,27 +1,28 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { MonitorOff } from 'lucide-react'
 import { CameraRig } from '@/scene/CameraRig'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
-import { Segmented } from '@/ui/kit/segmented'
 import { detectWebGL } from '@/lib/webgl'
 import { useDeskModelStore } from '@/state/deskModelStore'
-import type { ViewPreset } from '@/state/workspaceStore'
 import type { RoomConfig } from '@/types/project'
 import { SceneLighting } from '@/scene/SceneLighting'
 import { configureSceneRenderer, sceneDpr, SCENE_CAMERA_CLIP, SCENE_GL_OPTIONS } from '@/scene/renderProfile'
+import { createPreviewCameraBounds, PREVIEW_CAMERA_FOV } from '@/scene/previewCameraBounds'
 
 /**
  * 空间配置三维预览：与三维工作台共用同一套家具加载逻辑——DormDeskModel 负责
- * 加载无抽屉桌体 + 三只抽屉分离件（GLB 成功时渲染正式模型并叠加 ParametricDesk
- * desktopOnly 桌面开孔；失败 / 简化时回退参数化几何），并按固定家具的支撑与
- * 出线孔几何隐藏参数化床架 / 孔位标记；俯视时对家具模型做显示-only 剖切。
+ * 加载无抽屉桌体 + 三只抽屉分离件（GLB 成功时按模型原样显示实心桌板；
+ * 失败 / 简化时回退参数化几何），并按固定家具的支撑与出线孔几何隐藏参数化床架 / 孔位标记。
+ *
+ * 视角使用独立的约束模式（previewCameraBounds）：只保留一个透视预设作为观察方向，
+ * 拖动旋转 / 滚轮缩放都在房间内侧完成，家具总览始终完整；不提供视角按钮与平移。
  */
 export function SpacePreview3D({ room }: { room: RoomConfig }) {
-  const [view, setView] = useState<ViewPreset>('persp')
   const webglOk = useMemo(detectWebGL, [])
   const deskGlbLoaded = useDeskModelStore((s) => s.status === 'loaded')
+  const bounds = useMemo(() => createPreviewCameraBounds(room, { fovDeg: PREVIEW_CAMERA_FOV }), [room])
 
   if (!webglOk) {
     return (
@@ -38,34 +39,22 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
   return (
     <div className="relative h-72 overflow-hidden rounded-md border border-border bg-[#F4F7F8]">
       <Canvas shadows frameloop="demand" gl={SCENE_GL_OPTIONS} dpr={sceneDpr()}
-        camera={{ position: [1.9, 1.6, 2.6], fov: 42, ...SCENE_CAMERA_CLIP }}
+        camera={{ position: [1.9, 1.6, 2.6], fov: PREVIEW_CAMERA_FOV, ...SCENE_CAMERA_CLIP }}
         onCreated={({ gl }) => configureSceneRenderer(gl)}>
         <SceneLighting />
         {/* 桌体由 DormDeskModel 接管（GLB / 回退几何）；GLB 就绪时床架由模型自带、隐藏参数化床架 */}
         <RoomShell
           room={room}
           deskMode="none"
-          showBed={view !== 'top' && !deskGlbLoaded}
+          showBed={!deskGlbLoaded}
           showCableHoles={deskGlbLoaded}
         />
-        <DormDeskModel room={room} hideBedParts={view === 'top'} respectToolbar={false} />
-        {/* 小画布取景：拉远 + 抬高注视点，容纳整组家具（默认机位按桌面区域取景会裁掉床） */}
-        <CameraRig preset={view} furnitureModel={room.furnitureModel} zoomOut={1.75} targetShiftY={0.3} />
+        <DormDeskModel room={room} respectToolbar={false} />
+        {/* 约束模式：取景距离由家具包围盒与画布宽高比实时解算，不再用固定拉远倍数 */}
+        <CameraRig preset="persp" furnitureModel={room.furnitureModel} bounds={bounds} />
       </Canvas>
-      <div className="absolute right-2 top-2">
-        <Segmented
-          size="sm"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'persp', label: '透视' },
-            { value: 'front', label: '正视' },
-            { value: 'top', label: '俯视' },
-          ]}
-        />
-      </div>
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/35 to-transparent px-2.5 py-1.5 text-[11px] text-white">
-        正式模型 · 由当前表单实时生成 · 可拖拽旋转
+        拖动旋转 · 滚轮缩放 · 不会绕到墙后
       </div>
     </div>
   )

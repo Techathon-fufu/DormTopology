@@ -3,7 +3,7 @@ import { DESK_GAP } from '@/scene/sceneValidation'
 import { computeOrganizationZones } from '@/scene/organizationZones'
 import type { OrganizationPreferences } from '@/types/organization'
 import type { CableAvoidZone, RouteNode } from '@/types/cable'
-import { furnitureBoxes, furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
+import { effectiveCableHoles, furnitureBoxes, furnitureSurfaces, hasFixedFurniture } from './fixedFurniture'
 
 /**
  * 场景路由节点与走线避让区（演示用「规则式」参考）。
@@ -82,7 +82,7 @@ export function computeRouteNodes(room: RoomConfig): RouteNode[] {
   }
 
   // 出线孔（桌面上「入口」/ 桌底下「出口」两个走线点）
-  for (const hole of room.cableHoles) {
+  for (const hole of effectiveCableHoles(room)) {
     const [hx, , hz] = hole.position
     push(
       `hole-${hole.id}-top`,
@@ -135,7 +135,7 @@ function fixedRouteNodes(room: RoomConfig): RouteNode[] {
     push(`back-${x}`, 'backboard', '背板·后侧', [x, .762, DESK_GAP / 2])
     push(`over-${x}`, 'backboard', '背板·上沿', [x, .932, .09])
   }
-  for (const hole of room.cableHoles) {
+  for (const hole of effectiveCableHoles(room)) {
     push(`hole-${hole.id}-top`, 'hole', '出线孔·入口', [hole.position[0], .762, hole.position[2]])
     push(`hole-${hole.id}-under`, 'hole', '出线孔·出口', [hole.position[0], .7, hole.position[2]])
   }

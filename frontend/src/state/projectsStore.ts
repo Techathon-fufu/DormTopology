@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import { recordStorage } from './recordStorage'
 import { OUTLET_FIXED_Y_M, type Project } from '@/types/project'
 import { createDemoCables, createDemoProject, createDemoSceneObjects, DEMO_PROJECT_ID, DEMO_ROOM_NOTE, DEMO_SEED_VERSION } from '@/data/demoProject'
 import { cableRoutingObjectsSignature, endpointOf, invalidateCableRoutes } from '@/scene/cables'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { useCableStore } from './cableStore'
+import { usePlansStore } from './plansStore'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -15,7 +17,14 @@ import { useCableStore } from './cableStore'
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 定向迁移或归档重种。
  */
-const PROJECTS_PERSIST_VERSION = 3
+const PROJECTS_PERSIST_VERSION = 5
+
+/** Drop unsupported saved apertures without moving any objects or rewriting baselines. */
+export function migratePrefabDesktop(project: Project, invalidate = false): Project {
+  if (project.room.furnitureModel !== 'dormdesk-v1' || (!invalidate && !project.room.cableHoles.length)) return project
+  return { ...project, room: { ...project.room, cableHoles: [] },
+    cables: invalidateCableRoutes(project.cables ?? []), cableTrayAnalysis: undefined }
+}
 
 /** 内置示例项目是否需要按最新示例数据重种 */
 export function isDemoProjectStale(project: Project | undefined): boolean {
@@ -27,22 +36,23 @@ export function isDemoProjectStale(project: Project | undefined): boolean {
 export function migrateDefaultDemoPorts(project: Project): Project {
   if (project.id !== DEMO_PROJECT_ID || project.demoSeedVersion !== DEMO_SEED_VERSION
     || project.room.furnitureModel !== 'dormdesk-v1') return project
-  const oldOffsets: Record<string, [number, number, number]> = {
-    'port-laptop-usbc': [.172, .03, -.06], 'port-laptop-hdmi': [.172, .05, -.01],
-    'port-laptop-usba': [.172, .015, .06], 'port-monitor-pwr': [.12, .05, -.092],
-    'port-monitor-hdmi': [-.12, .05, -.092], 'port-lamp-pwr': [0, .06, -.092],
+  const oldOffsets: Record<string, Array<[number, number, number]>> = {
+    'port-laptop-usbc': [[.172, .03, -.06]], 'port-laptop-hdmi': [[.172, .05, -.01]],
+    'port-laptop-usba': [[.172, .015, .06]], 'port-monitor-pwr': [[.12, .05, -.092], [.12, .15, -.012]],
+    'port-monitor-hdmi': [[-.12, .05, -.092], [-.12, .15, -.012]], 'port-lamp-pwr': [[0, .06, -.092]],
   }
   const defaults = createDemoSceneObjects(project.id)
   let changed = false
   const objects = project.objects.map((object) => {
     const original = defaults.find((o) => o.id === object.id)
-    if (!original || original.model.shape !== object.model.shape
+    if (!original || original.model.shape !== object.model.shape || original.model.prefabId !== object.model.prefabId
       || (['width', 'height', 'depth'] as const).some((key) => original.dimensions[key] !== object.dimensions[key])) return object
     let updated = false
     const ports = object.ports.map((port) => {
       const old = oldOffsets[port.id], next = original.ports.find((p) => p.id === port.id)
-      if (!old || !next || port.confirmed === true || port.type !== next.type || port.direction !== next.direction
-        || !port.offset?.every((v, i) => v === old[i])) return port
+      if (!old || !next || port.confirmed === true || port.localDirection !== undefined
+        || port.type !== next.type || port.direction !== next.direction
+        || !old.some((offset) => port.offset?.every((v, i) => v === offset[i]))) return port
       changed = updated = true
       return { ...port, offset: next.offset, confirmed: false }
     })
@@ -103,11 +113,15 @@ export function migrateDefaultDemoWiring(project: Project): Project {
 
 interface ProjectsState {
   projects: Record<string, Project>
+  /** 由新版两段式创建流程产生的未完成草稿；旧项目不按 stage 猜测，避免误拦截。 */
+  creationDrafts: Record<string, true>
   ensureDemo: () => void
   /** 重新种入内置示例项目（回到凌乱初始状态，供「一键演示 / 重置重播」使用） */
   resetDemo: () => void
   upsert: (project: Project) => void
   update: (id: string, updater: (p: Project) => Project) => void
+  markCreationDraft: (id: string) => void
+  completeCreationDraft: (id: string) => void
   remove: (id: string) => void
 }
 
@@ -115,6 +129,7 @@ export const useProjectsStore = create<ProjectsState>()(
   persist(
     (set, get) => ({
       projects: {},
+      creationDrafts: {},
       ensureDemo() {
         let existing = get().projects[DEMO_PROJECT_ID]
         // v6 → v7 只移除演示书本，保留用户对其余物品、接口和房间的编辑。
@@ -140,6 +155,7 @@ export const useProjectsStore = create<ProjectsState>()(
             objects: existing.objects.map((o) => ({ ...o, projectId: archiveId })),
             cables: invalidateCableRoutes((existing.cables ?? []).map((c) => ({ ...c, projectId: archiveId }))),
           } : null
+          if (archiveId) usePlansStore.getState().archiveProjectRecords(DEMO_PROJECT_ID, archiveId)
           set((s) => ({ projects: { ...s.projects, ...(archive && archiveId ? { [archiveId]: archive } : {}), [DEMO_PROJECT_ID]: createDemoProject() } }))
         } else {
           const migrated = migrateDefaultDemoWiring(migrateDefaultDemoPorts(existing))
@@ -155,6 +171,7 @@ export const useProjectsStore = create<ProjectsState>()(
         }))
       },
       upsert(project) {
+        project = migratePrefabDesktop(project)
         set((s) => ({
           projects: { ...s.projects, [project.id]: { ...project, updatedAt: Date.now() } },
         }))
@@ -162,7 +179,7 @@ export const useProjectsStore = create<ProjectsState>()(
       update(id, updater) {
         const p = get().projects[id]
         if (!p) return
-        const next = updater(p)
+        const next = migratePrefabDesktop(updater(p))
         const routingChanged = JSON.stringify(p.room) !== JSON.stringify(next.room)
           || JSON.stringify(resolveOrganizationPreferences(p)) !== JSON.stringify(resolveOrganizationPreferences(next))
           || cableRoutingObjectsSignature(p.objects) !== cableRoutingObjectsSignature(next.objects)
@@ -173,23 +190,37 @@ export const useProjectsStore = create<ProjectsState>()(
             updatedAt: Date.now() } },
         }))
       },
+      markCreationDraft(id) {
+        set((s) => ({ creationDrafts: { ...s.creationDrafts, [id]: true } }))
+      },
+      completeCreationDraft(id) {
+        set((s) => {
+          const creationDrafts = { ...s.creationDrafts }
+          delete creationDrafts[id]
+          return { creationDrafts }
+        })
+      },
       remove(id) {
         if (id === DEMO_PROJECT_ID) return // 内置示例项目不可删除
         set((s) => {
           const next = { ...s.projects }
+          const creationDrafts = { ...s.creationDrafts }
           delete next[id]
-          return { projects: next }
+          delete creationDrafts[id]
+          return { projects: next, creationDrafts }
         })
       },
     }),
     {
       name: 'dormtopology.projects',
+      storage: createJSONStorage(() => recordStorage(['projects', 'creationDrafts'])),
       version: PROJECTS_PERSIST_VERSION,
       /**
        * 迁移历史（两轮改动合并后的口径）：
        * v1 → v2：早期版本把旧示例场景写进了本地存储，示例数据更新后不生效；迁移时按种子版本重种内置示例项目。
        * v2 → v3（0.9.0）：墙面插座收敛为一块「双插孔 ×2」面板（合并历史左右两个独立插座）；
        *   示例项目同时按最新示例数据重种，用户自建项目仅归一插座，其余字段原样保留。
+       * v3 → v4：移除旧预制桌面的虚构孔位；v4 → v5：合并显式创建草稿，保留已有标记、不按 stage 推断。
        */
       migrate: (persisted, from) => {
         const state = persisted as Partial<ProjectsState> | undefined
@@ -209,8 +240,11 @@ export const useProjectsStore = create<ProjectsState>()(
             }
           }
         }
+        if (from < 4) for (const [id, p] of Object.entries(projects)) {
+          if (p?.room) projects[id] = migratePrefabDesktop(p, true)
+        }
         // ensureDemo archives the previous seed after hydration, including schema migrations.
-        return { ...state, projects } as ProjectsState
+        return { ...state, projects, creationDrafts: state.creationDrafts ?? {} } as ProjectsState
       },
     },
   ),

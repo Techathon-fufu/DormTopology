@@ -1,3 +1,5 @@
+import { initialDesktopPose } from '@/scene/desktopBindings'
+import { placePowerStripOnBackboard } from '@/scene/backboardMount'
 import {
   OUTLET_FIXED_Y_M,
   type CableConnection,
@@ -10,6 +12,7 @@ import {
 import { DEFAULT_ORGANIZATION_PREFERENCES } from '@/types/organization'
 import { endpointOf } from '@/scene/cables'
 import { prefabModelRef } from '@/scene/prefabItems'
+import { applyNewObjectDefaults, syncSupportPose } from '@/scene/objectDefaults'
 
 /** 内置示例项目的固定 id：任意路由均可通过它进入同一个示例项目 */
 export const DEMO_PROJECT_ID = 'demo-dorm-101'
@@ -27,11 +30,16 @@ export const DEMO_PROJECT_ID = 'demo-dorm-101'
  * v6：键鼠区左移 6cm，给真实笔记本留出主桌面侧位，避免与打印机争用回台。
  * v7：移除三本演示书本；已有 v6 场景仅删书，保留其他编辑。同时合并预制物品碰撞与双输出
  * 适配器接线，键鼠区左移 10cm 以保留 20mm 净距。
+ * v8：按长槽与使用方式固定分区，插排移到右后回台，旧场景及基线另存。
+ * v9：按审核分区初始化显示器、键盘、鼠标及常用品，新增预制鼠标垫/纸巾盒时沿用同一范围。
+ *
+ * 注意：新建物品默认尺寸 85%（`createNewSampleSceneObjects`）**不是**种子变更——它只服务新项目
+ * 的示例物品库，旧示例 / 旧项目继续用 `createDemoSceneObjects` 的原尺寸，因此不提升本版本号。
  */
-export const DEMO_SEED_VERSION = 7
+export const DEMO_SEED_VERSION = 9
 
 export const DEMO_ROOM_NOTE =
-  '固定 L 形床桌、四格书架及三抽屉；出线孔与插座可在「空间配置」中调整'
+  '固定 L 形床桌、四格书架及三抽屉；桌面按正式模型保留，插座可在「空间配置」中调整'
 
 /** 默认空间：上床下桌标准款（单位：米） */
 export function createStandardRoom(): RoomConfig {
@@ -49,7 +57,7 @@ export function createStandardRoom(): RoomConfig {
       { id: 'post-bl', position: [-0.97, 0, 0.87], section: 0.06 },
       { id: 'post-br', position: [0.97, 0, 0.87], section: 0.06 },
     ],
-    cableHoles: [{ id: 'hole-1', position: [0.5, 0.75, 0.28], diameter: 0.05 }],
+    cableHoles: [],
     outlets: [
       { id: 'outlet-1', position: [0, OUTLET_FIXED_Y_M, 0.01], label: '后墙插座（双插孔 ×2）', slots: 2 },
     ],
@@ -126,7 +134,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           label: '电源',
           powered: true,
           maxWatt: 40,
-          offset: [0.12, 0.15, -0.012],
+          offset: [0.12, 0.30, -0.02],
           direction: 'back',
         },
         {
@@ -134,7 +142,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
           type: 'hdmi',
           label: 'HDMI 输入',
           powered: false,
-          offset: [-0.12, 0.15, -0.012],
+          offset: [-0.12, 0.30, -0.02],
           direction: 'back',
         },
       ],
@@ -344,7 +352,7 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       needsPower: true,
       fixed: true,
       source: 'demo',
-      note: '演示物品：4 位排插，放在真实桌面上；规格 4/6/8 位可切换',
+      note: '演示物品：4 位排插，默认安装在桌下背板中间；规格 4/6/8 位可切换',
     },
   ].map((object) => {
     const positions: Record<string, Vec3> = {
@@ -354,8 +362,21 @@ export function createDemoSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject
       'demo-computer-tower': [.4, 0, .29], 'demo-thermos': [.8, deskY, .29],
       'demo-cup': [.8, deskY, .4], 'demo-storage-box': [.41, 1.46, .17],
     }
-    return { ...object, transform: { position: positions[object.id] ?? object.transform.position, rotationY: 0 } } as SceneObject
-  })
+    const positioned = { ...object, transform: { position: positions[object.id] ?? object.transform.position, rotationY: 0 } } as SceneObject
+    return positioned
+  }).map((object, _, objects) => placePowerStripOnBackboard({ ...object,
+    transform: initialDesktopPose(object, createStandardRoom(), objects) }, createStandardRoom()))
+}
+
+/**
+ * 新建项目写入的「示例物品库」：物品与 `createDemoSceneObjects` 一致，但尺寸取新建默认值
+ * （源默认 × 0.85，见 `@/data/objectDefaults`），局部接口同比缩放，并同步鼠标 / 鼠标垫支撑。
+ *
+ * 只服务「新项目」。旧示例种子、浏览器已存示例、旧项目迁移继续使用 `createDemoSceneObjects`
+ * 的原尺寸——它们的尺寸属于用户或历史数据，不能隐式缩小，也不为此外提 `DEMO_SEED_VERSION`。
+ */
+export function createNewSampleSceneObjects(projectId = DEMO_PROJECT_ID): SceneObject[] {
+  return syncSupportPose(createDemoSceneObjects(projectId).map(applyNewObjectDefaults))
 }
 
 function endpoint(objectId: string, portId: string | undefined, position: Vec3): CableEndpoint {

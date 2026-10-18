@@ -1,4 +1,5 @@
-import type { ModelRef, PrimitiveShape, SceneObject, Vec3 } from '@/types/project'
+import type { ModelRef, ObjectDimensions, PrimitiveShape, SceneObject, Vec3 } from '@/types/project'
+import { scaleNewObjectDefaultDimensions } from '@/data/objectDefaults'
 import { boundsOf } from './collisionGeometry'
 import { PREFAB_ITEM_COLLISIONS } from './prefabItemCollisions.generated'
 
@@ -72,4 +73,20 @@ export function prefabModelRef(prefabId: string, shape: PrimitiveShape): ModelRe
     shape,
     note: `预制模型：${def.label}`,
   }
+}
+
+/**
+ * 预制物品的新建默认尺寸（米）：源资产实测外包尺寸 × 0.85。
+ *
+ * 用于「从物品库新建一件预制物品」时给出未确认默认值（例：整合远程示例后的鼠标垫 / 纸巾盒）。
+ * 未注册的 id 返回 `null`（调用方自行决定回退尺寸），不抛异常。
+ */
+export function prefabDefaultDimensions(prefabId: string): ObjectDimensions | null {
+  const def = PREFAB_ITEMS[prefabId]
+  if (!def) return null
+  return scaleNewObjectDefaultDimensions({
+    width: def.size[0],
+    height: def.size[1],
+    depth: def.size[2],
+  })
 }

@@ -10,7 +10,31 @@ Object.defineProperty(globalThis, 'localStorage', { value: {
   setItem: (key: string, value: string) => entries.set(key, value),
   removeItem: (key: string) => entries.delete(key),
 }, configurable: true })
+const { usePlansStore } = await import('../src/state/plansStore')
 const { migrateDefaultDemoPorts, migrateDefaultDemoWiring, useProjectsStore } = await import('../src/state/projectsStore')
+
+// All saved fixed-model projects lose phantom holes and obsolete routing proofs,
+// while object poses, connections and immutable baseline records stay intact.
+const fixedOld = createDemoProject()
+fixedOld.id = 'custom-fixed-desktop'
+fixedOld.room.cableHoles = [{ id: 'old-hole', position: [.5, .75, .28], diameter: .05 }]
+fixedOld.cables = fixedOld.cables.map(c => ({ ...c, status: 'planned', planSource: 'algorithm',
+  route: { ...c.route, strategy: 'cableHole', verification: { pathStyle: 'orthogonal', sceneId: 'old', sceneRevision: 3,
+    status: 'valid', supportStatus: 'not_evaluated' } } }))
+usePlansStore.getState().captureBaseline(fixedOld)
+const baselineBefore = structuredClone(usePlansStore.getState().baselines[fixedOld.id])
+entries.set('dormtopology.projects', JSON.stringify({ version: 3, state: { projects: { [fixedOld.id]: fixedOld } } }))
+await useProjectsStore.persist.rehydrate()
+const fixedNew = useProjectsStore.getState().projects[fixedOld.id]
+assert.deepEqual(fixedNew.room.cableHoles, [])
+assert.deepEqual(fixedNew.objects, JSON.parse(JSON.stringify(fixedOld.objects)))
+assert.deepEqual(fixedNew.cables.map(c => [c.from, c.to]), JSON.parse(JSON.stringify(fixedOld.cables.map(c => [c.from, c.to]))))
+assert.ok(fixedNew.cables.every(c => c.status === 'stale' && !c.route.verification))
+assert.deepEqual(usePlansStore.getState().baselines[fixedOld.id], baselineBefore)
+await useProjectsStore.persist.rehydrate()
+assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id], JSON.parse(JSON.stringify(fixedNew)), 'migration is idempotent')
+useProjectsStore.getState().upsert(fixedOld)
+assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id].room.cableHoles, [], 'imports cannot restore phantom apertures')
 
 for (const version of [1, 2, 3]) {
   const old = createLegacyDemoProject()
@@ -30,6 +54,9 @@ for (const version of [1, 2, 3]) {
   entries.set('dormtopology.projects', JSON.stringify({ version, state: { projects: { [DEMO_PROJECT_ID]: old, [custom.id]: custom } } }))
   await useProjectsStore.persist.rehydrate()
   assert.equal(useProjectsStore.getState().projects[DEMO_PROJECT_ID].demoSeedVersion, 3, 'hydration preserves the old seed until archiving')
+  usePlansStore.setState({ baselines: {}, candidates: {} })
+  usePlansStore.getState().captureBaseline(old)
+  const oldBaseline = structuredClone(usePlansStore.getState().baselines[old.id])
   useProjectsStore.getState().ensureDemo()
   const projects = useProjectsStore.getState().projects
   const current = projects[DEMO_PROJECT_ID]
@@ -39,6 +66,9 @@ for (const version of [1, 2, 3]) {
   const archives = Object.values(projects).filter((p) => p.id.startsWith(`${DEMO_PROJECT_ID}-seed-`))
   assert.equal(archives.length, 1)
   const archive = archives[0]
+  assert.equal(usePlansStore.getState().baselines[old.id], undefined)
+  assert.equal(usePlansStore.getState().baselines[archive.id].id, oldBaseline.id)
+  assert.deepEqual(usePlansStore.getState().baselines[archive.id].scene!.objects.map((o) => ({ ...o, projectId: old.id })), oldBaseline.scene!.objects)
   assert.equal(archive.isDemo, false)
   assert.equal(archive.room.furnitureModel, undefined)
   assert.deepEqual(archive.room.desk, oldRoom.desk)
@@ -74,12 +104,26 @@ legacyPorts.objects = legacyPorts.objects.map((o) => ({ ...o, ports: o.ports.map
       : p.id === 'port-laptop-hdmi' ? { ...p, confirmed: false, offset: [.173, .05, -.01] } : p) }))
 const surfacePorts = migrateDefaultDemoPorts(legacyPorts)
 const port = (p: typeof legacyPorts, id: string) => p.objects.flatMap((o) => o.ports).find((entry) => entry.id === id)!
-assert.deepEqual(port(surfacePorts, 'port-laptop-usbc').offset, [.172, .009, -.06])
-assert.deepEqual(port(surfacePorts, 'port-monitor-hdmi').offset, [-.12, .15, -.012])
+assert.deepEqual(port(surfacePorts, 'port-laptop-usbc').offset, [.175, .005, -.06])
+assert.deepEqual(port(surfacePorts, 'port-monitor-hdmi').offset, [-.12, .30, -.02])
 assert.deepEqual(port(surfacePorts, 'port-monitor-pwr').offset, [.12, .05, -.092], 'confirmed port measurements are preserved')
 assert.deepEqual(port(surfacePorts, 'port-laptop-hdmi').offset, [.173, .05, -.01], 'user-edited unconfirmed positions are preserved')
 assert.equal(port(surfacePorts, 'port-laptop-usbc').confirmed, false)
 assert.equal(migrateDefaultDemoPorts(surfacePorts), surfacePorts)
+
+const hullPorts = createDemoProject()
+const hullMonitor = hullPorts.objects.find((o) => o.id === 'demo-monitor')!
+hullMonitor.ports = hullMonitor.ports.map((p) => ({ ...p, confirmed: false,
+  offset: [p.id === 'port-monitor-pwr' ? .12 : -.12, .15, -.012] }))
+const corrected = migrateDefaultDemoPorts(hullPorts)
+assert.deepEqual(port(corrected, 'port-monitor-pwr').offset, [.12, .30, -.02])
+assert.deepEqual(port(corrected, 'port-monitor-hdmi').offset, [-.12, .30, -.02])
+assert.deepEqual(corrected.objects.map((o) => o.transform), hullPorts.objects.map((o) => o.transform))
+hullMonitor.ports = hullMonitor.ports.map((p) => ({ ...p, localDirection: [0, -.5, -.866] }))
+assert.equal(migrateDefaultDemoPorts(hullPorts), hullPorts, 'user-marked surface directions must retain their ports')
+hullMonitor.ports = hullMonitor.ports.map(({ localDirection: _direction, ...p }) => p)
+hullMonitor.model = { ...hullMonitor.model, prefabId: undefined }
+assert.equal(migrateDefaultDemoPorts(hullPorts), hullPorts, 'a replaced model must retain its ports')
 
 const oldWiring = createDemoProject()
 oldWiring.name = 'Saved placement'

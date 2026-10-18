@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { readFile, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 
 type Diagnostics = { draws: number; preference?: string; renderer?: string; dpr: number }
 
@@ -120,7 +120,7 @@ test('stops drawing while idle and wakes for camera movement and drawer animatio
   expect(failures).toEqual([])
 })
 
-test('comparison stays visible and the guide exports a rendered PNG with demand drawing', async ({ page }) => {
+test('result playback stays visible and legacy guide/compare paths redirect to it', async ({ page }) => {
   const failures: string[] = []
   page.on('pageerror', error => failures.push(error.message))
   await page.goto('/projects/demo-dorm-101/workspace')
@@ -133,17 +133,17 @@ test('comparison stays visible and the guide exports a rendered PNG with demand 
     const { usePlansStore } = await import(plansUrl)
     usePlansStore.getState().saveCandidate(useProjectsStore.getState().projects['demo-dorm-101'], '渲染回归快照')
   })
+  // 旧的方案对比地址是次级入口，直接跳转到最终回放页，不保留独立对比画布。
   await page.goto('/projects/demo-dorm-101/compare')
+  await expect(page).toHaveURL(/\/projects\/demo-dorm-101\/result$/)
   await expect(page.locator('canvas')).toBeVisible()
   await expectVisibleGeometry(page)
+  await expect(page.getByRole('main', { name: '整理动画场景' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '播放整理动画', exact: true })).toBeVisible()
+  // 执行指南已退场，旧地址兼容跳转到同一回放页。
   await page.goto('/projects/demo-dorm-101/guide')
-  await expect(page.getByRole('heading', { name: '当前方案场景', exact: true })).toBeVisible()
-  await page.getByText('更多导出', { exact: true }).click()
-  const exported = page.waitForEvent('download')
-  await page.getByRole('button', { name: '导出截图', exact: true }).click()
-  const download = await exported
-  const bytes = await readFile((await download.path())!)
-  expect([...bytes.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
-  expect(bytes.length).toBeGreaterThan(8_000)
+  await expect(page).toHaveURL(/\/projects\/demo-dorm-101\/result$/)
+  await expect(page.getByRole('button', { name: '上一步', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '按住查看摆放前', exact: true })).toBeVisible()
   expect(failures).toEqual([])
 })

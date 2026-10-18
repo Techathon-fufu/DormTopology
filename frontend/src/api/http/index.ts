@@ -4,7 +4,7 @@ import { ApiError, isApiError } from '../core/errors'
 import { runRemoteJob } from '../core/jobs'
 import { requestJson } from '../core/client'
 import { canonicalScene, organizationInputSignature, packingBaseline, sceneRef, toPackingScene, type PackingScene } from '../core/packingWire'
-import { knownOrganizationScene, rememberOrganizationScene, withOrganizationSceneLock } from '../core/organizationScenes'
+import { knownOrganizationScene, knownSceneForBaseline, remoteOrganizationProjectId, rememberOrganizationScene, withOrganizationSceneLock } from '../core/organizationScenes'
 import { synchronizeScene } from '../core/sceneSync'
 import { assertRecommendedScenePlacement } from '@/lib/organizationValidation'
 import { invalidateCableRoutes } from '@/scene/cables'
@@ -131,7 +131,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
         if (targetIds && (!targetIds.length || new Set(targetIds).size !== targetIds.length || targetIds.some((id) => !project.cables.some((cable) => cable.id === id)))) throw new ApiError('待规划线缆列表包含重复或未知连接', { kind: 'input' })
         return withOrganizationSceneLock(projectId, async () => {
           const signature = cablePlanningInputSignature(project)
-          const known = knownOrganizationScene(projectId)
+          const known = knownSceneForBaseline(projectId, baseline.id)
           const scene = toRoutingScene({ project, confirmed, ref: known })
           const canonical = await synchronizeScene({ projectId, scene, baseline: routingBaseline(baseline, project, known), baselineSourceId: baseline.id, known, signal })
           const ref = sceneRef(canonical)
@@ -144,7 +144,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
             onProgress, signal,
             mapResult: async (wire) => {
               if (cablePlanningInputSignature(project) !== signature) throw new ApiError('走线期间场景发生变化，请重新规划', { kind: 'input' })
-              const current = await requestJson<PackingScene>(`/projects/${encodeURIComponent(projectId)}/scene`, { signal })
+              const current = await requestJson<PackingScene>(`/projects/${encodeURIComponent(remoteOrganizationProjectId(projectId, baseline.id))}/scene`, { signal })
               canonicalScene(current, canonical, ref)
               return mapRoutingResult(wire, { scene: canonical, project })
             },
@@ -157,7 +157,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
       async planOrganization({ projectId, objects, room, preferences, baseline, confirmed, onProgress, signal }) {
         if (!confirmed) throw new ApiError('请先核对并确认物品尺寸及整理前位置', { kind: 'input' })
         return withOrganizationSceneLock(projectId, async () => {
-          const known = knownOrganizationScene(projectId)
+          const known = knownSceneForBaseline(projectId, baseline.id)
           const input = { projectId, objects, room, preferences, confirmed, ref: known }
           const scene = toPackingScene(input)
           const baselineScene = packingBaseline(baseline, input)
@@ -213,7 +213,7 @@ export function createHttpServices(deps: HttpServiceDeps = {}): AppServices {
               // A committed transaction can outlive a lost response. Recover only this consumed job.
               const job = await requestJson<Record<string, unknown>>(`/jobs/${encodeURIComponent(meta.jobId)}`)
               if (job.job_id !== meta.jobId || job.status !== 'succeeded' || job.applied !== true || job.scene_id !== known.sceneId || job.scene_revision !== known.sceneRevision || job.applied_scene_revision !== nextRef.sceneRevision) throw error
-              const saved = await requestJson<PackingScene>(`/projects/${encodeURIComponent(projectId)}/scene`)
+              const saved = await requestJson<PackingScene>(`/projects/${encodeURIComponent(remoteOrganizationProjectId(projectId, known.baselineSourceId))}/scene`)
               canonical = canonicalScene(saved, expected, nextRef)
             } catch { throw error }
           }

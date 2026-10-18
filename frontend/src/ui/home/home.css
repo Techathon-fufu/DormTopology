@@ -1,32 +1,24 @@
-/**
- * 首页专用样式（仅 / 路由使用）。
- *
- * 主题令牌只定义在 `.home-shell` 上：header 与页面是兄弟节点，共享同一份作用域变量，
- * 不修改全局 html / body 或工作台颜色。
- * 数据契约、算法结果与其余页面外观不受本文件影响。
- */
+/** Homepage composition. Color decisions come from the shared app theme tokens. */
 
 .home-shell {
-  /* 日间：雾白、浅橡木、低饱和青绿 */
-  --home-bg: #f7f8f7;
-  --home-bg-tint: #ecefec;
-  --home-ink: #1f2529;
-  --home-ink-soft: #59636b;
-  --home-line: #e0e4e0;
-  --home-surface: #ffffff;
-  --home-accent: #0b7a72;
-  --home-accent-strong: #096259;
-  --home-accent-ink: #ffffff;
-  --home-chip-bg: #eaf2ef;
-  --home-chip-ink: #0a6a62;
-  --home-hover: rgba(20, 30, 28, 0.055);
-  --home-thumb-a: #e8ede8;
-  --home-thumb-b: #dbe2dd;
-  --home-shadow: 0 14px 34px rgba(20, 26, 24, 0.14);
-  --home-focus: #0b7a72;
+  --home-bg: var(--app-bg);
+  --home-bg-tint: var(--app-muted);
+  --home-ink: var(--app-foreground);
+  --home-ink-soft: var(--app-muted-foreground);
+  --home-line: var(--app-border);
+  --home-surface: var(--app-surface);
+  --home-accent: var(--app-primary);
+  --home-accent-strong: var(--app-primary-hover);
+  --home-accent-ink: var(--app-on-primary);
+  --home-chip-bg: var(--app-primary-soft);
+  --home-chip-ink: var(--app-primary);
+  --home-hover: var(--app-hover);
+  --home-thumb-a: var(--app-thumb-a);
+  --home-thumb-b: var(--app-thumb-b);
+  --home-shadow: var(--app-shadow-overlay);
+  --home-focus: var(--app-primary);
 
   display: flex;
-  /* 旧内核没有 svh：先用 vh 兜底，支持的浏览器再用 svh */
   min-height: 100vh;
   min-height: 100svh;
   flex-direction: column;
@@ -34,28 +26,6 @@
   color: var(--home-ink);
   font-family: 'Inter', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-
-.home-shell[data-theme='dark'] {
-  /* 深夜：石墨灰、柔和薄荷绿、暖色桌灯 */
-  --home-bg: #16191c;
-  --home-bg-tint: #1b1f23;
-  --home-ink: #eaedef;
-  --home-ink-soft: #a6aeb4;
-  --home-line: #2b3136;
-  --home-surface: #1c2125;
-  --home-accent: #8fcdb6;
-  --home-accent-strong: #a6dbc6;
-  --home-accent-ink: #10201b;
-  --home-chip-bg: rgba(143, 205, 182, 0.14);
-  --home-chip-ink: #a9dcc7;
-  --home-hover: rgba(255, 255, 255, 0.06);
-  --home-thumb-a: #2a3136;
-  --home-thumb-b: #22282c;
-  --home-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
-  --home-focus: #8fcdb6;
-
-  color-scheme: dark;
 }
 
 /* ── 顶部栏 ───────────────────────────────────────────── */
@@ -840,4 +810,3 @@
 .home-headline {
   font-size: clamp(56px, 5.9vw, 84px);
 }
-

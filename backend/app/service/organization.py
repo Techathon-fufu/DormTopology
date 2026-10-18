@@ -119,10 +119,7 @@ def _apply_targets(scene: Scene, result: dict) -> Scene:
                 region_id not in item["allowed_region_ids"]
                 or region_id not in regions
                 or not fits_region(item, regions[region_id])
-                or (
-                    placement["placement_status"] == "placed"
-                    and item["rotation_y_rad"] not in item["allowed_rotations_y_rad"]
-                )
+                or item["rotation_y_rad"] not in item["allowed_rotations_y_rad"]
             ):
                 raise InvalidInput(
                     "A placed target violates region or orientation constraints"

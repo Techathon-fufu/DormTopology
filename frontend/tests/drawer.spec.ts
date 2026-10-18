@@ -250,7 +250,7 @@ test('drawer contents fit the cavity, open on placement and keep closed-frame co
       .map((issue: { message: string }) => issue.message)
     const hit = raycastSupports(
       new Raycaster(new Vector3(.48, 1, .65), new Vector3(0, -1, 0)).ray,
-      project.room, null, { top: 1 },
+      project.room, null, { top: -.3 },
     )
     useWorkspaceStore.getState().addObject(project.id, {
       ...probe, transform: { ...probe.transform, position: [0, 0, 1.2] },
@@ -259,7 +259,7 @@ test('drawer contents fit the cavity, open on placement and keep closed-frame co
     useWorkspaceStore.getState().updateObject(project.id, probe.id, { transform: { position: probe.transform.position } }, true)
     const stored = useProjectsStore.getState().projects[project.id].objects.find((item: { id: string }) => item.id === probe.id)
     return { fit, partial, mouth, valid, existingBlockers,
-      initiallyClosed, hit: hit && { slot: hit.drawerSlot, x: hit.x, y: hit.y }, storedPosition: stored?.transform.position }
+      initiallyClosed, hit: hit && { surface: hit.surfaceId, x: hit.x, y: hit.y }, storedPosition: stored?.transform.position }
 
   })
 
@@ -269,8 +269,8 @@ test('drawer contents fit the cavity, open on placement and keep closed-frame co
   expect(result.valid).toEqual([])
   expect(result.existingBlockers).toEqual([])
   expect(result.initiallyClosed).toBe(true)
-  expect(result.hit?.slot).toBe('top')
-  expect(result.hit?.x).toBeCloseTo(.78, 5)
+  expect(result.hit?.surface).toBe('support-drawer-top')
+  expect(result.hit?.x).toBeCloseTo(.48, 5)
   expect(result.hit?.y).toBe(.549)
   expect(result.storedPosition).toEqual([.78, .549, .65])
   await waitForTopSettled(page, 1)

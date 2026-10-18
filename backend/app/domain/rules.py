@@ -1,6 +1,7 @@
 """Validate the scene contract before running domain algorithms."""
 
 import math
+import re
 
 from .errors import SceneInputError
 from .geometry import validate_item_geometry
@@ -178,6 +179,15 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             {"high", "medium", "low"},
             path + ".usage_frequency",
         )
+        if "surface_mount" in item:
+            mount_path = path + ".surface_mount"
+            mount = _object(item["surface_mount"], "obstacle_id face", mount_path)
+            obstacle_id = _string(mount["obstacle_id"], mount_path + ".obstacle_id")
+            if not any(o["id"] == obstacle_id for o in scene["obstacles"]):
+                _fail(mount_path + ".obstacle_id", "must reference an existing obstacle")
+            _enum(mount["face"], {"z_max"}, mount_path + ".face")
+            if item["category"] != "power_strip" or not item["fixed"] or "plug_mount" in item:
+                _fail(mount_path, "only a fixed power_strip may attach to a backboard")
         allowed = _array(item["allowed_region_ids"], path + ".allowed_region_ids")
         if not allowed and not item["fixed"]:
             _fail(path + ".allowed_region_ids", "movable items need a target region")
@@ -200,14 +210,16 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
         rotations = _array(
             item["allowed_rotations_y_rad"], path + ".allowed_rotations_y_rad"
         )
-        if not rotations:
-            _fail(path + ".allowed_rotations_y_rad", "must not be empty")
+        if not rotations or len(rotations) > 8:
+            _fail(path + ".allowed_rotations_y_rad", "must contain 1 to 8 angles")
         for angle in rotations:
             angle = _number(angle, path + ".allowed_rotations_y_rad")
-            if angle not in (0.0, math.pi / 2):
+            if not -math.pi <= angle <= math.pi:
                 _fail(
-                    path + ".allowed_rotations_y_rad", "only 0 and pi/2 are supported"
+                    path + ".allowed_rotations_y_rad", "angles must be within [-pi, pi]"
                 )
+        if len(set(rotations)) != len(rotations):
+            _fail(path + ".allowed_rotations_y_rad", "angles must be unique")
         collision = _object(item["collision"], "type", path + ".collision")
         _enum(collision["type"], {"box", "compound"}, path + ".collision.type")
         if collision["type"] == "compound":
@@ -217,6 +229,16 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                 _fail(path + ".collision", str(error))
         for key in ("image_url", "model_url"):
             _nullable_string(item[key], path + "." + key)
+            if not item[key]:
+                continue
+            asset_path = re.split(r"[?#]", item[key], maxsplit=1)[0]
+            for _ in range(8):
+                decoded = re.sub(r"%([0-9a-fA-F]{2})", lambda m: chr(int(m[1], 16)), asset_path)
+                if decoded == asset_path:
+                    break
+                asset_path = decoded
+            if "objects" in asset_path.replace(chr(92), "/").lower().split("/"):
+                _fail(path + "." + key, "objects/ assets are retired; use Prefabmodel runtime assets")
         generation = _object(
             item["generation"], "task_id status source error", path + ".generation"
         )
@@ -299,6 +321,8 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                 _fail(path, problems[0]["message"])
 
     graph = _object(scene["routing_graph"], "nodes edges", "routing_graph")
+    if "path_style" in graph:
+        _enum(graph["path_style"], {"smooth", "orthogonal"}, "routing_graph.path_style")
     nodes = {}
     for i, value in enumerate(_array(graph["nodes"], "routing_graph.nodes")):
         path = f"routing_graph.nodes[{i}]"
@@ -331,6 +355,10 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
             _enum(mode, {"slot", "backboard"}, path + ".modes")
         _number(edge["clearance_radius_m"], path + ".clearance_radius_m", positive=True)
         _boolean(edge["exposed"], path + ".exposed")
+        if graph.get("path_style") == "orthogonal":
+            a, b = (nodes[edge[key]]["position"] for key in ("from_node_id", "to_node_id"))
+            if sum(abs(x - y) > 1e-8 for x, y in zip(a, b)) != 1:
+                _fail(path, "orthogonal channels must be axis aligned")
     if "supports" in graph and "support_policy" not in graph:
         _fail("routing_graph.support_policy", "supports require an explicit policy")
     if "support_policy" in graph:
@@ -431,6 +459,8 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
         _number(cable["diameter_m"], path + ".diameter_m", positive=True)
         if _number(cable["min_bend_radius_m"], path + ".min_bend_radius_m") < 0:
             _fail(path + ".min_bend_radius_m", "must be nonnegative")
+        if graph.get("path_style") == "orthogonal" and cable["min_bend_radius_m"] != 0:
+            _fail(path + ".min_bend_radius_m", "orthogonal layout requires zero physical bend-radius constraint")
         if _number(cable["slack_m"], path + ".slack_m") < 0:
             _fail(path + ".slack_m", "must be nonnegative")
         if "baseline_path_points" in cable:

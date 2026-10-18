@@ -1,3 +1,4 @@
+import { constrainDesktopPose, initialDesktopPose, followMousepad } from '@/scene/desktopBindings'
 import { create } from 'zustand'
 import type {
   CableConnection,
@@ -20,7 +21,8 @@ import { useCableStore } from './cableStore'
 import { useOrganizeStore } from './organizeStore'
 import { useDrawerStore } from './drawerStore'
 import { drawerSlotForObject } from '@/scene/fixedFurniture'
-import type { DrawerSlotId } from '@/scene/dormDeskDrawers'
+import { placePowerStripOnBackboard } from '@/scene/backboardMount'
+import { resizeIssue, laptopViewingAngle } from '@/scene/placementEditing'
 
 export type WorkspaceMode = 'organize' | 'cable'
 export type ViewPreset = 'persp' | 'front' | 'top' | 'left' | 'right' | 'desk'
@@ -35,8 +37,11 @@ export interface DragState {
   /** 已吸附的预览位置（米） */
   position: Vec3
   /** 吸附到的支撑面 */
-  support: 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'none'
-  drawerSlot?: DrawerSlotId
+  support: 'desk' | 'shelf' | 'drawer' | 'beam' | 'floor' | 'backboard' | 'none'
+  /** 拖拽中的候选物品（含背板安装等姿态调整），仅用于预览 */
+  object?: SceneObject
+  /** 候选物品的显示位置（已叠加抽屉滑出偏移） */
+  displayPosition?: Vec3
   /** 预览位置是否通过越界 / 相交校验 */
   valid: boolean
   /** 上一次有效预览位置（指针未命中支撑面时回退用） */
@@ -56,6 +61,7 @@ export type ObjectPatch = Partial<
     | 'fixed'
     | 'locked'
     | 'frequent'
+    | 'powerStrip'
   >
 > & {
   transform?: Partial<SceneObject['transform']>
@@ -139,7 +145,7 @@ interface WorkspaceState {
   setLastScore: (score: number | null) => void
   undo: (projectId: string) => void
   redo: (projectId: string) => void
-  updateObject: (projectId: string, objectId: string, patch: ObjectPatch, record?: boolean) => void
+  updateObject: (projectId: string, objectId: string, patch: ObjectPatch, record?: boolean) => boolean | void
   addObject: (projectId: string, object: SceneObject) => void
   removeObject: (projectId: string, objectId: string) => void
   replaceObjects: (projectId: string, objects: SceneObject[], record?: boolean) => void
@@ -299,7 +305,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
       const { transform: tPatch, dimensions: dPatch, model: mPatch, ...rest } = patch
-      const next = project.objects.map((o) => {
+      const previous = project.objects.find(o => o.id === objectId)
+      if (previous?.powerStrip?.mount === 'backboard' && !patch.powerStrip && tPatch?.rotationY) {
+        set({ notice: '背板上的插排保持朝外；拖到桌面后可旋转' }); return false
+      }
+      let next = project.objects.map((o) => {
         if (o.id !== objectId) return o
         const dimensions = dPatch ? { ...o.dimensions, ...dPatch } : o.dimensions
         const dimensionsChanged = JSON.stringify(dimensions) !== JSON.stringify(o.dimensions)
@@ -314,15 +324,30 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           return dimensionsChanged || !previous || geometry(previous) !== geometry(port)
             ? { ...port, confirmed: false } : port
         })
+        const resizedPosition = dPatch && o.powerStrip?.mount === 'backboard' && !tPatch
+          ? { position: [o.transform.position[0], o.transform.position[1], o.transform.position[2] + (dimensions.depth - o.dimensions.depth) / 2] as Vec3 } : undefined
+        const transformPatch = tPatch ?? resizedPosition
         return {
           ...o,
           ...rest,
-          transform: tPatch ? { ...o.transform, ...tPatch } : o.transform,
+          transform: mPatch?.shape === 'laptop' && mPatch.prefabId !== o.model.prefabId && !tPatch ? { ...o.transform, rotationY: laptopViewingAngle(o.transform.position, project.room) } : transformPatch ? { ...o.transform, ...transformPatch } : o.transform,
           dimensions,
           ports,
           model: mPatch ? { ...o.model, ...mPatch } : o.model,
         }
       })
+      try {
+        if (tPatch || dPatch || mPatch) next = next.map((o) => o.id === objectId
+          ? { ...o, transform: constrainDesktopPose(o, project.room, next) } : o)
+        next = followMousepad(project.objects, next, project.room)
+      } catch (error) { set({ notice: (error as Error).message }); return false }
+      if (dPatch && (!patch.powerStrip || patch.powerStrip.mount === previous?.powerStrip?.mount)) {
+        const changed = next.find((o) => o.id === objectId)
+        if (changed) {
+          const error = resizeIssue(changed, changed.dimensions, project.room, next)
+          if (error) { set({ notice: error }); return false }
+        }
+      }
       commit(
         projectId,
         {
@@ -331,25 +356,35 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         },
         record,
       )
+      return true
     },
 
     addObject(projectId, object) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
-      commit(projectId, { objects: [...project.objects, object] }, true)
+      let placed = object.model.shape === 'laptop' ? { ...object, transform: { ...object.transform, rotationY: laptopViewingAngle(object.transform.position, project.room) } } : placePowerStripOnBackboard(object, project.room)
+      try { placed = { ...placed, transform: initialDesktopPose(placed, project.room, project.objects) } }
+      catch (error) { set({ notice: (error as Error).message }); return }
+      let objects: SceneObject[]
+      try { objects = followMousepad(project.objects, [...project.objects, placed], project.room) }
+      catch (error) { set({ notice: (error as Error).message }); return }
+      commit(projectId, { objects }, true)
       set({ selectedId: object.id })
     },
 
     removeObject(projectId, objectId) {
       const project = useProjectsStore.getState().projects[projectId]
       if (!project) return
+      let objects: SceneObject[]
+      try { objects = followMousepad(project.objects, project.objects.filter((o) => o.id !== objectId), project.room) }
+      catch (error) { set({ notice: (error as Error).message }); return }
       const affected = project.cables.filter(
         (c) => c.from.objectId === objectId || c.to.objectId === objectId,
       )
       commit(
         projectId,
         {
-          objects: project.objects.filter((o) => o.id !== objectId),
+          objects,
           cables: project.cables.filter(
             (c) => c.from.objectId !== objectId && c.to.objectId !== objectId,
           ),
@@ -374,6 +409,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const strip = project.objects.find((o) => o.id === objectId)
       if (!strip) return null
       const change = computePowerStripSpecChange(strip, project.cables, next)
+      const sizeError = resizeIssue(change.object, change.object.dimensions, project.room, project.objects)
+      if (sizeError) { set({ notice: sizeError }); return null }
       change.object.ports = change.object.ports.map((port) => ({ ...port, confirmed: false }))
       const removed = new Set(change.removedPortCableIds)
       const affected = new Set(change.affectedCableIds)

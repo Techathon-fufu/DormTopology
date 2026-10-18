@@ -50,6 +50,15 @@ def item_geometry_issues(scene: Scene, item: dict) -> list[Issue]:
                     "Wall panel violates its fixed wall bounds or pose",
                 )
             )
+    elif "surface_mount" in item:
+        mount = item["surface_mount"]
+        board = next(o for o in scene["obstacles"] if o["id"] == mount["obstacle_id"])
+        bounds = aabb_from_item(item)
+        if (item["rotation_y_rad"] != 0 or item["allowed_region_ids"]
+                or abs(bounds.minimum[2] - board["max"][2]) > EPSILON
+                or any(bounds.minimum[i] < board["min"][i] - EPSILON
+                       or bounds.maximum[i] > board["max"][i] + EPSILON for i in (0, 1))):
+            problems.append(issue(item["id"], "no_space", "Power strip must fit and contact the referenced backboard face"))
     elif "plug_mount" in item:
         problems.extend(plug_mount_geometry_issues(scene, item))
     elif not legal_regions(scene, item):

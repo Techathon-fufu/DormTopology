@@ -239,6 +239,25 @@ class LayoutTests(unittest.TestCase):
 
 
 class PackingTests(unittest.TestCase):
+    def test_inward_laptop_angle_replaces_disallowed_original_angle(self):
+        scene = simple_scene()
+        laptop = item('laptop', 'laptop', (.35, .23, .346), (.5, .77, .3), ['desktop'])
+        laptop['allowed_rotations_y_rad'] = [-math.pi / 9]
+        scene['items'] = [laptop]
+        result = plan_packing(scene)
+        self.assertEqual(result['status'], 'success')
+        self.assertAlmostEqual(result['items'][0]['target_rotation_y_rad'], -math.pi / 9)
+        self.assertTrue(validate_layout(preview_scene(scene, result))['geometry_valid'])
+
+    def test_bounded_rotation_candidates_reject_duplicates_and_excess(self):
+        for angles in ([0, 0], list(i / 10 for i in range(9)), [float('nan')]):
+            scene = simple_scene()
+            laptop = item('laptop', 'laptop', (.35, .23, .346), (.5, .77, .3), ['desktop'])
+            laptop['allowed_rotations_y_rad'] = angles
+            scene['items'] = [laptop]
+            with self.subTest(angles=angles), self.assertRaises(PackingInputError):
+                plan_packing(scene)
+
     def test_collapsed_candidate_is_skipped_without_rejecting_valid_input(self):
         scene = simple_scene()
         scene["regions"].append(region("storage", (0.5, 0.8, 0.1, 0.5), 1.2, 0.2))
@@ -657,7 +676,7 @@ class InputTests(unittest.TestCase):
             lambda s: s["items"][0].update(rotation_y_rad=math.inf),
             lambda s: s["items"][0].update(dimensions_confirmed=False),
             lambda s: s["items"][0].update(allowed_region_ids=["unknown"]),
-            lambda s: s["items"][0].update(allowed_rotations_y_rad=[math.pi]),
+            lambda s: s["items"][0].update(allowed_rotations_y_rad=[math.pi + 0.01]),
             lambda s: s["items"][0].update(allowed_rotations_y_rad=[False]),
             lambda s: s["items"][0].update(allowed_region_ids=[]),
             lambda s: s["items"][0].update(allowed_region_ids=[["nested"]]),

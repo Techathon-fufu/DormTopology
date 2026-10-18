@@ -29,6 +29,20 @@ def port_is_blocked(device, blocker):
 
 
 class PackingPortAccessTests(unittest.TestCase):
+    def test_furniture_does_not_block_rear_connector(self):
+        scene = simple_scene()
+        scene['obstacles'] = [{'id': 'baffle', 'min': [0, .77, 0], 'max': [1, 1, .05]}]
+        device = item('device', 'device', (.2, .1, .1), (.5, .77, .11), ['desktop'])
+        device['ports'] = [connector((0, 0, -1), (0, .05, -.05))]
+        device['allowed_rotations_y_rad'] = [0]
+        scene['items'] = [device]
+        result = plan_packing(scene)
+        applied = preview_scene(scene, result)['items'][0]
+        blocker = item('baffle', 'box', (1, .23, .05), (.5, .77, .025), ['desktop'])
+        self.assertEqual(result['status'], 'success')
+        self.assertTrue(port_is_blocked(device, blocker))
+        self.assertFalse(port_is_blocked(applied, blocker))
+
     def test_device_keeps_its_outward_connector_accessible(self):
         scene = simple_scene()
         scene["regions"].append(region("left", (0, .3, 0, .6)))

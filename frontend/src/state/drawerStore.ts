@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { clampDrawerProgress, snapDrawerTarget, type DrawerSlotId } from '@/scene/dormDeskDrawers'
+import { useMemo } from 'react'
+import { clampDrawerProgress, snapDrawerTarget, drawerSlideX, DORM_DESK_DRAWERS, type DrawerSlotId } from '@/scene/dormDeskDrawers'
 
 /**
  * 抽屉开合会话状态（不持久化、不进方案快照；刷新后回到全闭）。
@@ -29,6 +30,7 @@ interface DrawerStoreState {
   /** 单击开 / 关切换（按当前目标取反） */
   toggle: (id: DrawerSlotId) => void
   open: (id: DrawerSlotId) => void
+  closeAll: () => void
   reset: () => void
 }
 
@@ -66,8 +68,15 @@ export const useDrawerStore = create<DrawerStoreState>((set) => ({
         [id]: { ...s.drawers[id], target: s.drawers[id].target === 1 ? 0 : 1 },
       },
     })),
-  open: (id) => set((s) => ({
-    drawers: { ...s.drawers, [id]: { ...s.drawers[id], target: 1 } },
-  })),
+  open: (id) => set((s) => ({ drawers: { ...s.drawers, [id]: { ...s.drawers[id], target: 1 } } })),
+  closeAll: () => set({ drawers: closedAll(), draggingId: null, hoveredId: null }),
   reset: () => set({ drawers: closedAll(), loadedIds: [], draggingId: null, hoveredId: null }),
 }))
+
+export function currentDrawerOffsets(drawers = useDrawerStore.getState().drawers) {
+  return Object.fromEntries(DORM_DESK_DRAWERS.map((spec) => [spec.id, drawerSlideX(spec.travelM, drawers[spec.id].progress)]))
+}
+export function useDrawerOffsets() {
+  const drawers = useDrawerStore((s) => s.drawers)
+  return useMemo(() => currentDrawerOffsets(drawers), [drawers])
+}

@@ -7,10 +7,12 @@ import * as THREE from 'three'
 import type { Project, SceneObject, Vec3 } from '@/types/project'
 import { useOrganizeStore } from '@/state/organizeStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
-import { useDrawerStore } from '@/state/drawerStore'
+import { drawerDisplayPosition } from './drawerContents'
+import { currentDrawerOffsets, useDrawerStore } from '@/state/drawerStore'
 import { useProjectsStore } from '@/state/projectsStore'
 import { useObjectResizeStore } from '@/state/objectResizeStore'
 import { bookPoseDimensions } from './bookPose'
+import { resizeIssue } from './placementEditing'
 import {
   RESIZE_MAX,
   RESIZE_MIN,
@@ -193,7 +195,7 @@ export function ObjectResizeHandles({
       const controlsAny = controls as unknown as OrbitControlsImpl | null
       const controlsWasEnabled = controlsAny ? controlsAny.enabled : false
 
-      const center = object.transform.position
+      const center = drawerDisplayPosition(object, project.room, currentDrawerOffsets())
       const rotY = object.transform.rotationY
       const source = {
         width: liveDims.width,
@@ -254,10 +256,13 @@ export function ObjectResizeHandles({
           s.diagDy,
         )
         if (scale === null) return
+        const dimensions = clampUniformResize(s.source, scale)
+        const currentProject = useProjectsStore.getState().projects[project.id]
         setPreview({
           projectId: project.id,
           objectId: object.id,
-          dimensions: clampUniformResize(s.source, scale),
+          dimensions,
+          issue: currentProject ? resizeIssue(object, dimensions, currentProject.room, currentProject.objects) : '项目已关闭',
         })
       }
 
@@ -271,6 +276,7 @@ export function ObjectResizeHandles({
         cleanup()
         useObjectResizeStore.getState().setPreview(null)
         if (!canCommit || !finalPreview || finalPreview.projectId !== project.id || finalPreview.objectId !== object.id) return
+        if (finalPreview.issue) { useWorkspaceStore.getState().setNotice(finalPreview.issue); return }
         const next = finalPreview.dimensions
         const changed =
           next.width !== object.dimensions.width ||
@@ -446,7 +452,7 @@ export function ObjectResizeHandles({
             <div>宽 {(ownedPreview.dimensions.width * 1000).toFixed(1)} mm</div>
             <div>高 {(ownedPreview.dimensions.height * 1000).toFixed(1)} mm</div>
             <div>深 {(ownedPreview.dimensions.depth * 1000).toFixed(1)} mm</div>
-            <div style={{ opacity: 0.75, marginTop: 4 }}>Esc 取消 · 松开提交</div>
+            <div style={{ color: ownedPreview.issue ? '#FCA5A5' : undefined, marginTop: 4 }}>{ownedPreview.issue ?? 'Esc 取消 · 松开保存'}</div>
           </div>
         </Html>
       ) : null}

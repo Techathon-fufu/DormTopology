@@ -6,10 +6,12 @@ import type {
   CableVisibility,
   Port,
   Project,
+  RoomConfig,
   SceneObject,
   Vec3,
 } from '@/types/project'
 import { portWorldDirection, portWorldPosition, inferCableKind } from '@/scene/ports'
+import { hasFixedFurniture } from './fixedFurniture'
 import { uid } from '@/lib/utils'
 import { clonePoints } from '@/types/cable'
 import { isPowerStripObject } from '@/scene/powerStrip'
@@ -126,7 +128,9 @@ export function hasUsableCableRoute(cable: CableConnection): boolean {
     && cable.planSource !== 'demo-rule'
     && cable.route.points.length >= 2
     && cable.route.verification?.status !== 'failed'
-    && (cable.planSource !== 'algorithm' || cable.route.verification?.status === 'valid')
+    && (cable.planSource !== 'algorithm' || (cable.route.verification?.status === 'valid'
+      && cable.route.verification.pathStyle === 'orthogonal'
+      && (!['power', 'video', 'network'].includes(cable.kind) || cable.route.strategy === 'backboard')))
 }
 
 /** `powered` describes a power input on ordinary devices; strip sockets supply power. */
@@ -206,7 +210,7 @@ const VISIBLE_NAME_KEYWORDS = [
   'phone', 'tablet', 'laptop', 'earbuds', 'watch', 'keyboard', 'mouse', 'charger',
 ]
 
-export type CableVisibilitySource = 'explicit' | 'keyword' | 'default'
+export type CableVisibilitySource = 'policy' | 'explicit' | 'keyword' | 'default'
 
 export interface CableVisibilityInfo {
   visibility: CableVisibility
@@ -241,7 +245,10 @@ export function inferCableVisibility(
 export function resolveCableVisibility(
   cable: CableConnection,
   objects: SceneObject[],
+  room?: RoomConfig,
 ): CableVisibilityInfo {
+  if (room && hasFixedFurniture(room)) return { visibility: 'hidden', source: 'policy' }
+  if (cable.kind === 'power' || cable.kind === 'video' || cable.kind === 'network') return { visibility: 'hidden', source: 'policy' }
   if (cable.visibility) return { visibility: cable.visibility, source: 'explicit' }
   return inferCableVisibility(objects, cable.from, cable.to)
 }

@@ -173,7 +173,8 @@ def _choose(
     preferred = set(original.get("preferred_region_ids", []))
     preferred_regions = [region for region in scene["regions"] if region["id"] in preferred]
     if (
-        any(r["id"] in allowed and fits_region(original, r) for r in scene["regions"])
+        original["rotation_y_rad"] in original["allowed_rotations_y_rad"]
+        and any(r["id"] in allowed and fits_region(original, r) for r in scene["regions"])
         and not item_geometry_issues(scene, original)
         and not any(item_conflicts(scene, original, p) for p in placed)
     ):
@@ -192,6 +193,14 @@ def _choose(
             choices = standing
     occupied = grid.occupied(placed)
     placed_geometry = [_port_geometry(item) for item in placed]
+    # Furniture can block a low rear connector even when the device body fits.
+    for obstacle in scene['obstacles']:
+        low, high = obstacle['min'], obstacle['max']
+        size = [high[i] - low[i] for i in range(3)]
+        placed_geometry.append(_port_geometry({
+            'position': [(low[0] + high[0]) / 2, low[1], (low[2] + high[2]) / 2],
+            'rotation_y_rad': 0, 'size_m': size, 'collision': {'type': 'box'},
+        }))
     placed_leadouts = [leadout for item in placed for leadout in _port_leadouts(item)]
     scored = []
     seen = set()
@@ -232,10 +241,12 @@ def _choose(
 
 
 def _region_id(scene: Scene, item: dict, *, target: bool = False) -> str | None:
-    if item["category"] in WALL_CATEGORIES:
+    if item["category"] in WALL_CATEGORIES or "surface_mount" in item:
         return None
     regions = scene["regions"]
     if target:
+        if item["rotation_y_rad"] not in item["allowed_rotations_y_rad"]:
+            return None
         regions = [r for r in regions if r["id"] in item["allowed_region_ids"]]
     return support_region(item, regions)
 

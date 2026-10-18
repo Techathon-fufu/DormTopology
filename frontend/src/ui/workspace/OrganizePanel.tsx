@@ -1,3 +1,4 @@
+import { PreviewCompareButton } from './HoldCompareButton'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -29,6 +30,7 @@ import {
   type OrganizationPreferences,
 } from '@/types/organization'
 import { services } from '@/api'
+import { hasFixedFurniture } from '@/scene/fixedFurniture'
 import { isApiError } from '@/api/core/errors'
 import { invalidateCableRoutes } from '@/scene/cables'
 import { useJobsStore } from '@/state/jobsStore'
@@ -125,7 +127,6 @@ export function OrganizePanel({
   const sourceSignature = useOrganizeStore((s) => s.sourceSignature)
   const hidePanel = useOrganizeStore((s) => s.hidePanel)
   const closePanel = useOrganizeStore((s) => s.closePanel)
-  const setCompare = useOrganizeStore((s) => s.setCompare)
   const setShowZones = useOrganizeStore((s) => s.setShowZones)
   const setStatus = useOrganizeStore((s) => s.setStatus)
   const setError = useOrganizeStore((s) => s.setError)
@@ -151,6 +152,7 @@ export function OrganizePanel({
   const confirmed = confirmedSource === confirmationSource
 
   const prefs = resolveOrganizationPreferences(project)
+  const fixedZones = hasFixedFurniture(project.room)
   const visibleObjects = project.objects.filter((o) => o.visible)
 
   const setPreferences = (patch: Partial<OrganizationPreferences>) => {
@@ -359,7 +361,7 @@ export function OrganizePanel({
           空间整理
         </h2>
         <div className="flex items-center gap-1.5">
-          <DataBadge kind={plan?.kind === 'rule-demo' ? 'computed' : 'real'} label={plan?.kind === 'rule-demo' ? '历史方案 · 未验证' : '真实后端算法'} />
+          {plan?.kind === 'rule-demo' ? <DataBadge kind="computed" label="历史方案 · 未验证" /> : null}
           {onClose ? (
             <Button variant="ghost" size="icon" className="h-7 w-7" title="关闭面板" disabled={accepting} onClick={onClose}>
               <X className="h-3.5 w-3.5" />
@@ -385,6 +387,14 @@ export function OrganizePanel({
         {/* 分区说明 */}
         <details className="space-y-2 rounded-lg border border-border p-3">
           <summary className="cursor-pointer text-[13px] font-medium">分区与参考线</summary>
+          {fixedZones && <ul className="space-y-1 py-2 text-xs leading-5 text-muted-foreground">
+            <li>显示器：正对后沿长槽中心，保持正向。</li>
+            <li>笔记本：显示器右侧，向座位内转 20°。</li>
+            <li>键盘与鼠标垫 / 鼠标：前排各自分区；鼠标区 25 × 20 cm，超出尺寸的鼠标垫会提示空间不足。</li>
+            <li>右侧回台外段：37 × 25 cm，专放预制水杯、保温杯、纸巾盒；其它模型不自动归入。</li>
+            <li>书架左起第二格：学习用品专用，书本优先放入，放满后使用其它书架格。</li>
+            <li>键盘前保留手部空间，桌前预留 60 × 50 cm 座位活动区，禁止放物品。固定物品冲突时请先解锁或调整位置。</li>
+          </ul>}
           {ZONE_ORDER.map((z) => (
             <div key={z} className="flex items-start gap-2 text-xs leading-relaxed">
               <span
@@ -413,8 +423,8 @@ export function OrganizePanel({
           <>
             {/* 可调整项 */}
             <fieldset disabled={planning} className="space-y-3 disabled:opacity-60">
-            <section className="space-y-3 rounded-lg border border-border p-3">
-              <h3 className="text-[13px] font-semibold">整理偏好（可调整）</h3>
+            <details className="space-y-3 rounded-lg border border-border p-3">
+              <summary className="cursor-pointer text-[13px] font-semibold">调整整理偏好</summary>
 
               <div className="space-y-1.5">
                 <Label>常用物品（优先放在易取位置）</Label>
@@ -457,7 +467,7 @@ export function OrganizePanel({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
+              {!fixedZones && <div className="space-y-1.5">
                 <Label>打字活动区（键鼠操作空间）</Label>
                 <div className="flex items-center gap-2">
                   <Segmented
@@ -485,9 +495,9 @@ export function OrganizePanel({
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   区域自动贴桌面靠人一侧；其它物品默认避让（高件避让书架搁板投影时可跨其后缘）。
                 </p>
-              </div>
+              </div>}
 
-              <div className="space-y-1.5">
+              {!fixedZones && <div className="space-y-1.5">
                 <Label>水杯活动区</Label>
                 <Segmented
                   size="sm"
@@ -497,7 +507,7 @@ export function OrganizePanel({
                   options={CUP_CORNER_ORDER.map((c) => ({ value: c, label: CUP_CORNER_LABELS[c] }))}
                 />
                 <p className="text-[11px] text-faint">以使用者面向桌面时的方位为准</p>
-              </div>
+              </div>}
 
               <div className="space-y-1.5">
                 <Label>偏好收纳分区（收纳容器优先去向）</Label>
@@ -509,17 +519,17 @@ export function OrganizePanel({
                   options={ZONE_ORDER.map((z) => ({ value: z, label: ZONE_LABELS[z] }))}
                 />
               </div>
-            </section>
+            </details>
 
             {/* 整理前状态快照：接受方案后可一键恢复（“再恢复整理前状态”流程） */}
             </fieldset>
-            <section className="space-y-2 rounded-lg border border-border p-3">
-              <div className="flex items-center justify-between">
+            <details className="space-y-2 rounded-lg border border-border p-3">
+              <summary className="flex cursor-pointer items-center justify-between">
                 <h3 className="text-[13px] font-semibold">整理前状态（快照）</h3>
                 {baseline ? (
                   <span className="text-[11px] text-faint">{formatDateTime(baseline.createdAt)}</span>
                 ) : null}
-              </div>
+              </summary>
               {baseline ? (
                 <>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -565,7 +575,7 @@ export function OrganizePanel({
               ) : (
                 <p className="text-[11px] text-faint">尚未采集：进入工作台时自动采集。</p>
               )}
-            </section>
+            </details>
 
             <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-xs leading-6">
               <input
@@ -597,7 +607,7 @@ export function OrganizePanel({
             </Button>
             {planning ? <Button variant="ghost" size="sm" className="w-full" onClick={discard}>取消本次预览</Button> : null}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              方案由后端布局算法生成；无法完成时会保留当前布局并显示原因。
+              生成后先预览，满意再接受。无法完成时会显示原因。
             </p>
           </>
         ) : (
@@ -609,7 +619,7 @@ export function OrganizePanel({
                 <span className="text-[11px] text-faint">{formatDateTime(plan.createdAt)}</span>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">{plan.summary.replace(/，动画 \d+ 组/, `，操作 ${commands.length} 步`)}</p>
-              <div className="grid grid-cols-1 gap-2">
+              <details><summary className="cursor-pointer text-xs text-muted-foreground">查看整理指标</summary><div className="mt-2 grid grid-cols-1 gap-2">
                 <Stat
                   label="桌面可用面积"
                   hint="估算口径见下方说明"
@@ -630,6 +640,7 @@ export function OrganizePanel({
                   hint={`未放置 ${plan.metrics.unplacedCount} · 相交 ${plan.metrics.overlapCount} · 越界 ${plan.metrics.outOfBoundsCount}`}
                 />
               </div>
+              </details>
               <details className="text-xs leading-relaxed text-muted-foreground">
                 <summary className="cursor-pointer select-none">指标口径说明</summary>
                 <p className="mt-1">{plan.metrics.method}</p>
@@ -638,7 +649,8 @@ export function OrganizePanel({
 
             {/* 动画 */}
             <section className="space-y-2 rounded-lg border border-border p-3">
-              <h3 className="text-[13px] font-semibold">模型操作指令（逐步执行）</h3>
+              <h3 className="text-[13px] font-semibold">整理动画</h3>
+              <details><summary className="cursor-pointer text-xs text-muted-foreground">查看全部步骤</summary>
               {batches.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{planFailure ? '当前结果存在布局问题，未生成移动指令。' : '物品已在目标位置，无需动画。'}</p>
               ) : (
@@ -662,6 +674,7 @@ export function OrganizePanel({
                 </ul>
               )}
 
+              </details>
               {batches.length > 0 && status !== 'preview' ? (
                 <div className="space-y-1">
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -730,38 +743,22 @@ export function OrganizePanel({
             {/* 对比 */}
             <section className="space-y-2 rounded-lg border border-border p-3">
               <h3 className="text-[13px] font-semibold">整理前后对比</h3>
-              <Segmented
-                size="sm"
-                className="w-full"
-                value={compare}
-                onChange={(v) => {
-                  if (v === 'after') skipToEnd()
-                  else setCompare(v)
-                  useTourStore.getState().signal(project.id, 'compare')
-                }}
-                options={[
-                  { value: 'before', label: '查看整理前', disabled: accepting },
-                  { value: 'after', label: '查看整理后', disabled: accepting },
-                ]}
-              />
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                一键切换即时对比；相机保持同一视角不变。切换到「整理前」会暂停预览；继续播放会回到操作预览。
-              </p>
+              <PreviewCompareButton disabled={accepting} />
             </section>
 
             {/* 规则解释 */}
-            <section className="space-y-2 rounded-lg border border-border p-3">
-              <h3 className="text-[13px] font-semibold">规则解释（按执行顺序）</h3>
+            <details className="space-y-2 rounded-lg border border-border p-3">
+              <summary className="cursor-pointer text-[13px] font-semibold">规则解释（按执行顺序）</summary>
               <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-muted-foreground">
                 {plan.rules.map((r, i) => (
                   <li key={i}>{r}</li>
                 ))}
               </ol>
-            </section>
+            </details>
 
             {/* 落位示例 */}
-            <section className="space-y-2 rounded-lg border border-border p-3">
-              <h3 className="text-[13px] font-semibold">为什么这样放（示例）</h3>
+            <details className="space-y-2 rounded-lg border border-border p-3">
+              <summary className="cursor-pointer text-[13px] font-semibold">为什么这样放（示例）</summary>
               <ul className="space-y-1.5">
                 {plan.assignments.slice(0, 6).map((a) => {
                   const obj = project.objects.find((o) => o.id === a.objectId)
@@ -776,7 +773,7 @@ export function OrganizePanel({
               {plan.assignments.length > 6 ? (
                 <p className="text-[11px] text-faint">其余 {plan.assignments.length - 6} 件按相同规则落位。</p>
               ) : null}
-            </section>
+            </details>
 
             {/* 未放置 */}
             <section className="space-y-2 rounded-lg border border-border p-3">

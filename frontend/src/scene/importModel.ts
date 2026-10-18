@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { Vec3 } from '@/types/project'
 import { disposeObject3D, loadModelFromUrl } from './modelLoader'
+import { repairPrefabWinding } from './meshWinding'
 
 /**
  * 动态导入外部 / 生成的单个模型文件（GLB / glTF）：供后续「生成物品模型」复用。
@@ -28,6 +29,8 @@ export interface ImportedModel {
   group: THREE.Group
   /** 归一化后的包围盒尺寸（米） */
   size: Vec3
+  /** Authored clips stay available to callers that choose to play them. */
+  animations: THREE.AnimationClip[]
   dispose: () => void
 }
 
@@ -38,7 +41,10 @@ export async function importModel(
   options: ImportModelOptions = {},
 ): Promise<ImportedModel> {
   const { unitScale = 1, rotationY = 0, fitWidthM = null, castShadow = true } = options
-  const { scene } = await loadModelFromUrl(url)
+  const { scene, animations } = await loadModelFromUrl(url)
+  // Only consistently wound, closed components are changed. Open cup-like
+  // surfaces, non-manifold geometry, UVs, textures and material settings remain authored.
+  repairPrefabWinding(scene)
 
   const group = new THREE.Group()
   group.name = name
@@ -79,5 +85,5 @@ export async function importModel(
     }
   })
 
-  return { name, group, size, dispose: () => disposeObject3D(group) }
+  return { name, group, size, animations, dispose: () => disposeObject3D(group) }
 }

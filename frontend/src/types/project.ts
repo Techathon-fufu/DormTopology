@@ -256,6 +256,8 @@ export const POWER_STRIP_MARGIN = 0.03
  */
 export interface PowerStripConfig {
   socketCount: PowerStripSocketCount
+  /** 背板安装：插孔朝前，height/depth 为安装后的轴向尺寸；缺省为水平摆放。 */
+  mount?: 'backboard'
   /** 相邻插孔中心间距（米） */
   socketSpacing: number
   /** 最大建议负载（瓦）：已连接设备的额定功率合计超过该值时给出警告（估算值） */
@@ -356,7 +358,7 @@ export const CABLE_STRATEGY_META: Record<CableRouteStrategy, { label: string }> 
   backboard: { label: '背板后走线' },
 }
 
-/** 线径档位：粗线 / 细线（影响渲染管径、净空与线缆间距检查） */
+/** 线径档位：粗线 / 细线（影响渲染管径与当前线缆自身的障碍净空） */
 export type CableThickness = 'thick' | 'thin'
 
 export const CABLE_THICKNESS_META: Record<
@@ -374,9 +376,6 @@ export const CABLE_THICKNESS_META: Record<
   thick: { label: '粗线', diameterM: 0.0065, renderRadiusM: 0.0055, minBendRadiusM: 0.0325 },
   thin: { label: '细线', diameterM: 0.0035, renderRadiusM: 0.0032, minBendRadiusM: 0.0175 },
 }
-
-/** 线缆间最小净间隙（米）：两根线缆表面之间至少留出的距离（本地咨询级检查） */
-export const CABLE_CLEARANCE_M = 0.008
 
 export interface CableEndpoint {
   objectId: string
@@ -398,6 +397,7 @@ export interface CableRoute {
   /** 真实后端沿已验证连续曲线积分得到的长度，不能重新平滑后沿用。 */
   pathLengthM?: number
   verification?: {
+    pathStyle?: 'smooth' | 'orthogonal'
     sceneId: string
     sceneRevision: number
     status: 'valid' | 'failed'

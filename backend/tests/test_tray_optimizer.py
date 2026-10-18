@@ -127,7 +127,6 @@ class TrayOptimizerTests(unittest.TestCase):
                 line_route("b", (0.7, 0.72, 0.20), (1.2, 0.72, 0.20)),
             ],
             [first, line_route("b", (1.2, 0.72, 0.20), (1.3, 0.72, 0.20))],
-            [first, line_route("b", (0.2, 0.73, 0.18), (1.2, 0.73, 0.18))],
         ]
         for routes in cases:
             with self.subTest(routes=routes):
@@ -136,6 +135,14 @@ class TrayOptimizerTests(unittest.TestCase):
                 self.assertEqual(optimization["cable_ids"], [])
                 self.assertEqual(optimization["shared_length_m"], 0.0)
                 self.assertEqual(optimization["occupied_width_m"], 0.0)
+
+    def test_coincident_routes_are_grouped_without_spacing_check(self):
+        routes = [line_route(identifier, (0.2, 0.73, 0.18), (1.2, 0.73, 0.18), diameter)
+                  for identifier, diameter in (("a", .004), ("b", .0065))]
+        result = optimize_underside_trays(tray_scene(), routes)[0]
+        self.assertEqual(result["status"], "recommended")
+        self.assertEqual(result["cable_ids"], ["a", "b"])
+        self.assertAlmostEqual(result["occupied_width_m"], .0075)
 
     def test_narrow_or_shallow_candidate_cannot_claim_capacity(self):
         routes = [
@@ -176,7 +183,7 @@ class TrayOptimizerTests(unittest.TestCase):
             line_route("a", (0.2, 0.73, 0.18), (1.2, 0.73, 0.18)),
             line_route("b", (0.2, 0.72, 0.20), (1.2, 0.72, 0.20)),
         ]
-        for budget in ("_MAX_SAMPLE_CHORDS", "_MAX_DISTANCE_CHECKS", "_MAX_RUNS"):
+        for budget in ("_MAX_RUNS", "_MAX_MEMBERSHIP_SETS"):
             with (
                 self.subTest(budget=budget),
                 patch(f"backend.app.domain.routing.optimizer.{budget}", 0),

@@ -1,16 +1,13 @@
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-
 export type ProjectStepKey = 'setup' | 'import' | 'workspace' | 'guide'
 
 const STEPS: Array<{ key: ProjectStepKey; label: string; suffix: string }> = [
-  { key: 'setup', label: '空间配置', suffix: 'setup' },
+  { key: 'setup', label: '项目与空间', suffix: 'setup' },
   { key: 'import', label: '照片与物品', suffix: 'import' },
-  { key: 'workspace', label: '三维工作台', suffix: 'workspace' },
-  { key: 'guide', label: '方案交付', suffix: 'guide' },
 ]
 
-/** 项目内步骤导航：① 空间配置 ② 照片与物品 ③ 三维工作台 ④ 方案交付（点击可跳转） */
+/** 创建项目只包含空间与物品两段；工作台和结果页属于项目本身。 */
 export function ProjectSteps({
   projectId,
   current,
@@ -20,8 +17,10 @@ export function ProjectSteps({
   current: ProjectStepKey
   className?: string
 }) {
+  if (current === 'workspace' || current === 'guide') return null
+
   return (
-    <nav aria-label="项目步骤" className={cn('flex items-center gap-1', className)}>
+    <nav aria-label="创建项目" className={cn('flex items-center gap-1', className)}>
       {STEPS.map((s, i) => (
         <Link
           key={s.key}

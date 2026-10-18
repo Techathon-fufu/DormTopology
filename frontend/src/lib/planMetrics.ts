@@ -106,7 +106,7 @@ function zoneCountsFor(
   }
 }
 
-function summarizeCables(cables: CableConnection[], objects: SceneObject[]): PlanCableSummary {
+function summarizeCables(cables: CableConnection[], objects: SceneObject[], room: RoomConfig): PlanCableSummary {
   const summary: PlanCableSummary = {
     total: cables.length,
     visibleCount: 0,
@@ -118,7 +118,7 @@ function summarizeCables(cables: CableConnection[], objects: SceneObject[]): Pla
     unplannedCount: 0,
   }
   for (const cable of cables) {
-    const visibility = resolveCableVisibility(cable, objects).visibility
+    const visibility = resolveCableVisibility(cable, objects, room).visibility
     if (visibility === 'hidden') summary.hiddenCount += 1
     else summary.visibleCount += 1
     if (resolveCableThickness(cable) === 'thick') summary.thickCount += 1
@@ -219,7 +219,7 @@ export function computePlanMetrics(
       issueCount: placementIssueCount + cableIssueCount,
       placementIssueCount,
       cableIssueCount,
-      cableSummary: summarizeCables(cables, objects),
+      cableSummary: summarizeCables(cables, objects, room),
       powerStrips,
       zoneCounts,
       objectZones,

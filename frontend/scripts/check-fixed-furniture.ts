@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import { Group, Box3, Raycaster, Vector3 } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { createDemoProject } from '../src/data/demoProject'
-import { FIXED_MODEL_URLS, fixedFurnitureBoxes, furnitureSurfaces, validFurnitureHole } from '../src/scene/fixedFurniture'
+import { FIXED_MODEL_URLS, fixedFurnitureBoxes, furnitureBoxes, furnitureSurfaces, validFurnitureHole } from '../src/scene/fixedFurniture'
 import { DORM_DESK_MODEL_CONFIG, mountDeskModel } from '../src/scene/deskModel'
 import { placementIssues, supportsContaining, raycastSupports } from '../src/scene/sceneValidation'
 import { toPackingScene, mapPackingOrganizationResult, toPackingPosition } from '../src/api/core/packingWire'
@@ -37,7 +37,12 @@ assert.equal(raycastSupports(new Raycaster(new Vector3(0, 1.2, .75), new Vector3
 assert.ok(supportsContaining(room, .4, .15).some((s) => s.kind === 'shelf' && s.y === 1.46))
 assert.ok(!supportsContaining(room, 0, .15).some((s) => Math.abs(s.y - 1.139) < .001))
 assert.ok(!validFurnitureHole(room, [0, .75, .75], .05))
-assert.ok(validFurnitureHole(room, room.cableHoles[0].position, .05))
+assert.deepEqual(room.cableHoles, [])
+assert.equal(validFurnitureHole(room, [.5, .75, .28], .05), false)
+const staleRoom = { ...room, cableHoles: [{ id: 'old-hole', position: [.5, .75, .28] as [number, number, number], diameter: .05 }] }
+assert.deepEqual(furnitureBoxes(staleRoom), fixedFurnitureBoxes, 'old room metadata cannot cut the model')
+const topHit = new Raycaster(new Vector3(.5, .8, .28), new Vector3(0, -1, 0)).intersectObject(group, true)
+assert.ok(topHit.some(hit => Math.abs(hit.point.y - .75) < 1e-5), 'the visible GLB has solid wood at the former hole')
 const small: SceneObject = { ...demo.objects[0], id: 'probe', ports: [], model: { ...demo.objects[0].model, shape: 'genericBox' }, dimensions: { width: .04, height: .04, depth: .04 }, transform: { position: [.78, .549, .65], rotationY: 0 } }
 assert.deepEqual(placementIssues(small, small.transform.position, [small], room), [], 'drawer interior has physical support and an empty cavity')
 assert.ok(placementIssues(small, [-.7, .2, .3], [small], room).some((i) => i.type === 'roomCollision'), 'wardrobe is an obstacle')
@@ -50,10 +55,12 @@ assert.equal(scene.regions.filter((r) => r.id.startsWith('support-shelf')).lengt
 assert.equal(scene.regions.filter((r) => r.id.startsWith('support-drawer')).length, 3)
 assert.ok(!scene.obstacles.some((o) => o.id.includes('desk-beam')))
 const routing = toRoutingScene({ project: { ...demo, cables: [] }, confirmed: true })
-const hole = room.cableHoles[0].position
+const hole: [number, number, number] = [.5, .75, .28]
 const slabs = routing.obstacles.filter((o) => o.id.includes('Desk_Top_'))
 const hp = toPackingPosition(hole, room)
-assert.ok(!slabs.some((o) => hp[0] > o.min[0] && hp[0] < o.max[0] && hp[2] > o.min[2] && hp[2] < o.max[2]), 'routing sees the same real opening')
+assert.ok(slabs.some((o) => hp[0] > o.min[0] && hp[0] < o.max[0] && hp[2] > o.min[2] && hp[2] < o.max[2]), 'routing sees the solid model tabletop')
+assert.deepEqual(toRoutingScene({ project: { ...demo, room: staleRoom, cables: [] }, confirmed: true }), routing, 'stale holes affect neither collisions nor channels')
+assert.ok(!routing.routing_graph.nodes.some(node => node.kind === 'slot'))
 const python = spawnSync('python3', ['-B', '-c', 'import json,sys; from backend.app.domain.packing import plan_packing,validate_layout; from backend.examples.packing_demo import preview_scene; s=json.load(sys.stdin); r=plan_packing(s); print(json.dumps({"result":r,"check":validate_layout(preview_scene(s,r))}))'], { cwd: resolve('..'), input: JSON.stringify(scene), encoding: 'utf8', timeout: 120_000 })
 assert.equal(python.status, 0, python.stderr)
 const { result, check } = JSON.parse(python.stdout)
@@ -65,13 +72,14 @@ assert.equal(mapped.serviceMeta?.applicable, true, JSON.stringify(mapped.service
 const zones = computeOrganizationZones(room, preferences)
 const monitor = mapped.assignments.find((a) => a.objectId === 'demo-monitor')!
 const printer = mapped.assignments.find((a) => a.objectId === 'demo-printer')!
-assert.ok(Math.abs(monitor.position[0] - (zones.typing.rect.x0 + zones.typing.rect.x1) / 2) < .002)
-assert.ok(printer.position[0] > .59)
+const expectedMonitorX = zones.workstation?.slotCenterX ?? (zones.typing.rect.x0 + zones.typing.rect.x1) / 2
+assert.ok(Math.abs(monitor.position[0] - expectedMonitorX) < .002)
+assert.ok(zones.workstation ? printer.position[0] < -.04 : printer.position[0] > .59, 'printer leaves the right return for daily items')
 assert.equal(monitor.rotationY, 0)
 assert.equal(printer.rotationY, 0)
 assert.ok(mapped.assignments.filter((a) => a.position[1] === 0).every((a) => a.objectId === 'demo-computer-tower'))
 assert.equal(furnitureSurfaces(room).filter((s) => s.kind === 'drawer').length, 3)
-if (!process.argv.includes('--routing-export')) console.log('Fixed furniture: shared transforms, L support, true shelves/drawers, opening, cabinet collisions and full real layout passed.')
+if (!process.argv.includes('--routing-export')) console.log('Fixed furniture: shared transforms, L support, true shelves/drawers, solid desktop, cabinet collisions and full real layout passed.')
 const peers = [-.35, .35].map((x, i): SceneObject => ({ ...small, id: `peer-${i}`,
   dimensions: { width: .08, height: .4, depth: .08 }, transform: { position: [x, .75, .19], rotationY: 0 },
   ports: [{ id: `peer-port-${i}`, type: 'hdmi', powered: false, offset: [0, .28, -.04], direction: 'back', confirmed: true }],

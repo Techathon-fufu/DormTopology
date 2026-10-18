@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { createDemoProject } from '../src/data/demoProject'
 import { fromPackingPosition, mapPackingOrganizationResult, toPackingScene } from '../src/api/core/packingWire'
 import { mapRoutingResult, toRoutingScene } from '../src/api/core/routingWire'
@@ -42,7 +43,7 @@ if (process.argv.includes('--ports-only')) {
 const preferences = resolveOrganizationPreferences(demo)
 const input = { projectId: demo.id, objects: demo.objects, room: demo.room, preferences, confirmed: true }
 const packingScene = { ...toPackingScene(input), baseline_id: 'demo-routing-regression' }
-assert.equal(packingScene.reserved_zones.length, demo.room.cableHoles.length, 'packing preserves a clearance above every configured cable hole')
+assert.equal(packingScene.reserved_zones.length, demo.room.cableHoles.length + 2, 'packing protects hole, hands and seated operation zones')
 const packing = domain('from backend.app.domain.packing import plan_packing,validate_layout; from backend.examples.packing_demo import preview_scene; s=json.load(sys.stdin); r=plan_packing(s); print(json.dumps({"result":r,"before":validate_layout(s),"after":validate_layout(preview_scene(s,r))}))', packingScene)
 assert.equal(packing.result.status, 'success', JSON.stringify(packing.result.issues))
 assert.equal(packing.after.geometry_valid, true, JSON.stringify(packing.after))
@@ -56,10 +57,10 @@ const organized: Project = { ...demo, objects: demo.objects.map((object) => {
 const zones = computeOrganizationZones(organized.room, preferences)
 const monitor = organized.objects.find((o) => o.id === 'demo-monitor')!
 const printer = organized.objects.find((o) => o.id === 'demo-printer')!
-assert.ok(Math.abs(monitor.transform.position[0] - (zones.typing.rect.x0 + zones.typing.rect.x1) / 2) < .002)
+assert.ok(Math.abs(monitor.transform.position[0] - zones.workstation!.slotCenterX) < .002)
 assert.equal(monitor.transform.rotationY, 0)
 assert.equal(printer.transform.rotationY, 0)
-assert.ok(printer.transform.position[0] > .59, 'printer stays on the side return, outside the central monitor view')
+assert.ok(printer.transform.position[0] < -.04, 'printer stays on the left, leaving the return for daily items')
 assert.equal(organized.objects.find((o) => o.id === 'demo-power-adapter')!.transform.position[1], organized.room.desk.height,
   'the active power adapter stays accessible on the desk rather than in a closed drawer')
 assert.ok(organized.objects.filter((o) => o.transform.position[1] === 0).every((o) => o.id === 'demo-computer-tower'))
@@ -92,6 +93,24 @@ for (const cable of organized.cables) for (const endpoint of [cable.from, cable.
   }
 }
 const run = (scene: unknown) => domain('from backend.app.domain.routing import plan_routing; print(json.dumps(plan_routing(json.load(sys.stdin))))', scene)
+if (process.argv.includes('--write-demo')) {
+  const result = run(organizedScene)
+  const mapped = mapRoutingResult(result, { scene: organizedScene, project: organized })
+  assert.equal(result.status, 'success', JSON.stringify(result.issues))
+  assert.equal(mapped.plannedCount, 7)
+  assert.equal(organizedScene.routing_graph.path_style, 'orthogonal')
+  assert.deepEqual(organized.room.cableHoles, [])
+  assert.ok(!organizedScene.routing_graph.nodes.some(n => n.kind === 'slot'))
+  assert.ok(result.cables.every((c: any) => c.mode === 'backboard'))
+  for (const cable of organized.cables.filter(c => ['power', 'video', 'network'].includes(c.kind))) {
+    assert.equal(result.cables.find((c: any) => c.id === cable.id).mode, 'backboard')
+  }
+  const output = resolve('public/routing-demo/fixed-desk.json')
+  mkdirSync(resolve('public/routing-demo'), { recursive: true })
+  writeFileSync(output, JSON.stringify({ project: organized, scene: organizedScene, result }, null, 2) + '\n')
+  console.log(`Generated ${output}: ${mapped.plannedCount}/7 verified routes on the main desk model.`)
+  process.exit(0)
+}
 const original = run(originalScene)
 const routed = run(organizedScene)
 const details = (result: any) => ({ status: result.status, cables: result.cables.map((c: any) => ({ id: c.id,

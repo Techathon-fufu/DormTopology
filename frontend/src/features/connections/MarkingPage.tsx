@@ -37,6 +37,7 @@ export function MarkingPage({
   objectId: string | null
   busy?: boolean
   onExit: () => void
+  /** 切换物品的唯一出口：路由内嵌页面与工作台覆盖层都改用它 */
   onObjectChange: (objectId: string) => void
 }) {
   const session = useConnectionsStore()
@@ -166,7 +167,7 @@ export function MarkingPage({
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background" role="region" aria-label="表面描点页面">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-background" role="region" aria-label="表面描点页面">
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-3">
         <Button size="sm" variant="outline" onClick={exit}>返回工作台</Button>
         <h2 className="text-sm font-semibold">表面描点</h2>
@@ -265,6 +266,10 @@ export function MarkingPage({
         </details>
       </aside>
       </div>
+
+      <p className="pointer-events-none absolute bottom-3 left-3 max-w-[42%] rounded-full border border-border bg-surface/90 px-3 py-1 text-[11px] text-muted-foreground">
+        点击物品表面放置接口 · 拖动空白处旋转视角 · Esc 取消描点 · 右侧切换物品
+      </p>
 
       <dialog
         ref={dialog}

@@ -4,10 +4,10 @@ type Rect = { u0: number; u1: number; v0: number; v1: number }
 type Face = Rect & { axis: number; sign: number; plane: number }
 const EPS = 1e-6
 const PALETTE: Record<string, string> = {
-  Mat_Pine_Natural: '#DFC7A3',
-  Mat_Warm_Oak: '#F0EDE6',
-  Mat_Dark_Wood: '#8FA69E',
-  Mat_Metal_Hardware: '#697681',
+  Mat_Pine_Natural: '#C89F6A',
+  Mat_Warm_Oak: '#D7B783',
+  Mat_Dark_Wood: '#5D4B3E',
+  Mat_Metal_Hardware: '#46515A',
 }
 
 /** Rectangle difference: no offsets, changes to dimensions, or collision geometry. */
@@ -70,8 +70,8 @@ export function prepareFurnitureAppearance(root: Object3D): void {
     }
     node.castShadow = true
     node.receiveShadow = true
-    // Original desktops are hidden by DormDeskModel and replaced with holed boards.
-    if (node.name.startsWith('Desk_Top_')) return
+    // The authored solid desktop is displayed directly. It participates in the
+    // same coplanar-face ownership pass as the rest of the fixed furniture.
     const box = boxBounds(node)
     if (!box) return
     const family = /^(Bed_|Guardrail_|Ladder_)/i.test(node.name) ? 'cutaway' : 'fixed'

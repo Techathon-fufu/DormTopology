@@ -12,13 +12,12 @@ export const SCENE_CAMERA_CLIP = { near: 0.1, far: 30 } as const
 export const SCENE_BACKGROUND = '#F4F7F8'
 
 export function sceneDpr(): [number, number] {
-  const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
-  return [1, coarse ? 1.25 : 1.5]
+  return [1, 1.5]
 }
 
 export function configureSceneRenderer(gl: WebGLRenderer): void {
   gl.outputColorSpace = SRGBColorSpace
   gl.toneMapping = ACESFilmicToneMapping
-  gl.toneMappingExposure = 1.05
+  gl.toneMappingExposure = 1
   gl.shadowMap.type = PCFSoftShadowMap
 }

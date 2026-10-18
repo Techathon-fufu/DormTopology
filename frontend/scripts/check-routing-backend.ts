@@ -52,10 +52,16 @@ const hole = toPackingPosition(project.room.cableHoles[0].position, project.room
 assert.ok(scene.obstacles.filter((obstacle) => obstacle.id.startsWith('furniture:desk-top:')).every((obstacle) => !(hole[0] > obstacle.min[0] && hole[0] < obstacle.max[0] && hole[2] > obstacle.min[2] && hole[2] < obstacle.max[2])))
 const slotNodes = scene.routing_graph.nodes.filter((node) => node.kind === 'slot')
 const holeNodes = scene.routing_graph.nodes.filter((node) => node.id.includes(':hole:'))
-assert.equal(slotNodes.length, 10, 'only actual top/under opening nodes satisfy the slot strategy')
-assert.equal(holeNodes.length, 20, 'a normal hole has five conservative lanes, each with an underside and three bounded tabletop crossing levels')
-assert.ok(holeNodes.filter((node) => node.id.includes(':upper-')).every((node) => node.kind === 'corner'),
-  'crossing above an opening never satisfies the slot strategy')
+assert.equal(scene.routing_graph.path_style, 'orthogonal')
+assert.ok(slotNodes.length >= 2 && slotNodes.length <= 6, 'bounded parallel top/under lanes')
+assert.equal(holeNodes.length, slotNodes.length, 'only actual aperture nodes satisfy the slot strategy')
+const graphNodes = new Map(scene.routing_graph.nodes.map(node => [node.id, node]))
+for (const edge of scene.routing_graph.edges) {
+  const a = graphNodes.get(edge.from_node_id)!, b = graphNodes.get(edge.to_node_id)!
+  assert.equal(a.position.filter((v, i) => Math.abs(v - b.position[i]) > 1e-8).length, 1, 'all channel edges are axis aligned')
+  if (a.kind === 'slot' || b.kind === 'slot') assert.deepEqual(edge.modes, ['slot'], 'rear cables never use hole edges')
+}
+assert.equal(toRoutingScene({ project: { ...project, cables: [{ ...project.cables[0], visibility: 'visible' }] }, confirmed: true }).cables[0].mode, 'backboard', 'video policy overrides stale visibility')
 const holeHalf = project.room.cableHoles[0].diameter / (2 * Math.sqrt(2))
 for (const node of holeNodes) {
   const inset = Math.max(Math.abs(node.position[0] - hole[0]), Math.abs(node.position[2] - hole[2]))
@@ -67,15 +73,10 @@ const narrowHoleScene = toRoutingScene({ project: { ...project, room: { ...proje
   cableHoles: project.room.cableHoles.map((hole) => ({ ...hole, diameter: .02 })) } }, confirmed: true })
 const narrowSlotNodes = narrowHoleScene.routing_graph.nodes.filter((node) => node.kind === 'slot')
 assert.equal(narrowSlotNodes.length, 2)
-assert.equal(narrowHoleScene.routing_graph.nodes.filter((node) => node.id.includes(':hole:')).length, 4)
+assert.equal(narrowHoleScene.routing_graph.nodes.filter((node) => node.id.includes(':hole:')).length, 2)
 assert.equal(new Set(narrowSlotNodes.map((node) => `${node.position[0]}:${node.position[2]}`)).size, 1,
   'a narrow hole gains no lateral positions outside its conservative opening')
-assert.ok(holeNodes.every((node) => node.position[1] <= project.room.desk.height + .03 + 1e-9))
-const approaches = scene.routing_graph.nodes.filter((node) => node.id.includes(':approach:'))
-assert.equal(approaches.length, 4)
-assert.ok(approaches.every((node) => node.kind === 'corner'), 'a local cable crossing never satisfies the selected routing strategy')
-assert.ok(approaches.every((node) => scene.routing_graph.edges.filter((edge) => edge.from_node_id === node.id || edge.to_node_id === node.id).length <= 8),
-  'local connector escapes have bounded graph degree')
+assert.ok(holeNodes.every((node) => node.position[1] <= project.room.desk.height + .04 + 1e-9))
 assert.equal(scene.cables[0].length_m, 2)
 assert.equal(scene.cables[0].slack_m, .05)
 assert.equal(scene.cables[0].mode, 'backboard')

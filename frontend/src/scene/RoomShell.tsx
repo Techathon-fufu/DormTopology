@@ -1,6 +1,6 @@
 import { Grid } from '@react-three/drei'
 import type { RoomConfig } from '@/types/project'
-import { hasFixedFurniture } from './fixedFurniture'
+import { effectiveCableHoles, hasFixedFurniture } from './fixedFurniture'
 import { ParametricDesk } from './ParametricDesk'
 import { boxGeometry, planeGeometry, standardMaterial, torusGeometry } from './resources'
 
@@ -93,7 +93,7 @@ export function RoomShell({
 
       {/* 逻辑出线孔标记（工作台 GLB 模式叠加；参数化模式见 ParametricDesk） */}
       {showCableHoles
-        ? room.cableHoles.map((hole) => (
+        ? effectiveCableHoles(room).map((hole) => (
             <mesh
               key={hole.id}
               rotation={[-Math.PI / 2, 0, 0]}

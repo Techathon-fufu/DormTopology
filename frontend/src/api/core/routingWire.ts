@@ -5,13 +5,14 @@ import type { CablePlanningResult } from '../types'
 import type { OrganizationSceneRef } from '@/types/organization'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { isPowerSourcePort, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
-import { portWorldDirection, portWorldPosition, resolvePortOffset } from '@/scene/ports'
-import { DESK_GAP } from '@/scene/sceneValidation'
-import { furnitureSurfaces, hasFixedFurniture, validFurnitureHole } from '@/scene/fixedFurniture'
+import { resolvePortOffset } from '@/scene/ports'
+import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { cableMountVolume, mountToRoutingSupport, mountToTrayCandidate, resolveCableManagement } from '@/scene/cableManagement'
 import { parseRouting } from '@/algorithm-lab/contract'
 import { ApiError } from './errors'
-import { fromPackingPosition, packingBaseline, toPackingPosition, toPackingScene, type PackingScene, type RoutingCable, type RoutingGraph, type SceneBox } from './packingWire'
+import { fromPackingPosition, packingBaseline, toPackingPosition, toPackingScene, type PackingScene, type RoutingCable, type SceneBox } from './packingWire'
+
+import { buildOrthogonalRoutingGraph } from './orthogonalGraph'
 
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 const vector = (value: unknown): value is Vec3 => Array.isArray(value) && value.length === 3 && value.every((v) => typeof v === 'number' && Number.isFinite(v))
@@ -22,17 +23,14 @@ function record(value: unknown): Record<string, unknown> {
 
 /** Include obstacles and all cables: another device or route can invalidate this result. */
 export function cablePlanningInputSignature(project: Project): string {
-  return JSON.stringify([project.id, project.room,
+  return JSON.stringify(['prefab-solid-desktop-v2', project.id, project.room,
     project.objects.map(({ model, ...object }) => ({ ...object, modelShape: model.shape, prefabId: model.prefabId })),
     project.cables, resolveOrganizationPreferences(project)])
 }
 
 /** Inscribed square openings conservatively preserve the material around a circular hole. */
 function openDeskTop(scene: PackingScene, project: Project): void {
-  if (hasFixedFurniture(project.room)) {
-    if (project.room.cableHoles.some((h) => !validFurnitureHole(project.room, h.position, h.diameter))) throw new ApiError('出线孔必须完整位于真实 L 形桌面内', { kind: 'input' })
-    return
-  }
+  if (hasFixedFurniture(project.room)) return // Prefab tabletop is solid, including for old saved rooms.
   const slab = scene.obstacles.find((o) => o.id === 'furniture:desk-top')
   if (!slab) return
   let parts: SceneBox[] = [slab]
@@ -56,126 +54,6 @@ function openDeskTop(scene: PackingScene, project: Project): void {
     })
   }
   if (project.room.cableHoles.length) scene.obstacles = scene.obstacles.flatMap((o) => o === slab ? parts.map((part, i) => ({ ...part, id: `furniture:desk-top:${i}` })) : [o])
-}
-
-/** Actual top/under channels are separate; only holes and the rear gap connect levels. */
-function routingGraph(project: Project): RoutingGraph {
-  const room = project.room, d = room.desk
-  const graph: RoutingGraph = { nodes: [], edges: [] }
-  const top: string[] = [], under: string[] = []
-  const rearChannels = new Set<string>()
-  const nodeClearances = new Map<string, number>()
-  const add = (id: string, position: Vec3, kind: RoutingGraph['nodes'][number]['kind']) => {
-    graph.nodes.push({ id: `routing:${id}`, position: toPackingPosition(position, room), kind })
-    return `routing:${id}`
-  }
-  const edge = (a: string, b: string, modes: Array<'slot' | 'backboard'>, clearance = 0.015, exposed = false) => {
-    graph.edges.push({ id: `routing:edge:${graph.edges.length}`, from_node_id: a, to_node_id: b, modes,
-      clearance_radius_m: Math.min(clearance, nodeClearances.get(a) ?? clearance, nodeClearances.get(b) ?? clearance), exposed })
-  }
-  const topY = d.height + 0.012, underY = d.height - d.thickness - 0.025
-  const surfaces = hasFixedFurniture(room) ? furnitureSurfaces(room, false).filter((s) => s.kind === 'desk').map((s) => s.rect)
-    : [{ x0: -d.width / 2, x1: d.width / 2, z0: DESK_GAP, z1: DESK_GAP + d.depth }]
-  for (const rect of surfaces) for (const x of [rect.x0 + .07, (rect.x0 + rect.x1) / 2, rect.x1 - .07]) {
-    for (const z of [rect.z0 + .035, rect.z1 - .07]) {
-      const key = `${x}:${z}`
-      top.push(add(`top:${key}`, [x, topY, z], 'corner'))
-      under.push(add(`under:${key}`, [x, underY, z], 'corner'))
-    }
-  }
-  // Parallel rear lanes let several cables follow the edge without sharing a centreline.
-  for (const [index, rect] of surfaces.entries()) {
-    const count = Math.max(1, Math.ceil((rect.x1 - rect.x0 - .08) / .12))
-    for (let i = 0; i <= count; i++) {
-      const x = rect.x0 + .04 + (rect.x1 - rect.x0 - .08) * i / count
-      for (const [lane, [inset, rise]] of [[.025, 0], [.04, 0], [.04, .009], [.04, .018]].entries()) {
-        const a = add(`edge-rear:${index}:${i}:${lane}:top`, [x, topY + rise, rect.z0 + inset], 'corner')
-        rearChannels.add(a); top.push(a)
-        if (!rise) {
-          const b = add(`edge-rear:${index}:${i}:${lane}:under`, [x, underY, rect.z0 + inset], 'corner')
-          rearChannels.add(b); under.push(b)
-        }
-      }
-    }
-  }
-  for (const hole of room.cableHoles) {
-    const half = hole.diameter / (2 * Math.sqrt(2)), offset = Math.min(.008, half / 3)
-    const lanes: Array<[number, number]> = [[0, 0]]
-    if (half - offset - .002 >= CABLE_THICKNESS_META.thick.diameterM / 2 + .002) {
-      lanes.push([-offset, -offset], [offset, -offset], [-offset, offset], [offset, offset])
-    }
-    for (const [index, [dx, dz]] of lanes.entries()) {
-      const key = index ? `hole:${hole.id}:lane-${index}` : `hole:${hole.id}`
-      const a = add(`${key}:top`, [hole.position[0] + dx, topY, hole.position[2] + dz], 'slot')
-      const b = add(`${key}:under`, [hole.position[0] + dx, underY, hole.position[2] + dz], 'slot')
-      const clearance = Math.min(.015, half - Math.max(Math.abs(dx), Math.abs(dz)) - .002)
-      nodeClearances.set(a, clearance); nodeClearances.set(b, clearance)
-      edge(a, b, ['slot'], clearance)
-      top.push(a); under.push(b)
-      for (const [layer, rise] of [.009, .018].entries()) {
-        const upper = add(`${key}:upper-${layer}`, [hole.position[0] + dx, topY + rise, hole.position[2] + dz], 'corner')
-        nodeClearances.set(upper, clearance)
-        top.push(upper)
-      }
-    }
-  }
-  for (const x of surfaces.flatMap((r) => [r.x0 + .07, (r.x0 + r.x1) / 2, r.x1 - .07])) {
-    const a = add(`rear:${x}:top`, [x, topY, DESK_GAP / 2], 'fixing_point')
-    const b = add(`rear:${x}:under`, [x, underY, DESK_GAP / 2], 'fixing_point')
-    edge(a, b, ['backboard'])
-    if (hasFixedFurniture(room)) {
-      const front = add(`rear:${x}:over-front`, [x, .932, .09], 'fixing_point')
-      const back = add(`rear:${x}:over-back`, [x, .932, DESK_GAP / 2], 'fixing_point')
-      edge(front, back, ['backboard'])
-      edge(back, a, ['backboard'])
-      top.push(front)
-    }
-    // These are allowed rear channel positions, not a claim that a clip is installed.
-    top.push(a); under.push(b)
-  }
-  for (const group of [top, under]) {
-    for (let a = 0; a < group.length; a++) for (let b = a + 1; b < group.length; b++) {
-      const modes: Array<'slot' | 'backboard'> = group[a].includes(':hole:') || group[b].includes(':hole:') ? ['slot']
-        : group[a].includes(':rear:') || group[b].includes(':rear:') ? ['backboard'] : ['slot', 'backboard']
-      if (hasFixedFurniture(room) && !group[a].includes(':rear:') && !group[b].includes(':rear:')) {
-        const start = fromPackingPosition(graph.nodes.find((n) => n.id === group[a])!.position, room)
-        const end = fromPackingPosition(graph.nodes.find((n) => n.id === group[b])!.position, room)
-        const steps = Math.max(1, Math.ceil(Math.hypot(start[0] - end[0], start[2] - end[2]) / .01))
-        if (Array.from({ length: steps + 1 }, (_, i) => i / steps).some((t) => {
-          const x = start[0] + (end[0] - start[0]) * t, z = start[2] + (end[2] - start[2]) * t
-          return !surfaces.some((r) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1)
-        })) continue
-      }
-      edge(group[a], group[b], modes, 0.015, group === top && !(rearChannels.has(group[a]) && rearChannels.has(group[b])))
-    }
-  }
-  const connectedPorts = new Set(project.cables.flatMap((cable) => [cable.from.portId, cable.to.portId]))
-  for (const object of project.objects) for (const port of object.ports) {
-    if (!connectedPorts.has(port.id)) continue
-    const position = portWorldPosition(object, port), direction = portWorldDirection(object, port)
-    if (Math.abs(direction[1]) > .5 || position[1] < d.height || position[1] > d.height + .04) continue
-    for (const [layer, rise] of [.015, .03].entries()) {
-      const approach: Vec3 = [position[0] + direction[0] * .04, position[1] + rise, position[2] + direction[2] * .04]
-      if (!surfaces.some((rect) => approach[0] >= rect.x0 && approach[0] <= rect.x1 && approach[2] >= rect.z0 && approach[2] <= rect.z1)) continue
-      const target = toPackingPosition(approach, room)
-      if (graph.nodes.some((node) => Math.hypot(...node.position.map((value, index) => value - target[index])) <= 1e-9)) continue
-      const id = add(`approach:${port.id}:${layer}`, approach, 'corner')
-      const nearest = graph.nodes.filter((node) => top.includes(node.id)).sort((a, b) => {
-        const distance = (point: Vec3) => Math.hypot(...point.map((value, index) => value - target[index]))
-        return distance(a.position) - distance(b.position) || a.id.localeCompare(b.id)
-      }).slice(0, 8)
-      for (const node of nearest) {
-        const end = fromPackingPosition(node.position, room)
-        const steps = Math.max(1, Math.ceil(Math.hypot(approach[0] - end[0], approach[2] - end[2]) / .01))
-        if (Array.from({ length: steps + 1 }, (_, i) => i / steps).some((t) => !surfaces.some((rect) => {
-          const x = approach[0] + (end[0] - approach[0]) * t, z = approach[2] + (end[2] - approach[2]) * t
-          return x >= rect.x0 && x <= rect.x1 && z >= rect.z0 && z <= rect.z1
-        }))) continue
-        edge(id, node.id, node.id.includes(':hole:') ? ['slot'] : node.id.includes(':rear:') ? ['backboard'] : ['slot', 'backboard'], .015, true)
-      }
-    }
-  }
-  return graph
 }
 
 function cableType(cable: CableConnection, project: Project): RoutingCable['cable_type'] {
@@ -251,10 +129,10 @@ export function toRoutingScene(input: { project: Project; confirmed: boolean; re
     const thickness = resolveCableThickness(cable), meta = CABLE_THICKNESS_META[thickness]
     return { id: cable.id, start_port_id: ends[0], end_port_id: ends[1], cable_type: cableType(cable, project), thickness,
       length_m: actualLength, diameter_m: meta.diameterM, min_bend_radius_m: 0,
-      slack_m: slack, mode: resolveCableVisibility(cable, project.objects).visibility === 'hidden' ? 'backboard' : 'slot' }
+      slack_m: slack, mode: resolveCableVisibility(cable, project.objects, project.room).visibility === 'hidden' ? 'backboard' : 'slot' }
   })
   openDeskTop(scene, project)
-  scene.routing_graph = routingGraph(project)
+  scene.routing_graph = buildOrthogonalRoutingGraph(project)
   if (scene.routing_graph.edges.some((edge) => edge.clearance_radius_m <= 0)) throw new ApiError('出线孔过小，无法配置线缆净空', { kind: 'input' })
   scene.reserved_zones = []
   applyCableManagement(scene, project)
@@ -310,6 +188,16 @@ export function mapRoutingResult(raw: unknown, ctx: { scene: PackingScene; proje
       if (!same(points[0], position(input.start_port_id)) || !same(points[points.length - 1], position(input.end_port_id)) || !same(segments[0][0], points[0]) || !same(segments[segments.length - 1][3], points[points.length - 1])) fail('后端曲线没有连接真实接口')
       segments.slice(1).forEach((segment, index) => { if (!same(segment[0], segments[index][3])) fail('后端连续曲线断开') })
       const sampledLength = points.slice(1).reduce((sum, p, index) => sum + Math.hypot(...p.map((v, i) => v - points[index][i])), 0)
+      if (scene.routing_graph.path_style === 'orthogonal') {
+        if (points.length !== segments.length + 1 || Math.abs(sampledLength - route.path_length_m) > 1e-6) fail('后端直角路径长度或顶点不匹配')
+        segments.forEach((segment, index) => {
+          if (!same(segment[0], points[index]) || !same(segment[3], points[index + 1])) fail('后端直角路径顶点不匹配')
+          segment.forEach((point, k) => {
+            if (!same(point, segment[0].map((v, i) => v + (segment[3][i] - v) * k / 3) as Vec3)) fail('后端直角路径含弯曲段')
+          })
+          if (index > 0 && index < segments.length - 1 && segment[0].filter((v, i) => Math.abs(v - segment[3][i]) > 1e-12).length !== 1) fail('后端直角路径含斜线')
+        })
+      }
       if (sampledLength > route.path_length_m + 0.001) fail('后端路径采样长度超过声明的曲线长度')
       if (issues.some((issue) => issue.entity_id === input.id)) fail('后端有效路径仍包含失败原因')
       plannedCount++
@@ -337,7 +225,7 @@ export function mapRoutingResult(raw: unknown, ctx: { scene: PackingScene; proje
       route: { channels: input.mode === 'slot' ? ['deskEdge', 'deskUnderside'] : ['backboard', 'deskUnderside'],
         points: points.map((p) => fromPackingPosition(p, ctx.project.room)), smooth: false, strategy: input.mode === 'slot' ? 'cableHole' : 'backboard',
         ...(valid ? { pathLengthM: route.path_length_m as number } : {}),
-        verification: { sceneId: scene.scene_id, sceneRevision: scene.scene_revision, status: route.status, reasonCode, supportStatus, maxUnsupportedSpanM } },
+        verification: { pathStyle: scene.routing_graph.path_style ?? 'smooth', sceneId: scene.scene_id, sceneRevision: scene.scene_revision, status: route.status, reasonCode, supportStatus, maxUnsupportedSpanM } },
       status: valid ? 'planned' : 'conflict', planSource: 'algorithm', accessories: [],
       note: valid ? `真实算法已验证几何与接口；${input.length_m === null ? '已计算所需线长，现有线材长度未校验' : '现有线材长度已校验'}；${supportStatus === 'verified' ? '已按确认安装条件复核支撑跨距' : '安装支撑尚未复核'}` : `真实算法：${REASONS[reasonCode!]}${issues.find((issue) => issue.entity_id === input.id)?.message ? `；${issues.find((issue) => issue.entity_id === input.id)!.message}` : ''}`,
       updatedAt: Date.now(),

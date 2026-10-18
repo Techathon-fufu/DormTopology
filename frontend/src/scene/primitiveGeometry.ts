@@ -18,10 +18,10 @@ export interface PrimitiveDescription {
 const cache = new Map<string, PrimitiveDescription>()
 const geometryCache = new Map<string, BufferGeometry>()
 
-export function describePrimitive(shape: PrimitiveShape | undefined, dims: ObjectDimensions, color = '#687681', sockets = 4): PrimitiveDescription {
+export function describePrimitive(shape: PrimitiveShape | undefined, dims: ObjectDimensions, color = '#687681', sockets = 4, backboard = false): PrimitiveDescription {
   const { width: w, height: h, depth: d } = dims
   if (![w,h,d].every(v => Number.isFinite(v) && v > 0)) throw new Error('物品尺寸必须为有限正数')
-  const key = JSON.stringify([shape,w,h,d,color,sockets])
+  const key = JSON.stringify([shape,w,h,d,color,sockets,backboard])
   const cached = cache.get(key)
   if (cached) return cached
   const parts: PrimitivePart[] = []
@@ -121,7 +121,11 @@ export function describePrimitive(shape: PrimitiveShape | undefined, dims: Objec
     case 'powerStrip': {
       box('body',[w,h,d],[0,h/2,0],'#E5E2DA')
       const count=Math.max(1,Math.min(12,Math.round(sockets)))
-      for(let i=0;i<count;i++) cyl(`socket-${i}`,[Math.min(.016,d*.45),h*.12,Math.min(.016,d*.45)],[(i-(count-1)/2)*Math.max(0,w-.06)/Math.max(1,count-1),h*.94,0],'#6B7280')
+      for(let i=0;i<count;i++) {
+        const x = (i-(count-1)/2)*Math.max(0,w-.06)/Math.max(1,count-1)
+        if (backboard) cyl(`socket-${i}`,[Math.min(.016,h*.45),d*.12,Math.min(.016,h*.45)],[x,h/2,d*.44],'#6B7280',[Math.PI/2,0,0])
+        else cyl(`socket-${i}`,[Math.min(.016,d*.45),h*.12,Math.min(.016,d*.45)],[x,h*.94,0],'#6B7280')
+      }
       break
     }
     default:

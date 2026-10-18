@@ -78,7 +78,10 @@ class RodinClient:
             if p.exists():
                 content = p.read_text(encoding="utf-8").strip()
                 if content:
-                    return content
+                    for line in content.splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            return line
                     
         raise ValueError(
             "Rodin API Key is missing or empty. Please set RODIN_API_KEY environment variable "
@@ -257,29 +260,79 @@ class RodinClient:
 
         return saved_files
 
+    def submit_fast_image_to_3d(
+        self,
+        image_path: str | Path,
+        prompt: Optional[str] = None,
+        tier: str = "Gen-2.5-Low",
+        quality_override: int = 1500,
+        geometry_file_format: str = "glb",
+    ) -> Dict[str, Any]:
+        """
+        Submit high-speed low-poly Base Geometry task (~15-20s).
+        Enforces material='None' (no texture baking) and custom low poly face budget.
+        """
+        path = Path(image_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"Input image not found: {path}")
+
+        mime_type, _ = mimetypes.guess_type(str(path))
+        if not mime_type:
+            mime_type = "image/png"
+
+        data = {
+            "tier": tier,
+            "mesh_mode": "Raw",
+            "material": "None",
+            "quality_override": quality_override,
+            "geometry_file_format": geometry_file_format,
+        }
+        if prompt:
+            data["prompt"] = prompt
+
+        with path.open("rb") as f:
+            files = {"images": ("input.png", f, mime_type)}
+            result = self._request_with_rate_limit("POST", "rodin", data=data, files=files)
+
+        return result
+
     def generate_glb_from_image(
         self,
         image_path: str | Path,
         output_dir: str | Path,
         prompt: Optional[str] = None,
-        use_agentic: bool = True,
-        tier: str = "standard",
+        use_agentic: bool = False,
+        fast_mode: bool = True,
+        tier: str = "Gen-2.5-Low",
+        quality_override: int = 1500,
         target_filename: Optional[str] = None,
         on_progress: Optional[Callable[[str], None]] = None,
     ) -> RodinTaskResult:
         """
         Convenience end-to-end method: Submit -> Poll -> Download.
+        Default: fast_mode=True (15-20s generation, low-poly ~1500 faces, base geometry).
         """
         if on_progress:
-            on_progress(f"Submitting image {image_path} to Rodin...")
+            on_progress(f"Submitting image {image_path} to Rodin (fast_mode={fast_mode})...")
 
-        if use_agentic:
-            gen_resp = self.submit_agentic_image_to_3d(image_path, prompt=prompt, tier=tier, export_type="glb")
+        if fast_mode:
+            gen_resp = self.submit_fast_image_to_3d(
+                image_path=image_path,
+                prompt=prompt,
+                tier=tier if tier.startswith("Gen-2.5") else "Gen-2.5-Low",
+                quality_override=quality_override,
+                geometry_file_format="glb",
+            )
+            task_uuid = gen_resp["uuid"]
+            job_info = gen_resp.get("jobs") or gen_resp.get("job", {})
+            subscription_key = job_info.get("subscription_key")
+        elif use_agentic:
+            gen_resp = self.submit_agentic_image_to_3d(image_path, prompt=prompt, tier="standard", export_type="glb")
             task_uuid = gen_resp["uuid"]
             job_info = gen_resp.get("job") or gen_resp.get("jobs", {})
             subscription_key = job_info.get("subscription_key")
         else:
-            gen_resp = self.submit_gen25_image_to_3d(image_path, prompt=prompt)
+            gen_resp = self.submit_gen25_image_to_3d(image_path, prompt=prompt, tier=tier)
             task_uuid = gen_resp["uuid"]
             job_info = gen_resp.get("jobs") or gen_resp.get("job", {})
             subscription_key = job_info.get("subscription_key")

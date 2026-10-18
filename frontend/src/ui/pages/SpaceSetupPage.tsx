@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Info,
   RotateCcw,
-  Sparkles,
   XCircle,
 } from 'lucide-react'
 import { PageIntro } from '@/ui/layout/PageIntro'
@@ -14,7 +13,7 @@ import { ProjectSteps } from '@/ui/layout/ProjectSteps'
 import { SpacePreview3D } from '@/ui/setup/SpacePreview3D'
 import { Button } from '@/ui/kit/button'
 import { EmptyState } from '@/ui/kit/empty-state'
-import { Label, Select } from '@/ui/kit/primitives'
+import { Input, Label } from '@/ui/kit/primitives'
 import { MmInput } from '@/ui/kit/mm-input'
 import {
   defaultOutletForm,
@@ -87,23 +86,27 @@ function SectionCard({
   )
 }
 
-/** 空间配置页：床桌 / 房间 / 立柱为固定模型；编辑书架 / 出线孔 / 插座（仅左右），实时同步三维预览（正式模型） */
 export function SpaceSetupPage() {
   const { id } = useParams<{ id: string }>()
   const project = useProject(id)
   const navigate = useNavigate()
   const update = useProjectsStore((s) => s.update)
+  const isCreating = useProjectsStore((s) => Boolean(id && s.creationDrafts[id]))
 
   const [form, setForm] = useState<SpaceForm>(() =>
     project ? roomToForm(project.room) : demoSpaceForm(),
   )
+  const [name, setName] = useState(project?.name ?? '我的宿舍书桌')
 
   // 切换项目（或示例项目首次写入完成）时，用已保存的空间重置表单
   const projectId = project?.id
   useEffect(() => {
     if (projectId) {
       const p = useProjectsStore.getState().projects[projectId]
-      if (p) setForm(roomToForm(p.room))
+      if (p) {
+        setForm(roomToForm(p.room))
+        setName(p.name)
+      }
     }
   }, [projectId])
 
@@ -114,8 +117,8 @@ export function SpaceSetupPage() {
 
   const dirty = useMemo(() => {
     if (!project) return false
-    return JSON.stringify(form) !== JSON.stringify(roomToForm(project.room))
-  }, [form, project])
+    return name.trim() !== project.name || JSON.stringify(form) !== JSON.stringify(roomToForm(project.room))
+  }, [form, name, project])
 
   const savedOutlets = useMemo(
     () => (project ? roomToForm(project.room).outlets : []),
@@ -154,20 +157,21 @@ export function SpaceSetupPage() {
     )
   }
 
-  const patch = (p: Partial<SpaceForm>) => setForm((f) => ({ ...f, ...p }))
-
   /** 固定模型：墙面仅一块「双插孔 ×2」面板，仅左右位置（X）可调 */
   const updateOutletX = (x: number) =>
     setForm((f) => ({ ...f, outlets: [{ ...(f.outlets[0] ?? defaultOutletForm()), x }] }))
 
-  const useDemoSpace = () => setForm(demoSpaceForm())
-  const revert = () => setForm(roomToForm(project.room))
+  const revert = () => {
+    setName(project.name)
+    setForm(roomToForm(project.room))
+  }
 
   const save = () => {
     if (errors.length > 0) return
     const room = formToRoom(form)
     update(project.id, (p) => ({
       ...p,
+      name: name.trim() || '我的宿舍书桌',
       room,
       // 插座位置调整后：相关走线标记「需要重新规划」（保留路径，可在工作台一键重算）
       cables:
@@ -175,26 +179,26 @@ export function SpaceSetupPage() {
           ? markCablesStaleByIds(p.cables, outletImpact.cableIds)
           : p.cables,
       // 已有物品的项目保持原进度，避免覆盖工作台阶段
-      stage: p.objects.length > 0 ? p.stage : 'photos',
+      stage: isCreating ? 'photos' : p.stage,
     }))
-    navigate(`/projects/${project.id}/import`)
+    navigate(isCreating ? `/projects/${project.id}/import` : `/projects/${project.id}/workspace`)
   }
 
   return (
     <div className="space-y-5">
       <PageIntro
-        step="01 / 确认空间"
-        title="为你的书桌，建立空间"
-        description="空间配置"
+        step={isCreating ? '创建项目 · 1/2' : '项目设置'}
+        title={isCreating ? '确认项目与空间' : '调整空间配置'}
+        description={isCreating ? '确认项目名称、固定桌体与墙插位置后继续添加物品。' : '保存后返回当前项目工作台。'}
       >
-        <ProjectSteps projectId={project.id} current="setup" className="flex-wrap" />
+        {isCreating ? <ProjectSteps projectId={project.id} current="setup" className="flex-wrap" /> : null}
       </PageIntro>
 
       {project.isDemo ? (
         <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary-soft/60 px-3 py-2 text-[13px] leading-relaxed">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
-            当前是示例项目：保存会覆盖其空间配置，可随时点击「恢复标准空间」把书架 / 出线孔 / 插座恢复为默认值。
+            当前是示例项目：保存会覆盖其空间配置，可在此调节后墙插座的左右位置。
           </p>
         </div>
       ) : null}
@@ -202,72 +206,20 @@ export function SpaceSetupPage() {
       <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6">
         {/* ── 表单 ─────────────────────────────────────────────── */}
         <div className="space-y-4">
-          <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
-            <p>
-              {form.furnitureModel ? 'L 形床桌、四格书架和三层抽屉' : '标准床桌'}
-            </p>
-          </div>
-
-          <SectionCard
-            title="① 书架分层"
-            extra={
-              <label className="flex items-center gap-2 text-[13px]">
-                <input
-                  type="checkbox"
-                  className="accent-[#0F9D8A]"
-                  checked={form.shelfEnabled}
-                  disabled={!!form.furnitureModel}
-                  onChange={(e) => patch({ shelfEnabled: e.target.checked })}
-                />
-                书架
-              </label>
-            }
-          >
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className={cn(!form.shelfEnabled && 'opacity-50')}>层数</Label>
-                <Select
-                  value={String(form.shelfLevels)}
-                  disabled={!form.shelfEnabled || !!form.furnitureModel}
-                  onChange={(e) => patch({ shelfLevels: Number(e.target.value) })}
-                >
-                  <option value="1">1 层</option>
-                  <option value="2">2 层</option>
-                  <option value="3">3 层</option>
-                </Select>
-              </div>
-              <MmField
-                label="离桌高度（最下层）"
-                minMm={0}
-                disabled={!form.shelfEnabled || !!form.furnitureModel}
-                valueMm={form.shelfAbove}
-                onChangeMm={(v) => patch({ shelfAbove: v })}
+          <SectionCard title="项目名称">
+            <div className="space-y-1">
+              <Label htmlFor="project-name">名称</Label>
+              <Input
+                id="project-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="例如：3 号楼 502 书桌"
               />
-              <MmField
-                label="搁板深度"
-                minMm={0}
-                disabled={!form.shelfEnabled || !!form.furnitureModel}
-                valueMm={form.shelfDepth}
-                onChangeMm={(v) => patch({ shelfDepth: v })}
-              />
+              <p className="text-xs text-faint">名称与空间配置一起保存，返回后可继续当前草稿。</p>
             </div>
-            <p className="text-xs text-faint">
-              {form.furnitureModel ? '四格书架与三层抽屉按家具实际尺寸固定。' : '书架尺寸须留足床板下方取物空间。'}
-            </p>
           </SectionCard>
 
-          <SectionCard title="② 出线孔与电源">
-            <div className="space-y-2">
-              <p className="text-[13px] text-muted-foreground">
-                出线孔
-              </p>
-              <div className="flex flex-wrap items-end gap-2">
-                <MmField className="w-28" label="孔 X（左右）" valueMm={form.hole.x} onChangeMm={(v) => patch({ hole: { ...form.hole, x: v } })} />
-                <MmField className="w-28" label="孔 Z（距后墙）" minMm={0} valueMm={form.hole.z} onChangeMm={(v) => patch({ hole: { ...form.hole, z: v } })} />
-                <MmField className="w-24" label="孔直径" minMm={0} valueMm={form.hole.diameter} onChangeMm={(v) => patch({ hole: { ...form.hole, diameter: v } })} />
-              </div>
-            </div>
+          <SectionCard title="后墙插座">
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
                 后墙插座为固定模型：一块面板 · 两个双插孔插座，仅可左右移动（x 以房间中心为 0），高度固定不可调；调整后保存会提示受影响的走线。
@@ -328,30 +280,11 @@ export function SpaceSetupPage() {
             <p className="mt-2 text-xs leading-relaxed text-faint">
               {form.furnitureModel ? 'L 形床桌' : '标准床桌'}
             </p>
-          </div>
-
-          <div className="rounded-xl border border-border bg-surface p-5 shadow-xs">
-            <h2 className="mb-2 text-sm font-semibold">当前空间摘要</h2>
-            <dl className="space-y-1 text-[13px] text-muted-foreground">
-              <div className="flex justify-between gap-3">
-                <dt>床桌 / 房间 / 立柱</dt>
-                <dd className="tabular-nums">固定标准款</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>书架</dt>
-                <dd className="tabular-nums">
-                  {form.furnitureModel ? '四格 · 左格分层' : form.shelfEnabled ? `${form.shelfLevels} 层 · 离桌 ${form.shelfAbove} mm` : '未配置'}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>出线孔</dt>
-                <dd className="tabular-nums">Ø {form.hole.diameter} mm</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>插座</dt>
-                <dd className="tabular-nums">1 块 · 双插孔 ×2 · 距地 {OUTLET_FIXED_Y_MM} mm</dd>
-              </div>
-            </dl>
+            {form.furnitureModel ? (
+              <p className="mt-1 text-xs leading-relaxed text-faint">
+                正式桌面没有穿线孔，按模型原样显示；线缆沿桌后边缘走线。
+              </p>
+            ) : null}
           </div>
 
           <div
@@ -403,12 +336,10 @@ export function SpaceSetupPage() {
 
           <div className="flex flex-col gap-2">
             <Button size="lg" onClick={save} disabled={errors.length > 0}>
-              {dirty ? '保存空间并前往照片导入' : '前往照片导入'}
+              {isCreating
+                ? dirty ? '保存并添加物品' : '下一步：添加物品'
+                : dirty ? '保存并返回工作台' : '返回工作台'}
               <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" onClick={useDemoSpace}>
-              <Sparkles className="h-4 w-4" />
-              恢复标准空间（书架 / 出线孔 / 插座默认值）
             </Button>
             <Button variant="ghost" onClick={revert} disabled={!dirty}>
               <RotateCcw className="h-4 w-4" />

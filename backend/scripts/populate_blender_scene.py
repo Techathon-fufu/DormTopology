@@ -1,7 +1,7 @@
 """
 Populate Blender Scene with Reconstructed 3D Assets
 Imports generated Rodin 3D models and detected desk clutter items,
-scales and positions them at detected 3D coordinates on dorm_desk.blend,
+scales and positions them at detected 3D coordinates on the official prefab desk,
 and saves the final populated .blend file and renders a preview image.
 
 Usage:
@@ -27,13 +27,18 @@ import bpy
 import mathutils
 
 project_root = Path(r"{project_root}")
-desk_blend = project_root / "objects" / "dorm_desk.blend"
+desk_parts = project_root / "Prefabmodel" / "dormdesk_parts"
 contract_path = project_root / "tests" / "test_vlm_round2" / "vlm_result_round2.json"
-output_blend = project_root / "objects" / "dorm_desk_populated.blend"
+output_blend = project_root / "output" / "dormdesk_populated.blend"
+output_blend.parent.mkdir(parents=True, exist_ok=True)
 preview_img = project_root / "image" / "dorm_desk_populated_preview.png"
 
-print(f"[*] Opening base scene: {desk_blend}")
-bpy.ops.wm.open_mainfile(filepath=str(desk_blend))
+print(f"[*] Importing official desk parts: {desk_parts}")
+bpy.ops.wm.read_factory_settings(use_empty=True)
+for filename in ("dormdesk_body.glb", "drawer_bottom.glb", "drawer_middle.glb", "drawer_top.glb"):
+    bpy.ops.import_scene.gltf(filepath=str(desk_parts / filename))
+# Blender's importer converts the prefab Y-up geometry to its native Z-up frame.
+# Keep common model coordinates for the VLM scene; do not normalize parts separately.
 
 # Load detection & model data
 with open(contract_path, "r", encoding="utf-8") as f:
@@ -214,7 +219,9 @@ for item in items:
 
     # 2. Try placing GLB model
     if model_rel:
-        model_full = project_root / model_rel
+        model_full = (project_root / model_rel).resolve()
+        if not model_full.is_relative_to((project_root / "Prefabmodel").resolve()):
+            raise ValueError("Model assets must resolve inside Prefabmodel/")
         if model_full.exists():
             res = place_gltf_model(iid, iname, model_full, pos, size, items_col)
             if res:
