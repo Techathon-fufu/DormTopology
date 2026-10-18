@@ -27,8 +27,8 @@ import { hasFixedFurniture } from './fixedFurniture'
  * 加载完成前 / 加载失败 / 用户选择简化几何时回退参数化桌体（ParametricDesk，与逻辑尺寸一致）。
  *
  * 固定家具（hasFixedFurniture）走 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
- * （FURNITURE_OFFSET 由 mountDeskModel 施加），并隐藏模型自带 Desk_Top_* 面片；
- * 桌面出线孔由 ParametricDesk desktopOnly 叠加显示。非固定家具沿用历史归一化路径。
+ * （FURNITURE_OFFSET 由 mountDeskModel 施加），完整显示模型定义的桌板，不程序开孔。
+ * 非固定家具沿用历史归一化路径。
  *
  * 抽屉推拉：每只抽屉包一层滑动组，逐帧由 drawerStore 的 progress 驱动
  * （单击开 / 关、拖拽跟手、松手吸附；交互见 scene/useDrawerInteraction.ts）。
@@ -155,15 +155,6 @@ export function DormDeskModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceFallback, retryNonce, roomShapeKey])
 
-  // 固定家具：隐藏模型自带 Desk_Top_* 面片（出线孔由 ParametricDesk desktopOnly 叠加）
-  useEffect(() => {
-    if (!parts) return
-    if (!hasFixedFurniture(room)) return
-    parts.body.traverse((node) => {
-      if (node.name.startsWith('Desk_Top_')) node.visible = false
-    })
-  }, [parts, room])
-
   // 显示-only 剖切（俯视）：隐藏床体 / 护栏 / 爬梯，便于查看桌面与地面布局
   useEffect(() => {
     if (!parts) return
@@ -203,7 +194,6 @@ export function DormDeskModel({
           {parts.drawers.map(({ spec, scene }) => (
             <DeskDrawerPart key={spec.id} spec={spec} scene={scene} />
           ))}
-          <ParametricDesk room={room} desktopOnly />
         </>
       ) : (
         <ParametricDesk room={room} hideBedParts={hideBedParts} />

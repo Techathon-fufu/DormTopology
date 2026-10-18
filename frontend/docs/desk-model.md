@@ -53,7 +53,7 @@ node /tmp/dorm-furniture-check.mjs
 
 ## 开孔、回退与限制
 
-孔位须完整位于一块真实桌板内。原 GLB 桌板节点隐藏，使用共享桌板几何切出圆孔内接正方形通道，以保守保证线缆净空；模型标记仍显示配置孔径。原模型未预制孔位。
+正式模型未预制桌面穿线孔。GLB 的 `Desk_Top_*` 节点保持可见，禁止另生成桌板替换它；同源碰撞盒和支撑面保持完整。`effectiveCableHoles` 对固定家具返回空集合，旧孔位不会产生可视标记、碰撞开口、保留区或 slot 通道；所有产品线缆走桌后/背板，legacy 参数化场景保留其配置。空间设置不提供固定桌体开孔编辑。
 
 加载中、失败或用户选择简化家具时，`ParametricDesk` 使用同一组碰撞盒绘制回退；不存在旧版虚构横梁和低位书架。俯视仅隐藏床、护栏和梯子，碰撞保持不变。任一资产加载失败会释放已加载部件并显示重试入口。
 
@@ -61,7 +61,7 @@ node /tmp/dorm-furniture-check.mjs
 
 ## 版本与验证
 
-`RoomConfig.furnitureModel` 为 `dormdesk-v1` 时使用上述几何；缺省时保留旧参数化模型与旧 API 平移。内置示例种子为第 7 版，键鼠区中线左移 10cm，为预制笔记本和显示器保留 20mm 净距；升级前将旧示例保留为独立项目，失效旧走线路径。已有用户项目及不可变后端基线不重写。
+`RoomConfig.furnitureModel` 为 `dormdesk-v1` 时使用上述几何；缺省时保留旧参数化模型与旧 API 平移。当前内置示例种子为第 9 版；本次桌板修复不重种示例，不改变用户摆放，持久化迁移仅移除虚构孔并失效旧走线。不可变后端基线不重写。
 
 固定家具初始透视机位从桌前方观察，避免右侧梯子遮挡工作区；历史参数化机位保持原值，用户仍可切换预设或自由旋转。
 
@@ -69,4 +69,14 @@ node /tmp/dorm-furniture-check.mjs
 
 ## 独立抽屉与单品模型整合
 
-`DormDeskModel` 保留固定家具共同变换、桌面开孔的同源几何与历史参数化回退，并为三个独立抽屉增加推拉交互。`ObjectModel` 在工作台、对比及交付页使用随包单品 GLB；底心归一化后通过共同尺寸缩放，保持与碰撞一致。抽屉位移是会话状态，内部物品按关闭内腔坐标保存；打开后渲染、吸附和即时碰撞同时平移。算法仍使用关闭内腔，以保证整理后能够收回抽屉。详见[整合验收](../../docs/merge_workflow_prefab_acceptance.md)。
+`DormDeskModel` 保留固定家具共同变换、GLB 原始桌板及同源完整碰撞与历史参数化回退，并为三个独立抽屉增加推拉交互。`ObjectModel` 在工作台、对比及交付页使用随包单品 GLB；底心归一化后通过共同尺寸缩放，保持与碰撞一致。抽屉位移是会话状态，内部物品按关闭内腔坐标保存；打开后渲染、吸附和即时碰撞同时平移。算法仍使用关闭内腔，以保证整理后能够收回抽屉。详见[整合验收](../../docs/merge_workflow_prefab_acceptance.md)。
+
+## 原桌板修复（2026-10-18）
+
+项目持久化 v4 移除固定家具的历史虚构孔并失效全部旧走线及集线槽分析，保留物品位置、连接和不可变基线。规划输入签名更新，旧异步候选不能被接受。原资产 GLB 与碰撞 JSON 不修改。
+
+`/routing-demo` 与业务工作台共用 `DormDeskModel`。从 `frontend/` 编译并执行 `scripts/check-demo-routing.ts --write-demo` 可重新生成正式场景、已应用布局及七线结果；编译命令为 `./node_modules/.bin/esbuild scripts/check-demo-routing.ts --bundle --platform=node --format=esm --outfile=/tmp/desk-demo.mjs '--define:import.meta.env={}'`，随后 `node /tmp/desk-demo.mjs --write-demo`。它是离线真实算法证据，不替代 HTTP 全流程或安装支撑验收。
+
+回归入口：`scripts/check-fixed-furniture.ts`（GLB 射线命中旧孔位置、渲染/碰撞共同变换、实际布局和走线）、`scripts/check-project-persist-migrate.ts`（旧项目迁移）、`scripts/check-asset-policy.ts`（非法路径）、`tests/prefab-desktop.spec.ts`（桌面/手机原桌板可见）、`tests/workspace.spec.ts`（空间配置及失败回退）。
+
+本次验证：生产构建通过；上述两组 Playwright 共 12 项通过（空间配置两项修正旧按钮文案断言后重跑通过）；实际七线均为有效 backboard 路径；资产路径、模型几何和旧项目迁移回归通过。后端全量 277 项中 275 项通过，两项显示器凸体生成测试报错；在未修改的 main `7415af8`、同一 Python 环境中复现相同错误，非本次修复引入。Blender 场景脚本只完成语法检查，未执行渲染。

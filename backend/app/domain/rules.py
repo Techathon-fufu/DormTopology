@@ -1,6 +1,7 @@
 """Validate the scene contract before running domain algorithms."""
 
 import math
+import re
 
 from .errors import SceneInputError
 from .geometry import validate_item_geometry
@@ -224,6 +225,16 @@ def validate_scene(scene: dict, *, for_planning: bool = False) -> None:
                 _fail(path + ".collision", str(error))
         for key in ("image_url", "model_url"):
             _nullable_string(item[key], path + "." + key)
+            if not item[key]:
+                continue
+            asset_path = re.split(r"[?#]", item[key], maxsplit=1)[0]
+            for _ in range(8):
+                decoded = re.sub(r"%([0-9a-fA-F]{2})", lambda m: chr(int(m[1], 16)), asset_path)
+                if decoded == asset_path:
+                    break
+                asset_path = decoded
+            if "objects" in asset_path.replace(chr(92), "/").lower().split("/"):
+                _fail(path + "." + key, "objects/ assets are retired; use Prefabmodel runtime assets")
         generation = _object(
             item["generation"], "task_id status source error", path + ".generation"
         )

@@ -2,7 +2,7 @@ import { desktopPlacementIssue } from './desktopBindings'
 import type { OrganizationIssue } from '@/types/organization'
 import type { RoomConfig, SceneObject, Vec3 } from '@/types/project'
 import { objectRoomHits } from './collisionGeometry'
-import { hasFixedFurniture, validFurnitureHole } from './fixedFurniture'
+import { effectiveCableHoles, hasFixedFurniture, validFurnitureHole } from './fixedFurniture'
 import { itemSpacingViolations } from './itemSpacing'
 import { DESK_GAP } from './sceneValidation'
 import { computeOrganizationZones } from './organizationZones'
@@ -14,7 +14,7 @@ export interface OrganizationReservedZone { id: string; label: string; min: Vec3
 
 /** Product coordinates: hole lead-outs plus hands and seated operation volumes. */
 export function organizationReservedZones(room: RoomConfig): OrganizationReservedZone[] {
-  const holes = room.cableHoles.map((hole) => {
+  const holes = effectiveCableHoles(room).map((hole) => {
     const radius = hole.diameter / 2
     const positionValid = Array.isArray(hole.position) && hole.position.length === 3 && hole.position.every(Number.isFinite)
     const valid = positionValid && Number.isFinite(radius) && radius > 0 && Number.isFinite(room.desk.height) && room.desk.height > 0

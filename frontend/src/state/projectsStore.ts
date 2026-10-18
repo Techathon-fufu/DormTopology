@@ -19,6 +19,13 @@ import { usePlansStore } from './plansStore'
  */
 const PROJECTS_PERSIST_VERSION = 4
 
+/** Drop unsupported saved apertures without moving any objects or rewriting baselines. */
+export function migratePrefabDesktop(project: Project, invalidate = false): Project {
+  if (project.room.furnitureModel !== 'dormdesk-v1' || (!invalidate && !project.room.cableHoles.length)) return project
+  return { ...project, room: { ...project.room, cableHoles: [] },
+    cables: invalidateCableRoutes(project.cables ?? []), cableTrayAnalysis: undefined }
+}
+
 /** 内置示例项目是否需要按最新示例数据重种 */
 export function isDemoProjectStale(project: Project | undefined): boolean {
   if (!project || project.id !== DEMO_PROJECT_ID) return false
@@ -146,6 +153,7 @@ export const useProjectsStore = create<ProjectsState>()(
         }))
       },
       upsert(project) {
+        project = migratePrefabDesktop(project)
         set((s) => ({
           projects: { ...s.projects, [project.id]: { ...project, updatedAt: Date.now() } },
         }))
@@ -153,7 +161,7 @@ export const useProjectsStore = create<ProjectsState>()(
       update(id, updater) {
         const p = get().projects[id]
         if (!p) return
-        const next = updater(p)
+        const next = migratePrefabDesktop(updater(p))
         const routingChanged = JSON.stringify(p.room) !== JSON.stringify(next.room)
           || JSON.stringify(resolveOrganizationPreferences(p)) !== JSON.stringify(resolveOrganizationPreferences(next))
           || cableRoutingObjectsSignature(p.objects) !== cableRoutingObjectsSignature(next.objects)
@@ -205,10 +213,11 @@ export const useProjectsStore = create<ProjectsState>()(
         }
         if (from < 4) {
           for (const [id, p] of Object.entries(projects)) {
-            if (!p?.objects) continue
+            if (!p?.room) continue
+            const migrated = migratePrefabDesktop(p, true)
             projects[id] = {
-              ...p,
-              objects: p.objects.map((o) =>
+              ...migrated,
+              objects: migrated.objects.map((o) =>
                 o.baseDimensions ? o : { ...o, baseDimensions: { ...o.dimensions } },
               ),
             }

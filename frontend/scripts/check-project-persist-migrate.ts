@@ -13,6 +13,29 @@ Object.defineProperty(globalThis, 'localStorage', { value: {
 const { usePlansStore } = await import('../src/state/plansStore')
 const { migrateDefaultDemoPorts, migrateDefaultDemoWiring, useProjectsStore } = await import('../src/state/projectsStore')
 
+// All saved fixed-model projects lose phantom holes and obsolete routing proofs,
+// while object poses, connections and immutable baseline records stay intact.
+const fixedOld = createDemoProject()
+fixedOld.id = 'custom-fixed-desktop'
+fixedOld.room.cableHoles = [{ id: 'old-hole', position: [.5, .75, .28], diameter: .05 }]
+fixedOld.cables = fixedOld.cables.map(c => ({ ...c, status: 'planned', planSource: 'algorithm',
+  route: { ...c.route, strategy: 'cableHole', verification: { pathStyle: 'orthogonal', sceneId: 'old', sceneRevision: 3,
+    status: 'valid', supportStatus: 'not_evaluated' } } }))
+usePlansStore.getState().captureBaseline(fixedOld)
+const baselineBefore = structuredClone(usePlansStore.getState().baselines[fixedOld.id])
+entries.set('dormtopology.projects', JSON.stringify({ version: 3, state: { projects: { [fixedOld.id]: fixedOld } } }))
+await useProjectsStore.persist.rehydrate()
+const fixedNew = useProjectsStore.getState().projects[fixedOld.id]
+assert.deepEqual(fixedNew.room.cableHoles, [])
+assert.deepEqual(fixedNew.objects, JSON.parse(JSON.stringify(fixedOld.objects)))
+assert.deepEqual(fixedNew.cables.map(c => [c.from, c.to]), JSON.parse(JSON.stringify(fixedOld.cables.map(c => [c.from, c.to]))))
+assert.ok(fixedNew.cables.every(c => c.status === 'stale' && !c.route.verification))
+assert.deepEqual(usePlansStore.getState().baselines[fixedOld.id], baselineBefore)
+await useProjectsStore.persist.rehydrate()
+assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id], JSON.parse(JSON.stringify(fixedNew)), 'migration is idempotent')
+useProjectsStore.getState().upsert(fixedOld)
+assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id].room.cableHoles, [], 'imports cannot restore phantom apertures')
+
 for (const version of [1, 2, 3]) {
   const old = createLegacyDemoProject()
   old.demoSeedVersion = 3

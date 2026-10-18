@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { MonitorOff } from 'lucide-react'
 import { CameraRig } from '@/scene/CameraRig'
 import { DormDeskModel } from '@/scene/DormDeskModel'
 import { RoomShell } from '@/scene/RoomShell'
-import { Segmented } from '@/ui/kit/segmented'
 import { detectWebGL } from '@/lib/webgl'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import type { ViewPreset } from '@/state/workspaceStore'
@@ -13,11 +12,11 @@ import type { RoomConfig } from '@/types/project'
 /**
  * 空间配置三维预览：与三维工作台共用同一套家具加载逻辑——DormDeskModel 负责
  * 加载无抽屉桌体 + 三只抽屉分离件（GLB 成功时渲染正式模型并叠加 ParametricDesk
- * desktopOnly 桌面开孔；失败 / 简化时回退参数化几何），并按固定家具的支撑与
- * 出线孔几何隐藏参数化床架 / 孔位标记；俯视时对家具模型做显示-only 剖切。
+ * 保留 GLB 原桌板；失败 / 简化时回退同源几何），并按固定家具的支撑与
+ * 出线孔几何隐藏参数化床架 / 孔位标记。
  */
 export function SpacePreview3D({ room }: { room: RoomConfig }) {
-  const [view, setView] = useState<ViewPreset>('persp')
+  const view: ViewPreset = 'persp'
   const webglOk = useMemo(detectWebGL, [])
   const deskGlbLoaded = useDeskModelStore((s) => s.status === 'loaded')
 
@@ -49,25 +48,13 @@ export function SpacePreview3D({ room }: { room: RoomConfig }) {
         <RoomShell
           room={room}
           deskMode="none"
-          showBed={view !== 'top' && !deskGlbLoaded}
+          showBed={!deskGlbLoaded}
           showCableHoles={deskGlbLoaded}
         />
-        <DormDeskModel room={room} hideBedParts={view === 'top'} respectToolbar={false} />
+        <DormDeskModel room={room} respectToolbar={false} />
         {/* 小画布取景：拉远 + 抬高注视点，容纳整组家具（默认机位按桌面区域取景会裁掉床） */}
         <CameraRig preset={view} furnitureModel={room.furnitureModel} zoomOut={1.75} targetShiftY={0.3} frontOnly />
       </Canvas>
-      <div className="absolute right-2 top-2">
-        <Segmented
-          size="sm"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'persp', label: '透视' },
-            { value: 'front', label: '正视' },
-            { value: 'top', label: '俯视' },
-          ]}
-        />
-      </div>
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/35 to-transparent px-2.5 py-1.5 text-[11px] text-white">
         正式模型 · 由当前表单实时生成 · 可拖拽旋转
       </div>

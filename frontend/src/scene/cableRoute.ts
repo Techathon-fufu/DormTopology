@@ -1,3 +1,4 @@
+import { effectiveCableHoles } from './fixedFurniture'
 import { segmentHitsObject } from './collisionGeometry'
 import * as THREE from 'three'
 import type {
@@ -167,7 +168,7 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
       p[1] > y - desk.thickness - 0.003 &&
       p[1] < y + 0.002
     ) {
-      const nearHole = room.cableHoles.some(
+      const nearHole = effectiveCableHoles(room).some(
         (h) => Math.hypot(p[0] - h.position[0], p[2] - h.position[2]) + radius + 0.001 < h.diameter / 2,
       )
       if (!nearHole) addIssue('slab', p, '路径穿过桌板（可从出线孔走线）')
@@ -650,7 +651,7 @@ export function planCableRoute(
 ): PlanCableResult {
   const nodes = computeRouteNodes(room)
   const map = routeNodeMap(nodes)
-  const visibility = resolveCableVisibility(cable, objects).visibility
+  const visibility = resolveCableVisibility(cable, objects, room).visibility
   const strategy = CABLE_VISIBILITY_META[visibility].strategy
   const chains = buildChains(cable, objects, room, nodes, strategy)
   const triedChains = chains.map((c) => c.name)

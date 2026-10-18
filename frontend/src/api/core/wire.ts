@@ -1,3 +1,4 @@
+import { assertAssetUrl } from '@/scene/assetPolicy'
 import { exportCollision, type CompoundCollision } from '@/scene/collisionGeometry'
 /**
  * 前后端 wire 契约（snake_case）与转换 / 校验层。
@@ -273,7 +274,7 @@ export function toWireItem(o: SceneObject): WireItemPayload {
       powered: p.powered,
       confirmed: true,
     })),
-    model_url: o.model.assetUrl ?? null,
+    model_url: o.model.assetUrl ? assertAssetUrl(o.model.assetUrl) : null,
   }
 }
 

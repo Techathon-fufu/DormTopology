@@ -5,7 +5,7 @@ import type { OrganizationSceneRef } from '@/types/organization'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { isPowerSourcePort, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
 import { resolvePortOffset } from '@/scene/ports'
-import { furnitureSurfaces, hasFixedFurniture, validFurnitureHole } from '@/scene/fixedFurniture'
+import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { cableMountVolume, mountToRoutingSupport, mountToTrayCandidate, resolveCableManagement } from '@/scene/cableManagement'
 import { parseRouting } from '@/algorithm-lab/contract'
 import { ApiError } from './errors'
@@ -22,17 +22,14 @@ function record(value: unknown): Record<string, unknown> {
 
 /** Include obstacles and all cables: another device or route can invalidate this result. */
 export function cablePlanningInputSignature(project: Project): string {
-  return JSON.stringify(['orthogonal-rear-v1', project.id, project.room,
+  return JSON.stringify(['prefab-solid-desktop-v2', project.id, project.room,
     project.objects.map(({ model, ...object }) => ({ ...object, modelShape: model.shape, prefabId: model.prefabId })),
     project.cables, resolveOrganizationPreferences(project)])
 }
 
 /** Inscribed square openings conservatively preserve the material around a circular hole. */
 function openDeskTop(scene: PackingScene, project: Project): void {
-  if (hasFixedFurniture(project.room)) {
-    if (project.room.cableHoles.some((h) => !validFurnitureHole(project.room, h.position, h.diameter))) throw new ApiError('出线孔必须完整位于真实 L 形桌面内', { kind: 'input' })
-    return
-  }
+  if (hasFixedFurniture(project.room)) return // Prefab tabletop is solid, including for old saved rooms.
   const slab = scene.obstacles.find((o) => o.id === 'furniture:desk-top')
   if (!slab) return
   let parts: SceneBox[] = [slab]
@@ -131,7 +128,7 @@ export function toRoutingScene(input: { project: Project; confirmed: boolean; re
     const thickness = resolveCableThickness(cable), meta = CABLE_THICKNESS_META[thickness]
     return { id: cable.id, start_port_id: ends[0], end_port_id: ends[1], cable_type: cableType(cable, project), thickness,
       length_m: actualLength, diameter_m: meta.diameterM, min_bend_radius_m: 0,
-      slack_m: slack, mode: resolveCableVisibility(cable, project.objects).visibility === 'hidden' ? 'backboard' : 'slot' }
+      slack_m: slack, mode: resolveCableVisibility(cable, project.objects, project.room).visibility === 'hidden' ? 'backboard' : 'slot' }
   })
   openDeskTop(scene, project)
   scene.routing_graph = buildOrthogonalRoutingGraph(project)

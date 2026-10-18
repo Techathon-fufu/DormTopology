@@ -6,10 +6,12 @@ import type {
   CableVisibility,
   Port,
   Project,
+  RoomConfig,
   SceneObject,
   Vec3,
 } from '@/types/project'
 import { portWorldDirection, portWorldPosition, inferCableKind } from '@/scene/ports'
+import { hasFixedFurniture } from './fixedFurniture'
 import { uid } from '@/lib/utils'
 import { clonePoints } from '@/types/cable'
 import { isPowerStripObject } from '@/scene/powerStrip'
@@ -243,7 +245,9 @@ export function inferCableVisibility(
 export function resolveCableVisibility(
   cable: CableConnection,
   objects: SceneObject[],
+  room?: RoomConfig,
 ): CableVisibilityInfo {
+  if (room && hasFixedFurniture(room)) return { visibility: 'hidden', source: 'policy' }
   if (cable.kind === 'power' || cable.kind === 'video' || cable.kind === 'network') return { visibility: 'hidden', source: 'policy' }
   if (cable.visibility) return { visibility: cable.visibility, source: 'explicit' }
   return inferCableVisibility(objects, cable.from, cable.to)
