@@ -1,5 +1,5 @@
 import type { Project, Vec3 } from '@/types/project'
-import { effectiveCableHoles, fixedFurnitureBoxes, furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
+import { effectiveCableHoles, fixedFurnitureBoxes, furnitureSurfaces, hasFixedFurniture, rearCablePassage } from '@/scene/fixedFurniture'
 import { portWorldPosition } from '@/scene/ports'
 import { DESK_GAP } from '@/scene/sceneValidation'
 import { toPackingPosition, type RoutingGraph } from './packingWire'
@@ -33,6 +33,40 @@ export function buildOrthogonalRoutingGraph(project: Project): RoutingGraph {
   }
   const connected = new Set(project.cables.flatMap(c => [c.from.portId, c.to.portId]))
   const portXs = project.objects.flatMap(o => o.ports.filter(p => connected.has(p.id)).map(p => portWorldPosition(o, p)[0]))
+  if (fixed && baffle) {
+    const passage = rearCablePassage
+    const midZ = (passage.min[2] + passage.max[2]) / 2
+    const passageXs = [passage.min[0] + .02, (passage.min[0] + passage.max[0]) / 2, passage.max[0] - .02]
+    const xs = [...new Set([baffle.min[0] + .025, baffle.max[0] - .025, ...passageXs, ...portXs].map(x => +x.toFixed(6))
+      .filter(x => x >= baffle.min[0] + .015 && x <= baffle.max[0] - .015))].sort((a, b) => a - b)
+    for (let lane = 0; lane < 3; lane++) {
+      const topY = passage.max[1] + .012 + lane * .012
+      const underY = passage.min[1] - .025 - lane * .012
+      const frontZ = passage.max[2] + .012 + lane * .012
+      const rearZ = baffle.min[2] - .012 - lane * .012
+      const lowY = baffle.min[1] - .015 - lane * .012
+      let previous: string[] | undefined
+      for (const [i, x] of xs.entries()) {
+        const name = `rear-passage:${lane}:${i}`
+        const top = add(`${name}:top-rail`, [x, topY, frontZ])
+        const under = add(`${name}:under-rail`, [x, underY, frontZ], 'fixing_point')
+        const lowFront = add(`${name}:low-front`, [x, lowY, frontZ], 'fixing_point')
+        const lowBack = add(`${name}:low-back`, [x, lowY, rearZ], 'fixing_point')
+        const back = add(`${name}:back-rail`, [x, underY, rearZ], 'fixing_point')
+        edge(under, lowFront, ['backboard']); edge(lowFront, lowBack, ['backboard']); edge(lowBack, back, ['backboard'])
+        const row = [top, under, lowFront, lowBack, back]
+        if (previous) row.forEach((id, j) => edge(previous![j], id, ['backboard'], j === 0))
+        previous = row
+        if (x > passage.min[0] + .01 && x < passage.max[0] - .01) {
+          const clearance = (passage.max[2] - passage.min[2]) / 2 - .001
+          const entry = add(`${name}:entry`, [x, topY, midZ], 'corner', clearance)
+          const exit = add(`${name}:exit`, [x, underY, midZ], 'fixing_point', clearance)
+          edge(top, entry, ['backboard']); edge(entry, exit, ['backboard']); edge(exit, under, ['backboard'])
+        }
+      }
+    }
+    return graph
+  }
   for (const [surfaceIndex, rect] of surfaces.entries()) {
     const left = rect.x0 + .025, right = rect.x1 - .025
     const xs = [...new Set([left, right, (left + right) / 2, ...portXs,

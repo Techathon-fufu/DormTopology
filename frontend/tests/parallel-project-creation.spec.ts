@@ -83,7 +83,7 @@ test('redirects an unfinished project away from the workspace until creation is 
 })
 
 for (const hasDraft of [false, true]) {
-  test(`migrates v4 ${hasDraft ? 'creation drafts' : 'completed legacy projects'} without losing saved objects`, async ({ page }) => {
+  test(`migrates v4 ${hasDraft ? 'creation drafts' : 'completed legacy projects'} to v7 without losing saved objects`, async ({ page }) => {
     await page.goto('/projects/new')
     await expect(page).toHaveURL(/\/projects\/(proj-[^/]+)\/setup$/)
     const projectId = new URL(page.url()).pathname.split('/')[2]
@@ -110,9 +110,11 @@ for (const hasDraft of [false, true]) {
         version: JSON.parse(localStorage.getItem('dormtopology.projects')!).version,
       }
     }, { storeUrl, projectId })
-    expect(restored.version).toBe(5)
+    expect(restored.version).toBe(7)
     expect(restored.project).toEqual(saved)
     expect(restored.draft).toBe(hasDraft)
+    if (!hasDraft) expect(restored.project).not.toHaveProperty('creationDrafts', undefined)
+    expect(restored.project.objects.length).toBeGreaterThan(0)
 
     await page.goto(`/projects/${projectId}/workspace`)
     await expect(page).toHaveURL(`/projects/${projectId}/${hasDraft ? 'import' : 'workspace'}`)
@@ -144,16 +146,16 @@ test('an older tab preserves other tabs draft records when saving an unrelated p
     const { useProjectsStore } = await import(storeUrl)
     const storage = useProjectsStore.persist.getOptions().storage!
     const key = 'parallel-project-creation-storage-check'
-    const initial = { state: { projects: {}, creationDrafts: {} }, version: 5 }
+    const initial = { state: { projects: {}, creationDrafts: {} }, version: 7 }
     localStorage.setItem(key, JSON.stringify(initial))
     await storage.getItem(key)
     localStorage.setItem(key, JSON.stringify({
       state: { projects: { remote: { name: '另一个标签页的项目' } }, creationDrafts: { remote: true } },
-      version: 5,
+      version: 7,
     }))
     await storage.setItem(key, {
       state: { projects: { local: { name: '当前标签页的项目' } }, creationDrafts: { local: true } },
-      version: 5,
+      version: 7,
     })
     const value = JSON.parse(localStorage.getItem(key)!).state
     localStorage.removeItem(key)

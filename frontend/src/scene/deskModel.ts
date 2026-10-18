@@ -16,7 +16,7 @@ import { FURNITURE_OFFSET, hasFixedFurniture } from './fixedFurniture'
  * - GLB 加载后统一换算为米制，并做底部对齐 / 居中 / 坐标轴校正（见下方配置项）；
  * - 模型若带可识别的命名节点（桌面 / 搁板 / 出线孔），实测高度以「锚点」形式经
  *   deskModelStore.metrics 提供给交互层（拖拽 / 校验 / 吸附优先采用实测面）；
- *   历史参数化项目保留 RoomConfig 几何（见 frontend/docs/desk-model.md）。
+ *   产品项目固定使用当前家具；历史归一化工具仅供独立资产检查。
  *
  * 本模块为纯计算（依赖 three 与 RoomConfig），可在无浏览器环境下单测。
  */
@@ -84,7 +84,7 @@ export const DORM_DESK_MODEL_CONFIG: DeskModelConfig = {
     // 模型自带上层四格书架（Bookshelf_*，y 1.46–1.9）与配置层的「桌面书架」不是同一支撑面；
     // 支撑面 / 分区对齐随分区重构单独处理（见 docs/desk-model.md 已知差异），此处不参与锚点匹配。
     shelf: [],
-    // 不含裸 'hole'：Cabinet_Lock_Keyhole（锁孔）会被误匹配；当前模型无出线孔节点。
+    // 不含裸 'hole'：避免匹配柜锁；后沿长槽没有独立节点，按主桌板网格提取。
     cableHole: ['cable_hole', 'cablehole', '出线孔'],
   },
 }

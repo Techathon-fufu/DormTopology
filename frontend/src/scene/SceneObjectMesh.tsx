@@ -50,6 +50,7 @@ export function SceneObjectMesh({
   )
   const renderedObject = dragPreview?.object ?? object
   const dims = resizePreview?.dimensions ?? renderedObject.dimensions
+  const displayObject = { ...renderedObject, dimensions: dims }
   const offsets = useDrawerOffsets()
   const organizePose = useOrganizeStore((s) =>
     s.plan ? s.compare === 'before' ? s.originals[object.id] : s.overrides[object.id] ?? s.originals[object.id] : undefined,
@@ -80,11 +81,11 @@ export function SceneObjectMesh({
   const rotationY = dragPreview ? renderedObject.transform.rotationY : (organizePose?.rotationY ?? t.rotationY)
 
   // 书本姿态：显示尺寸按 bookPose 交换，轮廓按同一姿态偏移/旋转，与碰撞体保持一致。
-  const displayObject = { ...renderedObject, dimensions: dims,
+  const posedObject = { ...renderedObject, dimensions: dims,
     transform: { ...renderedObject.transform, bookPose: organizePose?.bookPose ?? renderedObject.transform.bookPose } }
-  const displayDims = bookPoseDimensions(displayObject)
+  const displayDims = bookPoseDimensions(posedObject)
   const postureOffset = (displayDims.height - dims.height) / 2
-  const postureRotation: [number, number, number] = [bookTurned(displayObject) ? -Math.PI / 2 : 0, 0, 0]
+  const postureRotation: [number, number, number] = [bookTurned(posedObject) ? -Math.PI / 2 : 0, 0, 0]
 
   return (
     <group position={[pos[0], pos[1] + dims.height / 2, pos[2]]} rotation={[0, rotationY, 0]}>
@@ -129,14 +130,14 @@ export function SceneObjectMesh({
       </group>
       {selected || hovered || dragging || activeOperation ? (
         <group position={[0, postureOffset, 0]} rotation={postureRotation}>
-          <CollisionOutline object={displayObject} color="#0F9D8A"
+          <CollisionOutline object={posedObject} color="#0F9D8A"
             opacity={selected || dragging || activeOperation ? 0.85 : 0.4} />
         </group>
       ) : null}
       <ObjectResizeHandles project={project} object={object} selected={selected} />
       {hasIssues || dragInvalid ? (
         <group position={[0, postureOffset, 0]} rotation={postureRotation}>
-          <CollisionOutline object={displayObject} color="#D64545" opacity={dragInvalid ? 0.9 : 0.65} />
+          <CollisionOutline object={posedObject} color="#D64545" opacity={dragInvalid ? 0.9 : 0.65} />
         </group>
       ) : null}
     </group>

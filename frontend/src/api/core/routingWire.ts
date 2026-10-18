@@ -6,7 +6,9 @@ import type { OrganizationSceneRef } from '@/types/organization'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { isPowerSourcePort, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
 import { resolvePortOffset } from '@/scene/ports'
-import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
+import { fixedFurnitureBoxes, furnitureSurfaces, hasFixedFurniture, rearCablePassage } from '@/scene/fixedFurniture'
+import { routingExclusions } from '@/scene/routingPolicy'
+import { computeOrganizationZones } from '@/scene/organizationZones'
 import { cableMountVolume, mountToRoutingSupport, mountToTrayCandidate, resolveCableManagement } from '@/scene/cableManagement'
 import { parseRouting } from '@/algorithm-lab/contract'
 import { ApiError } from './errors'
@@ -23,7 +25,7 @@ function record(value: unknown): Record<string, unknown> {
 
 /** Include obstacles and all cables: another device or route can invalidate this result. */
 export function cablePlanningInputSignature(project: Project): string {
-  return JSON.stringify(['prefab-solid-desktop-v2', project.id, project.room,
+  return JSON.stringify(['prefab-ergonomic-routing-v4', project.id, project.room,
     project.objects.map(({ model, ...object }) => ({ ...object, modelShape: model.shape, prefabId: model.prefabId })),
     project.cables, resolveOrganizationPreferences(project)])
 }
@@ -134,7 +136,24 @@ export function toRoutingScene(input: { project: Project; confirmed: boolean; re
   openDeskTop(scene, project)
   scene.routing_graph = buildOrthogonalRoutingGraph(project)
   if (scene.routing_graph.edges.some((edge) => edge.clearance_radius_m <= 0)) throw new ApiError('出线孔过小，无法配置线缆净空', { kind: 'input' })
-  scene.reserved_zones = []
+  scene.reserved_zones = routingExclusions(project.room, project.objects).map(zone => ({
+    id: zone.name, min: toPackingPosition(zone.min, project.room), max: toPackingPosition(zone.max, project.room),
+  }))
+  if (hasFixedFurniture(project.room)) {
+    const baffle = fixedFurnitureBoxes.find(b => b.name === 'Desk_Back_Baffle')!
+    const surfaces = furnitureSurfaces(project.room, false).filter(s => s.kind === 'desk')
+    const seat = computeOrganizationZones(project.room, resolveOrganizationPreferences(project)).workstation!.seated.rect
+    const position = (p: Vec3) => toPackingPosition(p, project.room)
+    scene.routing_graph.spatial_cost_policy = {
+      desktop_min: position([Math.min(...surfaces.map(s => s.rect.x0)), rearCablePassage.max[1], baffle.min[2] - .04]),
+      desktop_max: position([Math.max(...surfaces.map(s => s.rect.x1)), project.room.height, Math.max(...surfaces.map(s => s.rect.z1))]),
+      // Closest safe inside rail (12 mm clear of the authored passage), not the solid intersection.
+      corner_start: position([baffle.min[0], rearCablePassage.max[1] + .012, rearCablePassage.max[2] + .012]),
+      corner_end: position([baffle.max[0], rearCablePassage.max[1] + .012, rearCablePassage.max[2] + .012]),
+      seat_position: position([(seat.x0 + seat.x1) / 2, 0, (seat.z0 + seat.z1) / 2]),
+      distance_scale_m: .15, corner_weight: 6, seat_weight: 12,
+    }
+  }
   applyCableManagement(scene, project)
   scene.exposure_zones = hasFixedFurniture(project.room) ? furnitureSurfaces(project.room, false).filter((s) => s.kind === 'desk').map((s) => ({ id: `routing:exposure-${s.id}`, min: toPackingPosition([s.rect.x0, s.y, s.rect.z0], project.room), max: toPackingPosition([s.rect.x1, project.room.height, s.rect.z1], project.room) }))
     : [{ id: 'routing:exposure-desktop', min: [0, project.room.desk.height, 0], max: [project.room.desk.width, project.room.height, project.room.desk.depth] }]

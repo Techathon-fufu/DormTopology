@@ -95,7 +95,7 @@ export function WorkspacePage() {
   const organizeStatus = useOrganizeStore((s) => s.status)
   const workspaceNotice = useWorkspaceStore((s) => s.notice)
   const baseline = usePlansStore((s) => s.baselines[id ?? ''])
-  const [showBefore, setShowBefore] = useState(false)
+  const [showBefore] = useState(false)
   const cableNotice = useCableStore((s) => s.notice)
   const cableAnimStatus = useCableStore((s) => s.animStatus)
   const deskMetrics = useDeskModelStore((s) => s.metrics)
@@ -483,16 +483,7 @@ export function WorkspacePage() {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      <Toolbar
-        project={project}
-        onCompare={setShowBefore}
-        canCompare={Boolean(baseline?.scene)}
-        onOpenOrganize={handleOpenOrganize}
-        onPlanCables={() => void runPlanCables()}
-        onSavePlan={handleSavePlan}
-        onOpenPlans={handleOpenPlans}
-        busy={busy}
-      />
+      <Toolbar project={project} onSavePlan={handleSavePlan} onOpenPlans={handleOpenPlans} plansOpen={plansOpen} />
       <div className="relative flex min-h-0 flex-1">
         <WorkspaceToolPanel
           project={project}
@@ -560,7 +551,7 @@ export function WorkspacePage() {
             busy={busy === 'cable'}
             onPlanCables={(ids) => void runPlanCables(ids)}
             onOpenOrganize={handleOpenOrganize}
-            onGuide={() => navigate(`/projects/${project.id}/result`)}
+            onResult={() => navigate(`/projects/${project.id}/result`)}
             className="flex w-72 shrink-0 border-l"
           />
         )}

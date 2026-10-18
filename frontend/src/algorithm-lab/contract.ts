@@ -122,6 +122,7 @@ export interface Scene {
   reserved_zones: BoxZone[];
   exposure_zones: BoxZone[];
   routing_graph: {
+    spatial_cost_policy?: import('@/scene/routingPolicy').SpatialCostPolicy;
     path_style?: 'smooth' | 'orthogonal';
     nodes: GraphNode[];
     edges: GraphEdge[];
@@ -501,6 +502,18 @@ function parseScene(value: unknown, path: string): Scene {
   });
   const graph = object(scene.routing_graph, `${path}.routing_graph`);
   if (graph.path_style !== undefined) choice(graph.path_style, ['smooth', 'orthogonal'], `${path}.routing_graph.path_style`);
+  if (graph.spatial_cost_policy !== undefined) {
+    const p = `${path}.routing_graph.spatial_cost_policy`;
+    const policy = object(graph.spatial_cost_policy, p);
+    if (graph.path_style !== 'orthogonal') invalid(p, 'spatial cost requires orthogonal routing');
+    for (const key of ['desktop_min', 'desktop_max', 'corner_start', 'corner_end', 'seat_position']) vector(policy[key], `${p}.${key}`);
+    const min = policy.desktop_min as Vec3, max = policy.desktop_max as Vec3;
+    if (min.some((v, i) => v >= max[i])) invalid(p, 'desktop bounds must be strictly increasing');
+    const start = policy.corner_start as Vec3, end = policy.corner_end as Vec3;
+    if (Math.hypot(...start.map((v, i) => v - end[i])) <= 1e-9) invalid(p, 'corner segment must have nonzero length');
+    geometryNumber(policy.distance_scale_m, `${p}.distance_scale_m`, 0, true);
+    for (const key of ['corner_weight', 'seat_weight']) geometryNumber(policy[key], `${p}.${key}`, 0);
+  }
   const nodeIds = new Set<string>();
   array(graph.nodes, `${path}.routing_graph.nodes`, VISUALIZATION_LIMITS.graph_nodes).forEach((entry, index) => {
     const entryPath = `${path}.routing_graph.nodes[${index}]`;

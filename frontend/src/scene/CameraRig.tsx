@@ -46,6 +46,9 @@ const SAME = 1e-5
  * 不平移、不绕到后墙或左墙背面、不穿地、不钻进家具；不传 bounds（工作台 / 最终页）时
  * 行为与原来一致。
  *
+ * frontOnly（远端新增）用于产品房间视图：限制相机绕到正面扇区，禁止左右背面观察。
+ * bounds 约束模式下方位角由 previewAzimuthRange 逐帧解算，frontOnly 仅作用于自由模式。
+ *
  * 兼容参数 zoomOut / targetShiftY 仅作用于无 bounds 的默认模式（正式模型整体更高更大时
  * 拉远并抬高注视点）；约束模式改用家具总览取景距离。
  */
@@ -55,6 +58,7 @@ export function CameraRig({
   targetShiftY = 0,
   furnitureModel,
   bounds,
+  frontOnly = false,
 }: {
   preset: ViewPreset
   furnitureModel?: RoomConfig['furnitureModel']
@@ -64,6 +68,8 @@ export function CameraRig({
   targetShiftY?: number
   /** 约束模式（空间配置预览）：由 createPreviewCameraBounds 生成；不传 = 默认自由轨道 */
   bounds?: PreviewCameraBounds
+  /** 远端新增：仅允许正面扇区观察（产品房间视图）；bounds 约束模式下由方位角范围接管 */
+  frontOnly?: boolean
 }) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
   const camera = useThree((s) => s.camera)
@@ -189,6 +195,9 @@ export function CameraRig({
     }
   }, [bounds, camera, size.width, size.height])
 
+  // frontOnly 只在自由轨道（无 bounds）下生效；bounds 模式的方位角 / 距离由 useFrame 接管。
+  const frontOnlyActive = frontOnly && !bounds
+
   return (
     <OrbitControls
       ref={controlsRef}
@@ -197,6 +206,8 @@ export function CameraRig({
       enableDamping
       dampingFactor={0.08}
       enablePan={!bounds}
+      minAzimuthAngle={frontOnlyActive ? 0 : bounds ? -Infinity : -Infinity}
+      maxAzimuthAngle={frontOnlyActive ? Math.PI / 2 - .08 : bounds ? Infinity : Infinity}
       panSpeed={0.9}
       zoomSpeed={0.9}
       rotateSpeed={bounds ? 0.6 : 1}

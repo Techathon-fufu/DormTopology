@@ -31,7 +31,7 @@ test('real packing stands books, previews, applies, restores and preserves fixed
     project.objects = [0, 1, 2, 3].map((index) => ({
       ...structuredClone(project.objects[0]), id: `book-${index}`, projectId: id, name: `书本 ${index + 1}`,
       dimensions: { width: .16, height: .025, depth: .2 },
-      transform: { position: [index === 3 ? .6 : -.2 + index * .02, .75, index === 3 ? .7 : .42], rotationY: 0 },
+      transform: { position: [index === 3 ? -.3 : -.2 + index * .02, .75, index === 3 ? .18 : .42], rotationY: 0 },
       category: 'nonElectrical', model: { status: 'placeholder', source: 'demo', shape: 'book' },
       ports: [], source: 'manual', frequent: false, fixed: index === 3, locked: false, visible: true,
     }))
@@ -47,7 +47,7 @@ test('real packing stands books, previews, applies, restores and preserves fixed
       overrides: useOrganizeStore.getState().overrides }
   }, { projectsUrl, organizeUrl, id })
   const original = (await snapshot()).objects
-  await page.getByTitle('打开空间整理面板：分区归位与整理方案').click()
+  await page.getByRole('button', { name: '生成整理方案', exact: true }).click()
   await page.getByRole('checkbox', { name: '我已核对物品尺寸及整理前位置' }).check()
   await page.getByRole('button', { name: '生成整理方案', exact: true }).last().click()
   await expect.poll(async () => (await snapshot()).plan?.serviceMeta?.source, { timeout: 60_000 }).toBe('real')

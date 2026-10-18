@@ -4,6 +4,7 @@ import type { CablePlanningResult } from '@/api/types'
 import { cablePlanningInputSignature, toRoutingScene } from '@/api/core/routingWire'
 import { canonicalScene, sceneRef } from '@/api/core/packingWire'
 import { requestJson } from '@/api/core/client'
+import { remoteOrganizationProjectId } from '@/api/core/organizationScenes'
 import { useProjectsStore } from '@/state/projectsStore'
 import { usePlansStore } from '@/state/plansStore'
 import { useWorkspaceStore } from '@/state/workspaceStore'
@@ -192,7 +193,8 @@ export async function acceptRoutingPreview(
   const ref = candidate.result.sceneRef
 
   // 写入前用现有后端接口核对正式场景版本；不新增端点。
-  const raw = await requestJson<unknown>(`/projects/${encodeURIComponent(project.id)}/scene`)
+  const remoteId = remoteOrganizationProjectId(project.id, candidate.baselineId)
+  const raw = await requestJson<unknown>(`/projects/${encodeURIComponent(remoteId)}/scene`)
   const expected = toRoutingScene({ project, confirmed: true, ref })
   const scene = canonicalScene(raw, expected, ref)
 

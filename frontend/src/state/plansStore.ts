@@ -7,6 +7,7 @@ import { invalidateCableRoutes } from '@/scene/cables'
 import { useProjectsStore } from './projectsStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { useCableStore } from './cableStore'
+import { repairDuplicatePortIds } from '@/scene/portIds'
 
 /**
  * 布局方案仓库：
@@ -14,7 +15,7 @@ import { useCableStore } from './cableStore'
  * - candidates：对比用方案（「保存方案」生成，0.8.0 起携带完整场景 / 线缆快照）
  * 当前方案实时保存在 Project.objects（projectsStore）。
  *
- * 持久化版本：v1（仅物品指派）→ v2（updatedAt / 场景快照 / 来源）。
+ * 持久化版本：v1（仅物品指派）→ v2（updatedAt / 场景快照 / 来源）→ v3（接口 ID 去重修复）。
  * v1 数据迁移时仅补齐 updatedAt，其余字段保持缺失（界面按「旧版本方案」展示，不丢数据）。
  */
 interface PlansState {
@@ -145,7 +146,7 @@ export const usePlansStore = create<PlansState>()(
     {
       name: 'dormtopology.plans',
       storage: createJSONStorage(() => recordStorage(['baselines', 'candidates'])),
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PlansState>
         if (version < 2) {
@@ -157,7 +158,19 @@ export const usePlansStore = create<PlansState>()(
           for (const [projectId, plans] of Object.entries(state.candidates ?? {})) {
             if (plans) candidates[projectId] = plans.map(migratePlan)
           }
-          return { ...state, baselines, candidates } as PlansState
+          state.baselines = baselines
+          state.candidates = candidates
+        }
+        if (version < 3) {
+          const repair = (plan: LayoutPlan): LayoutPlan => {
+            if (!plan.scene) return plan
+            const scene = repairDuplicatePortIds(plan.scene)
+            return scene === plan.scene ? plan : { ...plan, scene }
+          }
+          return { ...state,
+            baselines: Object.fromEntries(Object.entries(state.baselines ?? {}).map(([id, plan]) => [id, repair(plan)])),
+            candidates: Object.fromEntries(Object.entries(state.candidates ?? {}).map(([id, plans]) => [id, plans.map(repair)])),
+          } as PlansState
         }
         return state as PlansState
       },

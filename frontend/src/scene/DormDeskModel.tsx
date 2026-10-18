@@ -21,6 +21,7 @@ import { useDeskModelStore } from '@/state/deskModelStore'
 import { useDrawerStore } from '@/state/drawerStore'
 import { hasFixedFurniture } from './fixedFurniture'
 import { prepareFurnitureAppearance } from './furnitureAppearance'
+import { normalizeProductRoom } from '@/data/fixedRoom'
 
 /**
  * 桌体渲染：加载 models/dormdesk_parts/dormdesk_body.glb（无抽屉桌体）与三只抽屉分离件
@@ -28,8 +29,11 @@ import { prepareFurnitureAppearance } from './furnitureAppearance'
  * 加载完成前 / 加载失败 / 用户选择简化几何时回退参数化桌体（ParametricDesk，与逻辑尺寸一致）。
  *
  * 固定家具（hasFixedFurniture）走 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
- * （FURNITURE_OFFSET 由 mountDeskModel 施加），直接显示模型内的实心桌板；
+ * （FURNITURE_OFFSET 由 mountDeskModel 施加），直接显示模型内的桌板；
+ * 本地程序化开孔已由远端作者版本取代：GLB 自带后桌板凹口（rear desk notch），
+ * 不再程序开孔，solid-no-notch 说明已过时。
  * 共面清理由 prepareFurnitureAppearance 在显示副本上完成。非固定家具沿用历史归一化路径。
+ * 产品不提供其他家具模型入口。
  *
  * 抽屉推拉：每只抽屉包一层滑动组，逐帧由 drawerStore 的 progress 驱动
  * （单击开 / 关、拖拽跟手、松手吸附；交互见 scene/useDrawerInteraction.ts）。
@@ -47,12 +51,13 @@ interface MountedDeskParts {
 }
 
 export function DormDeskModel({
-  room,
+  room: roomProp,
   position = [0, 0, 0],
   rotationY = 0,
   visible = true,
   respectToolbar = true,
   hideBedParts = false,
+  forceFallback = false,
 }: {
   room: RoomConfig
   /** 额外位置偏移（米；叠加在归一化结果之上） */
@@ -65,8 +70,10 @@ export function DormDeskModel({
   respectToolbar?: boolean
   /** 显示-only 剖切：俯视时隐藏床体 / 护栏 / 爬梯（整组家具模型；碰撞与校验几何不变） */
   hideBedParts?: boolean
+  /** 强制回退参数化几何（本地新增：导入 / 预览路径需要忽略缓存 GLB） */
+  forceFallback?: boolean
 }) {
-  const forceFallback = useDeskModelStore((s) => s.forceFallback)
+  const room = normalizeProductRoom(roomProp)
   const retryNonce = useDeskModelStore((s) => s.retryNonce)
   const status = useDeskModelStore((s) => s.status)
   const showDesk = useDeskModelStore((s) => s.showDesk)
@@ -94,12 +101,6 @@ export function DormDeskModel({
       }
       setParts(null)
       useDrawerStore.getState().reset()
-    }
-
-    if (forceFallback || !hasFixedFurniture(room)) {
-      clearParts()
-      useDeskModelStore.getState().markSkipped()
-      return
     }
 
     clearParts() // 重新加载前释放旧部件

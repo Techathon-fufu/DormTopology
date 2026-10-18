@@ -19,7 +19,7 @@ export interface DeskConfig {
   width: number
   /** 桌面深度（米），示例 0.6 */
   depth: number
-  /** 桌板厚度（米） */
+  /** 桌板厚度（米），示例 0.03 */
   thickness: number
   /** 桌面上表面离地高度（米），示例 0.75 */
   height: number
@@ -279,6 +279,11 @@ export interface SceneObject {
   name: string
   category: ObjectCategory
   dimensions: ObjectDimensions
+  /**
+   * 等比缩放的基准尺寸（米）。外部功能首次等比缩放时从当前 dimensions 记录一次，
+   * 之后按百分比相对该基准计算，保留初始（如 85%）默认语义。
+   */
+  baseDimensions?: ObjectDimensions
   transform: ObjectTransform
   model: ModelRef
   ports: Port[]
@@ -392,7 +397,7 @@ export interface CableRoute {
   nodeIds?: (string | null)[]
   /** 渲染时是否按平滑曲线（Catmull-Rom）采样 */
   smooth?: boolean
-  /** 本条路径实际采用的走线策略（由线材类型推导；用于「类型变更后需重算」判定） */
+  /** 本条路径实际采用的走线策略（由线型推导；用于「类型变更后需重算」判定） */
   strategy?: CableRouteStrategy
   /** 真实后端沿已验证连续曲线积分得到的长度，不能重新平滑后沿用。 */
   pathLengthM?: number
@@ -438,7 +443,7 @@ export interface CableConnection {
   kind: CableKind
   /** 线径档位（粗 / 细）：未填写时按线缆类型推导（电源 / 视频 / 网线 = 粗线，其余 = 细线） */
   thickness?: CableThickness
-  /** 线材类型：可见线（出线槽）/ 隐藏线（背板后）；未填写时按两端设备名称推断（见 @/scene/cables.ts） */
+  /** 线材类型：可见线（出线槽）/ 隐藏线（背板后）；未填写时按端点设备名称推断 */
   visibility?: CableVisibility
   from: CableEndpoint
   to: CableEndpoint
@@ -486,7 +491,7 @@ export interface LayoutPlan {
   name: string
   kind: 'baseline' | 'current' | 'candidate'
   createdAt: number
-  /** 最近一次重命名 / 复制等变更时间（旧数据缺失时按 createdAt 处理） */
+  /** 最近一次重命名 / 复制等变更时间，用于列表排序（旧数据缺失时按 createdAt 处理） */
   updatedAt?: number
   assignments: LayoutAssignment[]
   /** 场景快照（0.8.0 起随「保存方案」写入；旧数据缺失时按「旧版本方案」展示） */

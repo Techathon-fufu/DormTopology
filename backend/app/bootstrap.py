@@ -21,7 +21,9 @@ from .db.photos import PhotoStore
 from .db.sqlite import SQLiteOrganizationRepository
 from .db.sqlite_store import SQLiteSceneStore
 from .service.executor import LimitedExecutor
+from .service.model_generation import ModelGenerationService
 from .service.organization import OrganizationService
+from .service.recognition import RecognitionService
 from .service.routing import RoutingService
 from .service.scenes import SceneService
 
@@ -29,8 +31,8 @@ from .service.scenes import SceneService
 @dataclass(frozen=True)
 class Settings:
     database_path: str | Path
-    max_workers: int = 2
-    max_pending: int = 8
+    max_workers: int = 16
+    max_pending: int = 64
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     workflow_database_path: str | Path | None = None
     workflow_data_dir: str | Path | None = None
@@ -42,8 +44,8 @@ class Settings:
         )
         return cls(
             database_path=os.environ.get("DORMTOPOLOGY_DB_PATH", str(default)),
-            max_workers=int(os.environ.get("DORMTOPOLOGY_JOB_WORKERS", "2")),
-            max_pending=int(os.environ.get("DORMTOPOLOGY_JOB_CAPACITY", "8")),
+            max_workers=int(os.environ.get("DORMTOPOLOGY_JOB_WORKERS", "16")),
+            max_pending=int(os.environ.get("DORMTOPOLOGY_JOB_CAPACITY", "64")),
             cors_origins=tuple(
                 origin.strip()
                 for origin in os.environ.get(
@@ -121,6 +123,9 @@ def create_app(
             await run_in_threadpool(repository.recover_incomplete_jobs)
 
             organization_service = OrganizationService(repository, executor)
+            routing_service = RoutingService(repository, executor)
+            recognition_service = RecognitionService(repository, executor, data_dir=workflow_data)
+            model_service = ModelGenerationService(repository, executor, data_dir=workflow_data)
 
             scene_store = await run_in_threadpool(SQLiteSceneStore, workflow_db)
             photo_store = await run_in_threadpool(PhotoStore, workflow_data / "photos")
@@ -130,7 +135,9 @@ def create_app(
             )
 
             app.state.organization_service = organization_service
-            app.state.routing_service = RoutingService(repository, executor)
+            app.state.routing_service = routing_service
+            app.state.recognition_service = recognition_service
+            app.state.model_service = model_service
             app.state.workflow_service = workflow_service
             app.state.workflow_photo_store = photo_store
             yield
@@ -168,13 +175,26 @@ def create_app(
     def get_routing_service() -> RoutingService:
         return app.state.routing_service
 
+    def get_recognition_service() -> RecognitionService:
+        return app.state.recognition_service
+
+    def get_model_service() -> ModelGenerationService:
+        return app.state.model_service
+
     def get_workflow_service() -> SceneService:
         return app.state.workflow_service
 
     def get_workflow_photos() -> PhotoStore:
         return app.state.workflow_photo_store
 
-    app.include_router(create_router(get_service, get_routing_service))
+    app.include_router(
+        create_router(
+            get_service,
+            get_routing_service,
+            get_recognition_service,
+            get_model_service,
+        )
+    )
     app.include_router(build_workflow_router(get_workflow_service, get_workflow_photos))
 
     return app

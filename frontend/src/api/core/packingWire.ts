@@ -56,6 +56,7 @@ export interface SceneBox {
 }
 
 export interface RoutingGraph {
+  spatial_cost_policy?: import('@/scene/routingPolicy').SpatialCostPolicy
   path_style?: 'smooth' | 'orthogonal'
   nodes: Array<{ id: string; position: Vec3; kind: 'corner' | 'slot' | 'fixing_point' | 'endpoint' }>
   edges: Array<{ id: string; from_node_id: string; to_node_id: string; modes: Array<'slot' | 'backboard'>; clearance_radius_m: number; exposed: boolean }>
@@ -265,6 +266,7 @@ export function toPackingScene(input: {
       placement_priority: shape === 'monitor' ? 100 : workstation && shape === 'laptop' ? 95 : shape === 'printer' ? 90 : workstation && shape === 'lamp' ? 80 : object.frequent ? 60 : 20,
       allowed_region_ids: allowedRegions, preferred_region_ids: preferred.filter((id) => allowedRegions.includes(id)),
       allowed_rotations_y_rad: workstation && shape === 'laptop' ? [workstation.laptop.rotationY]
+        : shape === 'computerTower' ? [...new Set([Math.atan2(Math.sin(object.transform.rotationY), Math.cos(object.transform.rotationY)), 0, Math.PI / 2])]
         : shape === 'monitor' || shape === 'printer' || desktopBinding(object, room) || (workstation && (shape === 'keyboard' || shape === 'mouse')) ? [0] : [0, Math.PI / 2],
       collision: exportCollision(object), ports, image_url: null, model_url: object.model.assetUrl ? assertAssetUrl(object.model.assetUrl) : null,
       generation: { task_id: null, status: 'not_requested', source: object.model.assetUrl ? object.model.source === 'generated' ? 'live' : 'cache' : 'placeholder', error: null },
@@ -285,6 +287,7 @@ export function toPackingScene(input: {
 
 export function packingBaseline(baseline: LayoutPlan, input: Parameters<typeof toPackingScene>[0]): PackingScene {
   if (baseline.projectId !== input.projectId || !baseline.scene) throw new ApiError('请重新采集包含完整场景的整理前快照', { kind: 'input' })
+  if (hasFixedFurniture(input.room) && !hasFixedFurniture(baseline.scene.room)) throw new ApiError('旧基线使用已停用的桌体，请基于当前固定模型重新采集整理前快照', { kind: 'input' })
   return toPackingScene({ ...input, room: baseline.scene.room, objects: baseline.scene.objects })
 }
 
@@ -344,7 +347,7 @@ export interface PackingMapContext {
 }
 
 export function organizationInputSignature(input: { objects: SceneObject[]; room: RoomConfig; preferences: OrganizationPreferences }): string {
-  return JSON.stringify([input.objects, input.room, input.preferences, { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M }])
+  return JSON.stringify(['prefab-rear-passage-v3', input.objects, input.room, input.preferences, { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M }])
 }
 
 export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContext): OrganizationPlan {
@@ -423,6 +426,8 @@ export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContex
   if (pending.size) fail('整理结果未覆盖所有输入物品')
   const localIssues: OrganizationIssue[] = targets.flatMap((object) => placementIssues(object, object.transform.position, targets, ctx.room).map((issue) => ({ entity_id: object.id, code: issue.type, message: issue.message })))
   if (hasFixedFurniture(ctx.room)) for (const target of targets) {
+    // Fixed/locked objects retain their validated original support, rather than a new storage target.
+    if (target.fixed || target.locked) continue
     const constrained = ['monitor', 'laptop', 'keyboard', 'mouse'].includes(target.model.shape ?? '')
       || target.model.prefabId === 'mousepad' || isDailyMiscellaneous(target) || isStudyItem(target)
     if (!constrained) continue

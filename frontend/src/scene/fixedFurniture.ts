@@ -56,7 +56,18 @@ export function blockingDrawerOpening(object: SceneObject, position: Vec3, room:
 
 export function hasFixedFurniture(room: RoomConfig): boolean { return room.furnitureModel === 'dormdesk-v1' }
 const translate = (v: number[]): Vec3 => v.map((n, i) => +(n + FURNITURE_OFFSET[i]).toFixed(6)) as Vec3
-export const fixedFurnitureBoxes: FurnitureBox[] = asset.parts.map((p) => ({ name: p.name, min: translate(p.min), max: translate(p.max) }))
+export const fixedFurnitureBoxes: FurnitureBox[] = asset.parts.flatMap((p) => p.name === 'Desk_Top_Main'
+  ? [...asset.desktopSolids].sort((a, b) => Number(b.name === 'Desk_Top_Main') - Number(a.name === 'Desk_Top_Main')) : [p])
+  .map((p) => ({ name: p.name, min: translate(p.min), max: translate(p.max) }))
+/** Authored rear-edge notch, measured from the GLB vertex grid (not a user-created hole). */
+export const rearCablePassage = { min: translate(asset.rearPassages[0].min), max: translate(asset.rearPassages[0].max) }
+
+/** Routing policy only: never route over or along the top of the rear baffle. */
+export function baffleTopExclusion(room: RoomConfig): FurnitureBox {
+  const baffle = fixedFurnitureBoxes.find(p => p.name === 'Desk_Back_Baffle')!
+  return { name: 'routing:no-baffle-top', min: [baffle.min[0], baffle.max[1], baffle.min[2] - .04],
+    max: [baffle.max[0], Math.max(room.height, baffle.max[1] + .1), baffle.max[2] + .015] }
+}
 
 /** Geometry comes only from the prefab asset; saved hole settings cannot cut it. */
 export function furnitureBoxes(_room: RoomConfig, offsets: DrawerOffsets = {}): FurnitureBox[] {
@@ -68,7 +79,7 @@ export function furnitureBoxes(_room: RoomConfig, offsets: DrawerOffsets = {}): 
   })
 }
 
-/** dormdesk-v1 has no modeled tabletop apertures. Legacy parametric rooms retain their own holes. */
+/** Circular user holes are retired; the authored rear notch is rearCablePassage. The solid prefab has no user-defined tabletop apertures. */
 export function effectiveCableHoles(room: RoomConfig): RoomConfig['cableHoles'] {
   return hasFixedFurniture(room) ? [] : room.cableHoles
 }
@@ -80,9 +91,11 @@ function surface(id: string, kind: FurnitureSurface['kind'], label: string, boun
 
 /** Actual free interiors, excluding the divider boards and drawer shells. */
 export function furnitureSurfaces(_room: RoomConfig, _legacyCutHoles = true, offsets: DrawerOffsets = {}): FurnitureSurface[] {
-  // Retain the second argument for existing callers; prefab surfaces are always solid.
+  // Retain the second argument for existing callers; prefab surfaces are always solid and follow the authored regions.
   const desks = fixedFurnitureBoxes.filter((p) => p.name.startsWith('Desk_Top_'))
-    .map((p) => surface(`support-${p.name}`, 'desk', p.name.includes('Main') ? '主桌面' : '右侧回台', [p.min[0], p.max[0], p.min[2], p.max[2]], p.max[1], 1.88))
+    .map((p) => surface(`support-${p.name}`, 'desk', p.name.includes('Main') ? '主桌面' : '右侧回台',
+      [p.min[0], p.max[0], p.min[2], p.name.startsWith('Desk_Top_Main_Rear_')
+        ? fixedFurnitureBoxes.find(b => b.name === 'Desk_Top_Main')!.max[2] : p.max[2]], p.max[1], 1.88))
   const shelves = [
     surface('support-shelf-1-low', 'shelf', '书架左格下层', [-.43, -.11, .04, .29], 1.46, 1.652),
     surface('support-shelf-1-high', 'shelf', '书架左格上层', [-.43, -.11, .04, .29], 1.668, 1.86),
@@ -105,7 +118,7 @@ export function furnitureSurfaces(_room: RoomConfig, _legacyCutHoles = true, off
   })
 }
 
-/** No hole is valid until it is declared by the prefab geometry itself. */
+/** No user-defined circular hole is valid on the fixed prefab; the authored rear notch is rearCablePassage. */
 export function validFurnitureHole(_room: RoomConfig, _position: Vec3, _diameter: number): boolean {
   return false
 }

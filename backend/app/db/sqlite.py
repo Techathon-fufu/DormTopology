@@ -12,6 +12,9 @@ from ..service.errors import Conflict, NotFound
 from ..service.ports import SceneRecord
 
 
+TERMINAL_STANDALONE_STATUSES = ("cancelled", "failed", "succeeded")
+
+
 def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -56,6 +59,12 @@ class SQLiteOrganizationRepository:
                 snapshot TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS jobs_scene ON jobs(scene_id, scene_revision);
+            CREATE TABLE IF NOT EXISTS standalone_jobs (
+                job_id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                status TEXT NOT NULL,
+                envelope TEXT NOT NULL
+            );
             """
             )
 
@@ -207,12 +216,63 @@ class SQLiteOrganizationRepository:
                 ),
             )
 
+    def create_standalone_job(self, envelope: dict) -> None:
+        with self._transaction() as connection:
+            connection.execute(
+                "INSERT INTO standalone_jobs (job_id, kind, status, envelope) VALUES (?, ?, ?, ?)",
+                (envelope["job_id"], envelope["kind"], envelope["status"], encode(envelope)),
+            )
+
+    def update_standalone_job(
+        self,
+        job_id: str,
+        *,
+        status: str | None = None,
+        stage: str | None = None,
+        progress: float | None = None,
+        result: dict | None = None,
+        error: dict | None = None,
+    ) -> dict | None:
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT status, envelope FROM standalone_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            envelope = json.loads(row["envelope"])
+            # Once a standalone job reaches a terminal state, later writes must
+            # not resurrect it or mutate the retained terminal envelope.
+            if row["status"] in TERMINAL_STANDALONE_STATUSES:
+                return envelope
+            if status is not None:
+                envelope["status"] = status
+            if stage is not None:
+                envelope["stage"] = stage
+            if progress is not None:
+                envelope["progress"] = progress
+            if result is not None:
+                envelope["result"] = result
+            if error is not None:
+                envelope["error"] = error
+            envelope["updated_at"] = timestamp()
+            connection.execute(
+                "UPDATE standalone_jobs SET status = ?, envelope = ? WHERE job_id = ?",
+                (envelope["status"], encode(envelope), job_id),
+            )
+            return envelope
+
     def get_job(self, job_id: str) -> dict | None:
         with self._read() as connection:
             row = connection.execute(
                 "SELECT envelope FROM jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
-        return json.loads(row["envelope"]) if row else None
+            if row:
+                return json.loads(row["envelope"])
+            row = connection.execute(
+                "SELECT envelope FROM standalone_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            return json.loads(row["envelope"]) if row else None
 
     def claim_job(self, job_id: str) -> bool:
         with self._transaction() as connection:
@@ -274,15 +334,29 @@ class SQLiteOrganizationRepository:
             row = connection.execute(
                 "SELECT * FROM jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
-            if row is None:
+            if row is not None:
+                envelope = json.loads(row["envelope"])
+                if row["status"] in ("queued", "running"):
+                    envelope.update(
+                        status="cancelled", stage="Cancelled", updated_at=timestamp()
+                    )
+                    connection.execute(
+                        "UPDATE jobs SET status = 'cancelled', envelope = ? WHERE job_id = ?",
+                        (encode(envelope), job_id),
+                    )
+                return envelope
+            standalone_row = connection.execute(
+                "SELECT * FROM standalone_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            if standalone_row is None:
                 raise NotFound("Job not found")
-            envelope = json.loads(row["envelope"])
-            if row["status"] in ("queued", "running"):
+            envelope = json.loads(standalone_row["envelope"])
+            if standalone_row["status"] in ("queued", "running"):
                 envelope.update(
                     status="cancelled", stage="Cancelled", updated_at=timestamp()
                 )
                 connection.execute(
-                    "UPDATE jobs SET status = 'cancelled', envelope = ? WHERE job_id = ?",
+                    "UPDATE standalone_jobs SET status = 'cancelled', envelope = ? WHERE job_id = ?",
                     (encode(envelope), job_id),
                 )
             return envelope
@@ -346,6 +420,24 @@ class SQLiteOrganizationRepository:
                 )
                 connection.execute(
                     "UPDATE jobs SET status = 'failed', envelope = ? WHERE job_id = ?",
+                    (encode(envelope), row["job_id"]),
+                )
+            standalone_rows = connection.execute(
+                "SELECT job_id, envelope FROM standalone_jobs WHERE status IN ('queued', 'running')"
+            ).fetchall()
+            for row in standalone_rows:
+                envelope = json.loads(row["envelope"])
+                envelope.update(
+                    status="failed",
+                    stage="Service restarted",
+                    updated_at=timestamp(),
+                    error={
+                        "code": "interrupted",
+                        "message": "Service restarted; submit a new task",
+                    },
+                )
+                connection.execute(
+                    "UPDATE standalone_jobs SET status = 'failed', envelope = ? WHERE job_id = ?",
                     (encode(envelope), row["job_id"]),
                 )
 

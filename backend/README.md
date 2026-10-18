@@ -1,6 +1,6 @@
 # DormTopology 3D 后端核心实现层
 
-本目录包含领域算法、整理与走线应用服务、SQLite 持久化、FastAPI 接口，以及独立的外部服务适配器与脚本。整理服务调用真实 `plan_packing`，走线服务调用真实 `plan_routing`；照片识别、Rodin 和独立布局规划的应用接口尚未接入，返回 HTTP 501，独立脚本不等于应用接口验收。
+本目录包含领域算法、整理与走线应用服务、SQLite 持久化、FastAPI 接口，以及独立的外部服务适配器与脚本。整理服务调用真实 `plan_packing`，走线服务调用真实 `plan_routing`；照片识别与 Rodin 已接入后台任务及轮询；真实供应商调用仍需本机配置凭据并单独验收，预制模型匹配不算真实 Rodin。独立布局规划接口仍返回 HTTP 501。
 
 ## 启动规划服务
 
@@ -18,8 +18,8 @@ python3 -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `DORMTOPOLOGY_DB_PATH` | `~/.local/share/dormtopology/organization.sqlite3` | SQLite 场景、不可变基线和任务持久化；自动建立父目录 |
-| `DORMTOPOLOGY_JOB_WORKERS` | `2` | 整理与走线共用的后台工作线程数 |
-| `DORMTOPOLOGY_JOB_CAPACITY` | `8` | 运行和排队任务总上限，必须不小于工作线程数；满时 HTTP 503 |
+| `DORMTOPOLOGY_JOB_WORKERS` | `16` | 整理与走线共用的后台工作线程数 |
+| `DORMTOPOLOGY_JOB_CAPACITY` | `64` | 运行和排队任务总上限，必须不小于工作线程数；满时 HTTP 503 |
 | `DORMTOPOLOGY_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | 允许直接跨域访问的前端来源，逗号分隔；使用同源代理无需额外设置 |
 
 运行一个后端进程。每个 SQLite 读取或事务独立创建并关闭连接，算法在写事务之外执行。应用 lifespan 统一创建服务与执行器，关闭时等待后台工作退出；重新启动后未完成任务变为 `failed`，错误代码 `interrupted`，允许用户重新提交。取消会阻止结果发布；已开始的 Python 算法会完成当前计算后释放执行容量。
@@ -53,7 +53,7 @@ python3 -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 
 走线 `algorithm_version` 为 `routing-1.0`。输入 `length_m` 允许为 `null`，未知现有线长也能规划并计算所需长度 `path_length_m + slack_m`；已知线长仍须为有限正数并校验是否足够。任务 `succeeded` 仅表示计算结束，仍须检查结果 `status` 与每根线的 `valid` / `failed`；线长不足等失败结果不含路径、控制点或有效长度。缺失原始实测路径时基线暴露长度为 `null`。未配置安装支撑策略的场景返回 `support_check.status: "not_evaluated"`，不代表已验证施工可行性。独立 `validate_routing` / `measure_exposed_length`、产品安装件编辑与确认、真实布局应用后三线全流程及正式指南仍待验收。
 
-错误结构为 `{error: {code, message, field?}, detail?}`；HTTP 422 表示结构、引用或确认状态错误，404 表示资源不存在，409 表示冲突，503 表示任务容量已满。`POST /recognition`、`/models/generate`、`/layout/plan` 明确返回 501。
+错误结构为 `{error: {code, message, field?}, detail?}`；HTTP 422 表示结构、引用或确认状态错误，404 表示资源不存在，409 表示冲突，503 表示任务容量已满。`POST /recognition` 和 `/models/generate` 返回 202 后轮询 `/jobs/{job_id}`；`/layout/plan` 返回 501。
 
 ## 验证
 

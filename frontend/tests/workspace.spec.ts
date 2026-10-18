@@ -180,7 +180,8 @@ test('uses the solid prefab desktop in setup without invented hole controls', as
   await expect(page.getByLabel('离桌高度（最下层）', { exact: true })).toHaveCount(0)
   await expect(page.getByText('未发现数值越界或明显结构冲突', { exact: true })).toBeVisible()
   await expectNonblankCanvas(page)
-  await expect(page.getByText('正式桌面没有穿线孔，按模型原样显示；线缆沿桌后边缘走线。')).toBeVisible()
+  // 桌体 GLB 自带后沿出线缺口，正式桌面按模型原样显示；线缆沿桌后缺口走线，不翻越背板顶沿。
+  await expect(page.getByText('固定 L 形床桌；线缆经后沿长槽进入桌下，不翻越背板顶沿。')).toBeVisible()
   await expect(page.getByLabel('孔 X（左右）', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '前往照片导入', exact: true })).toBeEnabled()
   await attachViewport(page, testInfo, 'fixed-furniture-setup')

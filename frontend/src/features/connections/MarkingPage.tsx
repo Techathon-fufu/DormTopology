@@ -53,7 +53,9 @@ export function MarkingPage({
   const audit = useMemo(() => auditConnections(project), [project])
   const object = project.objects.find((o) => o.id === target)
 
+
   // 换物品或重新进入页面即开始取点；未保存草稿不跨物品保留。
+  // 从右键菜单切换到另一件物品时同步目标；不重置已打开的草稿以外的东西。
   useEffect(() => {
     pendingRelocation.current = null
     setDraft(null)

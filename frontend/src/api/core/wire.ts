@@ -686,7 +686,7 @@ export function mapModelGenerationResult(wire: unknown, fallbackObjectId: string
   const failed = data.status === 'failed'
   const noteParts = [
     typeof data.note === 'string' && data.note ? data.note : undefined,
-    assetUrl ? '后端已生成模型资产；三维场景暂未接入 URL 模型渲染（物品仍为占位几何）' : undefined,
+    assetUrl ? '3D 模型资产已就绪并接入场景渲染' : undefined,
     warnings.length > 0 ? `本地校验：${warnings.join('；')}` : undefined,
   ]
   return {

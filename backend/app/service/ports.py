@@ -36,6 +36,19 @@ class OrganizationRepository(Protocol):
 
     def create_job(self, envelope: dict, snapshot: Scene) -> None: ...
 
+    def create_standalone_job(self, envelope: dict) -> None: ...
+
+    def update_standalone_job(
+        self,
+        job_id: str,
+        *,
+        status: str | None = None,
+        stage: str | None = None,
+        progress: float | None = None,
+        result: dict | None = None,
+        error: dict | None = None,
+    ) -> dict | None: ...
+
     def get_job(self, job_id: str) -> dict | None: ...
 
     def claim_job(self, job_id: str) -> bool: ...

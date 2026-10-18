@@ -223,6 +223,11 @@ def _choose(
                     int(bool(preferred_regions) and not any(
                         fits_region(candidate, region) for region in preferred_regions
                     )),
+                    # Towers keep their front facing the user: within the
+                    # preferred storage tier, translate before trying rotation.
+                    int(original["category"] == "computerTower" and abs(math.remainder(
+                        candidate["rotation_y_rad"] - original["rotation_y_rad"], 2 * math.pi
+                    )) > 1e-8),
                     _port_access_cost(candidate, placed_geometry, placed_leadouts),
                     int(original["category"] in BOOK_CATEGORIES and upright(candidate)
                         and candidate["rotation_y_rad"] != (

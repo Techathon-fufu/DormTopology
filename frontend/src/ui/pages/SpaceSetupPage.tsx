@@ -86,6 +86,7 @@ function SectionCard({
   )
 }
 
+/** 空间配置页：床桌 / 房间 / 立柱 / 书架为固定模型；仅后墙插座左右位置可调节，实时同步三维预览 */
 export function SpaceSetupPage() {
   const { id } = useParams<{ id: string }>()
   const project = useProject(id)
@@ -278,7 +279,7 @@ export function SpaceSetupPage() {
             <h2 className="mb-2 text-sm font-semibold">三维预览</h2>
             <SpacePreview3D room={previewRoom} />
             <p className="mt-2 text-xs leading-relaxed text-faint">
-              {form.furnitureModel ? 'L 形床桌' : '标准床桌'}
+              固定 L 形床桌；线缆经后沿长槽进入桌下，不翻越背板顶沿。
             </p>
             {form.furnitureModel ? (
               <p className="mt-1 text-xs leading-relaxed text-faint">

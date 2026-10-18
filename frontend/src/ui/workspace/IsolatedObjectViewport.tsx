@@ -25,7 +25,7 @@ export function IsolatedObjectViewport({ project, objectId }: { project: Project
   const object = project.objects.find((o) => o.id === objectId)
   if (!object) return null
   const isolated = { ...project, objects: [object], cables: [] }
-  return <div className="absolute inset-x-0 bottom-[48%] top-14 sm:bottom-0 sm:right-[344px]" aria-label={`单独预览：${object.name}`}>
+  return <div className="absolute inset-x-0 bottom-0 top-14 right-[344px]" aria-label={`单独预览：${object.name}`}>
     <Canvas camera={{ fov: 40 }} dpr={[1, 2]}>
       <color attach="background" args={['#F4F1EA']} />
       <ambientLight intensity={1.1} />

@@ -8,6 +8,8 @@ import { cableRoutingObjectsSignature, endpointOf, invalidateCableRoutes } from 
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { useCableStore } from './cableStore'
 import { usePlansStore } from './plansStore'
+import { normalizeProductRoom } from '@/data/fixedRoom'
+import { repairDuplicatePortIds } from '@/scene/portIds'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -17,12 +19,13 @@ import { usePlansStore } from './plansStore'
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 定向迁移或归档重种。
  */
-const PROJECTS_PERSIST_VERSION = 5
+const PROJECTS_PERSIST_VERSION = 7
 
 /** Drop unsupported saved apertures without moving any objects or rewriting baselines. */
 export function migratePrefabDesktop(project: Project, invalidate = false): Project {
-  if (project.room.furnitureModel !== 'dormdesk-v1' || (!invalidate && !project.room.cableHoles.length)) return project
-  return { ...project, room: { ...project.room, cableHoles: [] },
+  const room = normalizeProductRoom(project.room)
+  if (!invalidate && room === project.room) return project
+  return { ...project, room,
     cables: invalidateCableRoutes(project.cables ?? []), cableTrayAnalysis: undefined }
 }
 
@@ -171,7 +174,7 @@ export const useProjectsStore = create<ProjectsState>()(
         }))
       },
       upsert(project) {
-        project = migratePrefabDesktop(project)
+        project = repairDuplicatePortIds(migratePrefabDesktop(project))
         set((s) => ({
           projects: { ...s.projects, [project.id]: { ...project, updatedAt: Date.now() } },
         }))
@@ -179,7 +182,7 @@ export const useProjectsStore = create<ProjectsState>()(
       update(id, updater) {
         const p = get().projects[id]
         if (!p) return
-        const next = migratePrefabDesktop(updater(p))
+        const next = repairDuplicatePortIds(migratePrefabDesktop(updater(p)))
         const routingChanged = JSON.stringify(p.room) !== JSON.stringify(next.room)
           || JSON.stringify(resolveOrganizationPreferences(p)) !== JSON.stringify(resolveOrganizationPreferences(next))
           || cableRoutingObjectsSignature(p.objects) !== cableRoutingObjectsSignature(next.objects)
@@ -221,6 +224,7 @@ export const useProjectsStore = create<ProjectsState>()(
        * v2 → v3（0.9.0）：墙面插座收敛为一块「双插孔 ×2」面板（合并历史左右两个独立插座）；
        *   示例项目同时按最新示例数据重种，用户自建项目仅归一插座，其余字段原样保留。
        * v3 → v4：移除旧预制桌面的虚构孔位；v4 → v5：合并显式创建草稿，保留已有标记、不按 stage 推断。
+       * v5 → v6：预制桌面归一化不再移动物品或重写基线；v6 → v7：修复重复的接口 id（保留端口语义）。
        */
       migrate: (persisted, from) => {
         const state = persisted as Partial<ProjectsState> | undefined
@@ -240,8 +244,11 @@ export const useProjectsStore = create<ProjectsState>()(
             }
           }
         }
-        if (from < 4) for (const [id, p] of Object.entries(projects)) {
+        if (from < 6) for (const [id, p] of Object.entries(projects)) {
           if (p?.room) projects[id] = migratePrefabDesktop(p, true)
+        }
+        if (from < 7) for (const [id, p] of Object.entries(projects)) {
+          if (p?.objects && p?.cables) projects[id] = repairDuplicatePortIds(p)
         }
         // ensureDemo archives the previous seed after hydration, including schema migrations.
         return { ...state, projects, creationDrafts: state.creationDrafts ?? {} } as ProjectsState

@@ -62,6 +62,7 @@ export type ObjectPatch = Partial<
     | 'locked'
     | 'frequent'
     | 'powerStrip'
+    | 'baseDimensions'
   >
 > & {
   transform?: Partial<SceneObject['transform']>
