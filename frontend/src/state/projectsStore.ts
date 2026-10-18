@@ -8,6 +8,7 @@ import { cableRoutingObjectsSignature, endpointOf, invalidateCableRoutes } from 
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { useCableStore } from './cableStore'
 import { usePlansStore } from './plansStore'
+import { normalizeProductRoom } from '@/data/fixedRoom'
 
 /**
  * 项目元数据与场景配置（localStorage 持久化）。
@@ -17,12 +18,13 @@ import { usePlansStore } from './plansStore'
  * - `PROJECTS_PERSIST_VERSION`：持久化 schema 版本。字段结构变化时 +1，并用 migrate 转换旧数据。
  * - `DEMO_SEED_VERSION`：内置示例项目的数据版本。示例场景内容变化时 +1，由 ensureDemo 重种。
  */
-const PROJECTS_PERSIST_VERSION = 4
+const PROJECTS_PERSIST_VERSION = 5
 
 /** Drop unsupported saved apertures without moving any objects or rewriting baselines. */
 export function migratePrefabDesktop(project: Project, invalidate = false): Project {
-  if (project.room.furnitureModel !== 'dormdesk-v1' || (!invalidate && !project.room.cableHoles.length)) return project
-  return { ...project, room: { ...project.room, cableHoles: [] },
+  const room = normalizeProductRoom(project.room)
+  if (!invalidate && room === project.room) return project
+  return { ...project, room,
     cables: invalidateCableRoutes(project.cables ?? []), cableTrayAnalysis: undefined }
 }
 
@@ -209,7 +211,7 @@ export const useProjectsStore = create<ProjectsState>()(
             }
           }
         }
-        if (from < 4) for (const [id, p] of Object.entries(projects)) {
+        if (from < 5) for (const [id, p] of Object.entries(projects)) {
           if (p?.room) projects[id] = migratePrefabDesktop(p, true)
         }
         // ensureDemo archives the previous seed after hydration, including schema migrations.

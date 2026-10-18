@@ -1,3 +1,4 @@
+import { normalizeProductRoom } from '@/data/fixedRoom'
 import type {
   CableConnection,
   LayoutPlan,
@@ -275,7 +276,7 @@ export function resolvePlanScene(plan: LayoutPlan, project: Project): ResolvedPl
       planId: plan.id,
       objects: plan.scene.objects,
       cables: plan.scene.cables,
-      room: plan.scene.room,
+      room: normalizeProductRoom(plan.scene.room),
       fallback: false,
     }
   }

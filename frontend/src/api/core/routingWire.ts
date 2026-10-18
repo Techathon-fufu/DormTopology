@@ -5,7 +5,7 @@ import type { OrganizationSceneRef } from '@/types/organization'
 import { resolveOrganizationPreferences } from '@/types/organization'
 import { isPowerSourcePort, resolveCableThickness, resolveCableVisibility } from '@/scene/cables'
 import { resolvePortOffset } from '@/scene/ports'
-import { furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
+import { baffleTopExclusion, furnitureSurfaces, hasFixedFurniture } from '@/scene/fixedFurniture'
 import { cableMountVolume, mountToRoutingSupport, mountToTrayCandidate, resolveCableManagement } from '@/scene/cableManagement'
 import { parseRouting } from '@/algorithm-lab/contract'
 import { ApiError } from './errors'
@@ -22,7 +22,7 @@ function record(value: unknown): Record<string, unknown> {
 
 /** Include obstacles and all cables: another device or route can invalidate this result. */
 export function cablePlanningInputSignature(project: Project): string {
-  return JSON.stringify(['prefab-solid-desktop-v2', project.id, project.room,
+  return JSON.stringify(['prefab-rear-passage-v3', project.id, project.room,
     project.objects.map(({ model, ...object }) => ({ ...object, modelShape: model.shape, prefabId: model.prefabId })),
     project.cables, resolveOrganizationPreferences(project)])
 }
@@ -134,6 +134,10 @@ export function toRoutingScene(input: { project: Project; confirmed: boolean; re
   scene.routing_graph = buildOrthogonalRoutingGraph(project)
   if (scene.routing_graph.edges.some((edge) => edge.clearance_radius_m <= 0)) throw new ApiError('出线孔过小，无法配置线缆净空', { kind: 'input' })
   scene.reserved_zones = []
+  if (hasFixedFurniture(project.room)) {
+    const cap = baffleTopExclusion(project.room)
+    scene.reserved_zones.push({ id: cap.name, min: toPackingPosition(cap.min, project.room), max: toPackingPosition(cap.max, project.room) })
+  }
   applyCableManagement(scene, project)
   scene.exposure_zones = hasFixedFurniture(project.room) ? furnitureSurfaces(project.room, false).filter((s) => s.kind === 'desk').map((s) => ({ id: `routing:exposure-${s.id}`, min: toPackingPosition([s.rect.x0, s.y, s.rect.z0], project.room), max: toPackingPosition([s.rect.x1, project.room.height, s.rect.z1], project.room) }))
     : [{ id: 'routing:exposure-desktop', min: [0, project.room.desk.height, 0], max: [project.room.desk.width, project.room.height, project.room.desk.depth] }]

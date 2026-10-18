@@ -1,7 +1,8 @@
+import { normalizeProductRoom } from '@/data/fixedRoom'
 import { Grid } from '@react-three/drei'
 import type { RoomConfig } from '@/types/project'
 import { effectiveCableHoles, hasFixedFurniture } from './fixedFurniture'
-import { ParametricDesk } from './ParametricDesk'
+import { DormDeskModel } from './DormDeskModel'
 import { boxGeometry, standardMaterial, torusGeometry } from './resources'
 
 const WALL = '#EFECE6'
@@ -11,28 +12,29 @@ const METAL = '#3A3F45'
 /**
  * 房间外壳与床架结构：地面 / 墙面 / 网格 + 床架横梁 / 床板 / 梯子 + 墙面插座。
  * 坐标约定：后墙位于 z = 0，房间向 +z 展开，x 以桌面中心为 0（米）。
- * 桌体（桌面 / 桌腿 / 书架搁板 / 立柱 / 出线孔）拆分为 ParametricDesk：
- * - deskMode='parametric'（默认）：与既有一致（空间配置预览 / 交付页三维视图沿用）；
+ * 桌体由 DormDeskModel 统一加载：
+ * - deskMode='model'（默认）：加载唯一正式桌体及三个抽屉；
  * - deskMode='none'：工作台视口使用，桌体由 DormDeskModel 决策渲染 GLB 或回退参数化几何。
  * 所有部件使用共享几何体 / 材质缓存（横梁、梯子横档等重复件只创建一次）。
  */
 export function RoomShell({
   room,
-  deskMode = 'parametric',
+  deskMode = 'model',
   showBed = true,
   showCableHoles = false,
 }: {
   room: RoomConfig
-  /** 'parametric' 渲染参数化桌体（默认）；'none' 不渲染桌体（由 DormDeskModel 接管） */
-  deskMode?: 'parametric' | 'none'
+  /** Render the only supported GLB, or let the caller mount the same model. */
+  deskMode?: 'model' | 'none'
   /** Display-only cutaway; collision geometry is unchanged. */
   showBed?: boolean
   /**
-   * 叠加逻辑出线孔标记（工作台 GLB 模式用：模型无孔位节点，出线孔仍以 RoomConfig 为事实来源；
+   * 叠加逻辑出线孔标记（工作台 GLB 模式用：固定家具圆孔集合为空，原生长槽直接来自 GLB；
    * 参数化模式由 ParametricDesk 渲染，勿同时开启以免重复）。
    */
   showCableHoles?: boolean
 }) {
+  room = normalizeProductRoom(room)
   const L = room.length
   const D = room.width
   const H = room.height
@@ -84,8 +86,8 @@ export function RoomShell({
         fadeStrength={1.4}
       />
 
-      {/* 桌体（参数化简化几何）：工作台由 DormDeskModel 接管；桌面 / 桌腿 / 书架 / 立柱 / 出线孔见 ParametricDesk */}
-      {deskMode === 'parametric' ? <ParametricDesk room={room} hideBedParts={!showBed} /> : null}
+      {/* 所有页面共用正式桌体；加载失败仅显示同源简化几何 */}
+      {deskMode === 'model' ? <DormDeskModel room={room} hideBedParts={!showBed} respectToolbar={false} /> : null}
 
       {/* 逻辑出线孔标记（工作台 GLB 模式叠加；参数化模式见 ParametricDesk） */}
       {showCableHoles

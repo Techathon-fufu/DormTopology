@@ -19,7 +19,7 @@ import { disposeObject3D, loadModelFromUrl } from '@/scene/modelLoader'
 import { ParametricDesk } from '@/scene/ParametricDesk'
 import { useDeskModelStore } from '@/state/deskModelStore'
 import { useDrawerStore } from '@/state/drawerStore'
-import { hasFixedFurniture } from './fixedFurniture'
+import { normalizeProductRoom } from '@/data/fixedRoom'
 
 /**
  * 桌体渲染：加载 models/dormdesk_parts/dormdesk_body.glb（无抽屉桌体）与三只抽屉分离件
@@ -28,7 +28,7 @@ import { hasFixedFurniture } from './fixedFurniture'
  *
  * 固定家具（hasFixedFurniture）走 fixedFurniture 提供的支撑 / 碰撞与共同父节点偏移
  * （FURNITURE_OFFSET 由 mountDeskModel 施加），完整显示模型定义的桌板，不程序开孔。
- * 非固定家具沿用历史归一化路径。
+ * 产品不提供其他家具模型入口。
  *
  * 抽屉推拉：每只抽屉包一层滑动组，逐帧由 drawerStore 的 progress 驱动
  * （单击开 / 关、拖拽跟手、松手吸附；交互见 scene/useDrawerInteraction.ts）。
@@ -65,7 +65,7 @@ export function DormDeskModel({
   /** 显示-only 剖切：俯视时隐藏床体 / 护栏 / 爬梯（整组家具模型；碰撞与校验几何不变） */
   hideBedParts?: boolean
 }) {
-  const forceFallback = useDeskModelStore((s) => s.forceFallback)
+  room = normalizeProductRoom(room)
   const retryNonce = useDeskModelStore((s) => s.retryNonce)
   const status = useDeskModelStore((s) => s.status)
   const showDesk = useDeskModelStore((s) => s.showDesk)
@@ -93,12 +93,6 @@ export function DormDeskModel({
       }
       setParts(null)
       useDrawerStore.getState().reset()
-    }
-
-    if (forceFallback || !hasFixedFurniture(room)) {
-      clearParts()
-      useDeskModelStore.getState().markSkipped()
-      return
     }
 
     clearParts() // 重新加载前释放旧部件
@@ -153,7 +147,7 @@ export function DormDeskModel({
     }
     // roomShapeKey 覆盖归一化依赖的桌面 / 书架尺寸；room 其余字段（如位置微调）不触发重载
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forceFallback, retryNonce, roomShapeKey])
+  }, [retryNonce, roomShapeKey])
 
   // 显示-only 剖切（俯视）：隐藏床体 / 护栏 / 爬梯，便于查看桌面与地面布局
   useEffect(() => {
@@ -185,7 +179,7 @@ export function DormDeskModel({
     }
   })
 
-  const useGlb = hasFixedFurniture(room) && !forceFallback && status === 'loaded' && parts !== null
+  const useGlb = status === 'loaded' && parts !== null
   return (
     <group position={position} rotation={[0, rotationY, 0]} visible={(respectToolbar ? showDesk : true) && visible}>
       {useGlb && parts ? (

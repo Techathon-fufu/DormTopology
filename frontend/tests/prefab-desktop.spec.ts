@@ -18,8 +18,11 @@ async function desktopMeshes(page: Page) {
     return rows
   })
 }
-for (const route of ['/routing-demo', '/projects/demo-dorm-101/workspace']) {
+for (const route of ['/routing-demo', '/projects/demo-dorm-101/workspace', '/projects/demo-dorm-101/setup', '/projects/demo-dorm-101/result']) {
   test(`original prefab tabletops remain visible at ${route}`, async ({ page }, testInfo) => {
+    await page.addInitScript(() => localStorage.setItem('dormtopology.desk-model', JSON.stringify({
+      version: 1, state: { forceFallback: true, showDesk: true },
+    })))
     const errors: string[] = [], assets = new Set<string>()
     page.on('pageerror', e => errors.push(e.message))
     page.on('response', response => {
@@ -34,6 +37,8 @@ for (const route of ['/routing-demo', '/projects/demo-dorm-101/workspace']) {
       await expect(page.getByText('7 / 7', { exact: true })).toBeVisible()
       await expect(page.getByText('穿孔走线', { exact: false })).toHaveCount(0)
       await page.getByRole('button', { name: '俯视', exact: true }).click()
+      await page.screenshot({ path: testInfo.outputPath('rear-passage-top.png'), fullPage: true })
+      await page.getByRole('button', { name: '背面', exact: true }).click()
     }
     await page.screenshot({ path: testInfo.outputPath('solid-tabletop.png'), fullPage: true })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)

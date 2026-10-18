@@ -1,4 +1,4 @@
-import { effectiveCableHoles } from './fixedFurniture'
+import { baffleTopExclusion, effectiveCableHoles, furnitureBoxes, hasFixedFurniture } from './fixedFurniture'
 import { segmentHitsObject } from './collisionGeometry'
 import * as THREE from 'three'
 import type {
@@ -149,10 +149,22 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
   }
 
   const testObjects = objects.filter((o) => o.visible)
+  const furniture = hasFixedFurniture(room) ? [...furnitureBoxes(room), baffleTopExclusion(room)].map(b => ({
+    name: b.name, box: new THREE.Box3(new THREE.Vector3(...b.min), new THREE.Vector3(...b.max)).expandByScalar(radius + .0005),
+  })) : []
 
   for (let index = 0; index < samples.length; index += 1) {
     const p = samples[index]
     const previous = samples[Math.max(0, index - 1)]
+    const start = new THREE.Vector3(...previous), end = new THREE.Vector3(...p)
+    const length = start.distanceTo(end)
+    const ray = new THREE.Ray(start, end.clone().sub(start).normalize())
+    for (const solid of furniture) {
+      const hit = length > 0 ? ray.intersectBox(solid.box, new THREE.Vector3()) : null
+      if (solid.box.containsPoint(start) || solid.box.containsPoint(end) || (hit && start.distanceTo(hit) <= length)) {
+        addIssue('slab', p, solid.name === 'routing:no-baffle-top' ? '禁止沿背板顶沿走线，请从后沿长槽进入桌下' : '路径与正式桌体相交（含线径净空）')
+      }
+    }
     // 1) 房间边界
     if (p[1] < -0.002) addIssue('bounds', p, '路径低于地面（越界）')
     if (p[1] > room.height - 0.005) addIssue('bounds', p, '路径超过层高（越界）')
@@ -161,7 +173,7 @@ export function checkCableRoute(input: CableCheckInput): CableCheckResult {
 
     // 3) 桌板（允许从出线孔穿过）
     if (
-      p[0] > -desk.width / 2 - 0.002 &&
+      !hasFixedFurniture(room) && p[0] > -desk.width / 2 - 0.002 &&
       p[0] < desk.width / 2 + 0.002 &&
       p[2] > g + 0.002 &&
       p[2] < g + desk.depth - 0.002 &&

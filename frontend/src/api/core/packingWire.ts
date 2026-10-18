@@ -282,6 +282,7 @@ export function toPackingScene(input: {
 
 export function packingBaseline(baseline: LayoutPlan, input: Parameters<typeof toPackingScene>[0]): PackingScene {
   if (baseline.projectId !== input.projectId || !baseline.scene) throw new ApiError('请重新采集包含完整场景的整理前快照', { kind: 'input' })
+  if (hasFixedFurniture(input.room) && !hasFixedFurniture(baseline.scene.room)) throw new ApiError('旧基线使用已停用的桌体，请基于当前固定模型重新采集整理前快照', { kind: 'input' })
   return toPackingScene({ ...input, room: baseline.scene.room, objects: baseline.scene.objects })
 }
 
@@ -341,7 +342,7 @@ export interface PackingMapContext {
 }
 
 export function organizationInputSignature(input: { objects: SceneObject[]; room: RoomConfig; preferences: OrganizationPreferences }): string {
-  return JSON.stringify([input.objects, input.room, input.preferences, { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M }])
+  return JSON.stringify(['prefab-rear-passage-v3', input.objects, input.room, input.preferences, { min_item_gap_m: DEFAULT_MIN_ITEM_GAP_M }])
 }
 
 export function mapPackingOrganizationResult(raw: unknown, ctx: PackingMapContext): OrganizationPlan {

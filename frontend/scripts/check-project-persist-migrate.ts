@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { createDemoProject, DEMO_PROJECT_ID, DEMO_SEED_VERSION } from '../src/data/demoProject'
 import { createLegacyDemoProject } from './fixtures/legacyDemo'
 import { OUTLET_FIXED_Y_M } from '../src/types/project'
+import { createFixedRoom, normalizeProductRoom } from '../src/data/fixedRoom'
+import { roomToForm, formToRoom } from '../src/ui/setup/spaceForm'
 
 // Hydrate the actual Zustand store, including its real persist migration.
 const entries = new Map<string, string>()
@@ -36,7 +38,7 @@ assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id], JSON.parse(J
 useProjectsStore.getState().upsert(fixedOld)
 assert.deepEqual(useProjectsStore.getState().projects[fixedOld.id].room.cableHoles, [], 'imports cannot restore phantom apertures')
 
-for (const version of [1, 2, 3]) {
+for (const version of [1, 2, 3, 4]) {
   const old = createLegacyDemoProject()
   old.demoSeedVersion = 3
   old.name = 'Edited previous furniture'
@@ -50,7 +52,6 @@ for (const version of [1, 2, 3]) {
   custom.isDemo = false
   custom.name = 'User geometry'
   const geometry = structuredClone(old.objects)
-  const oldRoom = structuredClone(old.room)
   entries.set('dormtopology.projects', JSON.stringify({ version, state: { projects: { [DEMO_PROJECT_ID]: old, [custom.id]: custom } } }))
   await useProjectsStore.persist.rehydrate()
   assert.equal(useProjectsStore.getState().projects[DEMO_PROJECT_ID].demoSeedVersion, 3, 'hydration preserves the old seed until archiving')
@@ -70,17 +71,17 @@ for (const version of [1, 2, 3]) {
   assert.equal(usePlansStore.getState().baselines[archive.id].id, oldBaseline.id)
   assert.deepEqual(usePlansStore.getState().baselines[archive.id].scene!.objects.map((o) => ({ ...o, projectId: old.id })), oldBaseline.scene!.objects)
   assert.equal(archive.isDemo, false)
-  assert.equal(archive.room.furnitureModel, undefined)
-  assert.deepEqual(archive.room.desk, oldRoom.desk)
+  assert.equal(archive.room.furnitureModel, 'dormdesk-v1')
+  assert.deepEqual(archive.room.desk, createFixedRoom().desk)
   assert.deepEqual(archive.objects.map((o) => ({ ...o, projectId: old.id })), geometry)
   assert.ok(archive.cables.every((c) => c.projectId === archive.id && c.status === 'stale'))
   const savedCustom = projects[custom.id]
   assert.deepEqual(savedCustom.objects, custom.objects)
-  assert.deepEqual(savedCustom.room.desk, custom.room.desk)
+  assert.deepEqual(savedCustom.room.desk, createFixedRoom().desk)
   if (version < 3) {
     assert.equal(savedCustom.room.outlets.length, 1)
     assert.deepEqual(savedCustom.room.outlets[0].position, [-.4, OUTLET_FIXED_Y_M, .01])
-  } else assert.deepEqual(savedCustom, JSON.parse(JSON.stringify(custom)))
+  } else assert.deepEqual(savedCustom.room, normalizeProductRoom(custom.room))
   const ids = Object.keys(projects)
   useProjectsStore.getState().ensureDemo()
   assert.deepEqual(Object.keys(useProjectsStore.getState().projects), ids, 'upgrading is idempotent')
@@ -94,7 +95,21 @@ useProjectsStore.getState().ensureDemo()
 const archived = Object.values(useProjectsStore.getState().projects).find((p) => !p.isDemo)!
 assert.ok(archived)
 assert.deepEqual(archived.cables, [])
-assert.deepEqual(archived.room.desk, earliest.room.desk)
+assert.deepEqual(archived.room.desk, createFixedRoom().desk)
+
+const legacyForm = roomToForm(earliest.room)
+assert.equal(legacyForm.furnitureModel, 'dormdesk-v1')
+const changedForm = { ...legacyForm, furnitureModel: undefined, deskW: 9000, deskH: 200, shelfEnabled: false }
+assert.deepEqual(formToRoom(changedForm).desk, createFixedRoom().desk, 'form cannot replace the authored desk')
+useProjectsStore.getState().upsert(earliest)
+assert.equal(useProjectsStore.getState().projects[earliest.id].room.furnitureModel, 'dormdesk-v1')
+useProjectsStore.getState().update(earliest.id, p => ({ ...p, room: { ...p.room, furnitureModel: undefined, desk: { ...p.room.desk, width: 9 } } }))
+assert.deepEqual(useProjectsStore.getState().projects[earliest.id].room.desk, createFixedRoom().desk)
+
+entries.set('dormtopology.desk-model', JSON.stringify({ version: 1, state: { forceFallback: true, showDesk: true } }))
+const { useDeskModelStore } = await import('../src/state/deskModelStore')
+await useDeskModelStore.persist.rehydrate()
+assert.ok(!('forceFallback' in useDeskModelStore.getState()), 'old preference cannot disable the real model')
 
 const legacyPorts = createDemoProject()
 legacyPorts.objects = legacyPorts.objects.map((o) => ({ ...o, ports: o.ports.map((p) => p.id === 'port-laptop-usbc'
@@ -173,5 +188,5 @@ const occupied = { ...oldWiring, cables: [...oldWiring.cables, { ...oldWiring.ca
 const repairedOccupied = migrateDefaultDemoWiring(occupied)
 assert.ok(repairedOccupied.cables.some((c) => c.id === 'custom-strip-connection'))
 assert.equal(repairedOccupied.cables.filter((c) => c.id === 'demo-cable-adapter-ac').length, 0, 'do not duplicate an existing AC input connection')
-console.log('Actual project-store hydration v1/v2/v3, archived edits, custom geometry and idempotence passed.')
+console.log('Actual project-store hydration v1-v4, fixed-model enforcement, retained edits and idempotence passed.')
 console.log('Saved default wiring repair passed: placement retained, separate USB outputs, AC input, confirmations and custom connections preserved.')

@@ -258,7 +258,7 @@ export function SpaceSetupPage() {
           </SectionCard>
 
           <SectionCard title="② 出线孔与电源">
-            {form.furnitureModel ? <p className="text-xs text-muted-foreground">正式桌面没有穿线孔，按模型原样显示；线缆沿桌后边缘走线。</p> : <>
+            {form.furnitureModel ? <p className="text-xs text-muted-foreground">桌体固定使用正式模型；线缆经后沿长槽进入桌下，不翻越背板顶沿。</p> : <>
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">
                 出线孔
@@ -347,7 +347,7 @@ export function SpaceSetupPage() {
               </div>
               <div className="flex justify-between gap-3">
                 <dt>出线孔</dt>
-                <dd className="tabular-nums">{form.furnitureModel ? '无（按正式模型）' : `Ø ${form.hole.diameter} mm`}</dd>
+                <dd className="tabular-nums">{form.furnitureModel ? '后沿长槽（模型固定）' : `Ø ${form.hole.diameter} mm`}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt>插座</dt>
