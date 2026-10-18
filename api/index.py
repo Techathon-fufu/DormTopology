@@ -6,6 +6,7 @@ from pathlib import Path
 os.environ.setdefault("DORMTOPOLOGY_DB_PATH", "/tmp/dormtopology.db")
 os.environ.setdefault("DORMTOPOLOGY_WORKFLOW_DB_PATH", "/tmp/workflow.db")
 os.environ.setdefault("DORMTOPOLOGY_WORKFLOW_DATA_DIR", "/tmp/dormtopology-data")
+os.environ.setdefault("DORMTOPOLOGY_GENERATED_MODELS_DIR", "/tmp/dormtopology-models")
 
 # 添加 backend 目录到 Python 路径
 backend_dir = Path(__file__).parent.parent / "backend"

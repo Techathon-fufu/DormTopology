@@ -85,7 +85,9 @@ class ModelGenerationService:
         self.crops_dir = self.data_dir / "crops"
         self.uploads_dir = self.data_dir / "uploads"
         self.frontend_models_dir = self.root_dir / "frontend" / "public" / "models"
-        self.generated_models_dir = self.frontend_models_dir / "generated"
+        # 支持通过环境变量覆盖生成模型目录（Vercel serverless 需要写入 /tmp）
+        generated_models_dir_env = os.environ.get("DORMTOPOLOGY_GENERATED_MODELS_DIR")
+        self.generated_models_dir = Path(generated_models_dir_env) if generated_models_dir_env else (self.frontend_models_dir / "generated")
         self.prefab_backup_dir = self.root_dir / "Prefabmodel"
 
         self.crops_dir.mkdir(parents=True, exist_ok=True)
